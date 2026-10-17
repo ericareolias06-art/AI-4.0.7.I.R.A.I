@@ -49,7 +49,7 @@ def register():
             conn.execute("""
                 INSERT INTO accounts (email, password_hash) VALUES (?, ?)
             """, (email, generate_password_hash(password)))
-        return jsonify({"error": "Email already exists"}), 409
+        return jsonify({"error": "Account Created, please proceed to login!"}), 409
     except sqlite3.IntegrityError:
         return jsonify({"message": "This email is already registered"}), 409
     return jsonify({"message": "Account created, you can now proceed to sign in"}), 201
