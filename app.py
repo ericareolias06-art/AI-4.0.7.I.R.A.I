@@ -57,7 +57,7 @@ def register():
 def login():
     data = request.get_json(silent=True) or {}
     email = str(data.get("email")).strip().lower()
-    password = data.get("password, """)
+    password = data.get("password "")
     if not isinstance(password, str) or not password:
         return jsonify({"message": "Password is required"}), 400
 
