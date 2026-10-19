@@ -10,12 +10,25 @@
 <body>
     <main class="login-box">
         <h1>Irai Tec Premium</h1>
-        <p>Unlock your Premium subscription.</p>
+        <p>Choose a plan to unlock Premium access.</p>
 
         <section>
-            <h2>Premium Membership</h2>
-            <p>Get access to Premium for one full year with a valid promo code.</p>
+            <h2>Monthly Premium</h2>
+            <p>$3 per month</p>
+            <button id="monthlyButton" type="button">
+                Subscribe Monthly
+            </button>
         </section>
+
+        <section>
+            <h2>Yearly Premium</h2>
+            <p>$30 per year — save $6 annually!</p>
+            <button id="yearlyButton" type="button">
+                Subscribe Yearly
+            </button>
+        </section>
+
+        <hr>
 
         <form id="promoForm">
             <label for="promoCode">Have a promo code?</label>
@@ -29,9 +42,9 @@
             <button type="submit">Activate Free Premium</button>
         </form>
 
-        <p id="message" role="status"></p>
+        <p id="message" role="status" aria-live="polite"></p>
 
-        <button id="continueButton" hidden>
+        <button id="continueButton" type="button" hidden>
             Continue to Irai Tec
         </button>
     </main>
