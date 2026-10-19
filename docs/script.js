@@ -1,3 +1,4 @@
+
 const API_BASE = "https://ai-4-0-7-i-r-a-i-1.onrender.com";
 
 const login = document.getElementById("loginForm");
@@ -50,11 +51,12 @@ register.addEventListener("submit", async (event) => {
             register.reset();
             register.hidden = true;
             login.hidden = false;
-            toggle.textContent = "Create an account";
+            toggle.textContent = "Don't have an account? Register";
         }
     } catch (error) {
         console.error(error);
-        message.textContent = "Cannot connect to login server. Check your connection.";
+        message.textContent =
+            "Cannot connect to login server. Check your connection.";
     }
 });
 
@@ -74,13 +76,34 @@ login.addEventListener("submit", async (event) => {
 
         const data = await response.json();
 
-        if (response.ok) {
+        if (!response.ok) {
+            message.textContent =
+                data.message || data.error || "Login failed.";
+            return;
+        }
+
+        // Check the subscription status from the server.
+        const accountResponse = await fetch(`${API_BASE}/api/me`, {
+            method: "GET",
+            credentials: "include"
+        });
+
+        if (!accountResponse.ok) {
+            message.textContent =
+                "Login worked, but we couldn't check your subscription. Please try again.";
+            return;
+        }
+
+        const account = await accountResponse.json();
+
+        if (account.premium) {
             window.location.href = "home.html";
         } else {
-            message.textContent = data.message || data.error || "Login failed.";
+            window.location.href = "subscription.html";
         }
     } catch (error) {
         console.error(error);
-        message.textContent = "Cannot connect to login server. Check your connection.";
+        message.textContent =
+            "Cannot connect to login server. Check your connection.";
     }
 });
