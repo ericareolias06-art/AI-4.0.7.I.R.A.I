@@ -19,6 +19,9 @@ FRONTEND_ORIGIN = os.environ.get(
 ).rstrip("/")
 
 app = Flask(__name__)
+@app.get("/api/health")
+def health():
+    return jsonify({"status": "ok"}), 200
 app.secret_key = os.environ.get("SECRET_KEY")
 
 if not app.secret_key:
