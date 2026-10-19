@@ -1,1 +1,30 @@
-hi
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Account Login</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <main class="login-box">
+        <h1>Welcome</h1>
+        <p>Sign In to your Irai Tec Account</p>
+
+        <form id="loginForm">
+           <input type="email" id="email" placeholder="Email" required>
+           <input type="password" id="password" placeholder="Password" required>
+           <button type="submit">Sign In</button>
+        </form>
+        <form id="registerForm" hidden>
+           <input type="email" id="newEmail" placeholder="Email" required>
+           <input type="password" id="newPassword" placeholder="Create Password" minlength="12" required>
+           <input type="password" id="newPasswordConfirm" placeholder="Confirm Password" minlength="12" required>
+           <button type="submit">Create Account</button>
+        </form>
+        <p id="message"></p>
+        <button id="toggleForm">Don't have an account? Register</button>
+    </main>
+</body>
+</html>
