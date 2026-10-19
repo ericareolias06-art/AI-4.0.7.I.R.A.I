@@ -57,10 +57,6 @@ def initialize_database():
             )
         """)
 
-@app.get("/api/health")
-def health():
-    return jsonify(status="ok"), 200
-
 @app.post("/api/register")
 def register():
     data = request.get_json(silent=True) or {}
