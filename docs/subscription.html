@@ -1,0 +1,41 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Irai Tec Premium</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main class="login-box">
+        <h1>Irai Tec Premium</h1>
+        <p>Unlock your Premium subscription.</p>
+
+        <section>
+            <h2>Premium Membership</h2>
+            <p>Get access to Premium for one full year with a valid promo code.</p>
+        </section>
+
+        <form id="promoForm">
+            <label for="promoCode">Have a promo code?</label>
+            <input
+                type="text"
+                id="promoCode"
+                placeholder="Enter promo code"
+                autocomplete="off"
+                required
+            >
+            <button type="submit">Activate Free Premium</button>
+        </form>
+
+        <p id="message" role="status"></p>
+
+        <button id="continueButton" hidden>
+            Continue to Irai Tec
+        </button>
+    </main>
+
+    <script src="subscription.js" defer></script>
+</body>
+</html>
