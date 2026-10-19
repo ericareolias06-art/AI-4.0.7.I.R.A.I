@@ -1,19 +1,19 @@
+
 import os
 import sqlite3
+import hmac
+import hashlib
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 
-import hmac
-import hashlib
-from datetime import datetime, timedelta, timezone
-
 BASE = Path(__file__).resolve().parent
 WEB = BASE / "main"
 
-# Locally this defaults to main/database.db.
-# On Render, set DB_PATH=/var/data/database.db
+# On Render, use a persistent disk for DB_PATH.
 DB = Path(os.environ.get("DB_PATH", str(WEB / "database.db")))
 
 FRONTEND_ORIGIN = os.environ.get(
@@ -22,11 +22,8 @@ FRONTEND_ORIGIN = os.environ.get(
 ).rstrip("/")
 
 app = Flask(__name__)
-@app.get("/api/health")
-def health():
-    return jsonify({"status": "ok"}), 200
-app.secret_key = os.environ.get("SECRET_KEY")
 
+app.secret_key = os.environ.get("SECRET_KEY")
 if not app.secret_key:
     raise RuntimeError("Set the SECRET_KEY environment variable.")
 
@@ -36,7 +33,6 @@ CORS(
     supports_credentials=True,
 )
 
-# Secure cookie settings for HTTPS deployment.
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SECURE=True,
@@ -44,11 +40,13 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=60 * 60 * 8,
 )
 
+
 def get_db():
     DB.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def initialize_database():
     with get_db() as conn:
@@ -82,6 +80,25 @@ def initialize_database():
             )
         """)
 
+
+def has_active_premium(account):
+    if not account or not account["premium_until"]:
+        return False
+
+    try:
+        expiry = datetime.fromisoformat(account["premium_until"])
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        return expiry > datetime.now(timezone.utc)
+    except (ValueError, TypeError):
+        return False
+
+
+@app.get("/api/health")
+def health():
+    return jsonify(status="ok"), 200
+
+
 @app.post("/api/register")
 def register():
     data = request.get_json(silent=True) or {}
@@ -93,7 +110,9 @@ def register():
         return jsonify(message="Enter a valid email address"), 400
 
     if not isinstance(password, str) or len(password) < 12:
-        return jsonify(message="Password must be at least 12 characters"), 400
+        return jsonify(
+            message="Password must be at least 12 characters"
+        ), 400
 
     if password != confirm:
         return jsonify(message="Passwords do not match"), 400
@@ -101,15 +120,21 @@ def register():
     try:
         with get_db() as conn:
             conn.execute(
-                "INSERT INTO accounts (email, password_hash) VALUES (?, ?)",
+                """
+                INSERT INTO accounts (email, password_hash)
+                VALUES (?, ?)
+                """,
                 (email, generate_password_hash(password)),
             )
     except sqlite3.IntegrityError:
-        return jsonify(message="This email is already registered"), 409
+        return jsonify(
+            message="This email is already registered"
+        ), 409
 
     return jsonify(
         message="Account created. You can now sign in."
     ), 201
+
 
 @app.post("/api/login")
 def login():
@@ -122,7 +147,11 @@ def login():
 
     with get_db() as conn:
         account = conn.execute(
-            "SELECT id, email, password_hash FROM accounts WHERE email = ?",
+            """
+            SELECT id, email, password_hash, premium_until
+            FROM accounts
+            WHERE email = ?
+            """,
             (email,),
         ).fetchone()
 
@@ -136,29 +165,52 @@ def login():
     session["account_id"] = account["id"]
     session["email"] = account["email"]
 
-    return jsonify(message="Login successful"), 200
+    return jsonify(
+        message="Login successful",
+        premium=has_active_premium(account),
+        premium_until=account["premium_until"],
+    ), 200
+
 
 @app.get("/api/me")
 def current_account():
     if "account_id" not in session:
         return jsonify(message="Not logged in"), 401
 
+    with get_db() as conn:
+        account = conn.execute(
+            """
+            SELECT id, email, premium_until
+            FROM accounts
+            WHERE id = ?
+            """,
+            (session["account_id"],),
+        ).fetchone()
+
+    if account is None:
+        session.clear()
+        return jsonify(message="Account not found"), 401
+
     return jsonify(
-        email=session["email"]
+        email=account["email"],
+        premium=has_active_premium(account),
+        premium_until=account["premium_until"],
     ), 200
 
-@app.post("/api/logout")
-def logout():
-    session.clear()
-    return jsonify(message="Logged out"), 200
+
 @app.post("/api/redeem-promo")
 def redeem_promo():
     if "account_id" not in session:
         return jsonify(message="Please log in first"), 401
 
-    expected_code = os.environ.get("PREMIUM_PROMO_CODE", "").strip()
+    expected_code = os.environ.get(
+        "PREMIUM_PROMO_CODE", ""
+    ).strip()
+
     if not expected_code:
-        return jsonify(message="Promo codes are not configured"), 503
+        return jsonify(
+            message="Promo codes are not configured"
+        ), 503
 
     data = request.get_json(silent=True) or {}
     submitted_code = str(data.get("code") or "").strip()
@@ -169,7 +221,6 @@ def redeem_promo():
         return jsonify(message="Invalid promo code"), 400
 
     now = datetime.now(timezone.utc)
-    expires = now + timedelta(days=365)
     promo_hash = hashlib.sha256(
         expected_code.upper().encode("utf-8")
     ).hexdigest()
@@ -177,29 +228,23 @@ def redeem_promo():
     try:
         with get_db() as conn:
             account = conn.execute(
-                "SELECT premium_until FROM accounts WHERE id = ?",
+                """
+                SELECT id, premium_until
+                FROM accounts
+                WHERE id = ?
+                """,
                 (session["account_id"],),
             ).fetchone()
 
             if account is None:
                 return jsonify(message="Account not found"), 404
 
-            if account["premium_until"]:
-                try:
-                    existing_expiry = datetime.fromisoformat(
-                        account["premium_until"]
-                    )
-                    if existing_expiry.tzinfo is None:
-                        existing_expiry = existing_expiry.replace(
-                            tzinfo=timezone.utc
-                        )
-                    if existing_expiry > now:
-                        return jsonify(
-                            message="Your account already has Premium access"
-                        ), 409
-                except ValueError:
-                    pass
+            if has_active_premium(account):
+                return jsonify(
+                    message="Your account already has Premium access"
+                ), 409
 
+            # Each account can redeem this code only once.
             conn.execute(
                 """
                 INSERT INTO promo_redemptions
@@ -213,8 +258,15 @@ def redeem_promo():
                 ),
             )
 
+            # Grant one year (365 days) from redemption.
+            expires = now + timedelta(days=365)
+
             conn.execute(
-                "UPDATE accounts SET premium_until = ? WHERE id = ?",
+                """
+                UPDATE accounts
+                SET premium_until = ?
+                WHERE id = ?
+                """,
                 (expires.isoformat(), session["account_id"]),
             )
 
@@ -228,12 +280,21 @@ def redeem_promo():
         premium=True,
         premium_until=expires.isoformat(),
     ), 200
+
+
+@app.post("/api/logout")
+def logout():
+    session.clear()
+    return jsonify(message="Logged out"), 200
+
+
+# Initialize the database for both local and hosted execution.
+initialize_database()
+
+
 if __name__ == "__main__":
-    initialize_database()
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8001)),
         debug=False,
     )
-else:
-    initialize_database()
