@@ -1,4 +1,3 @@
-    )
 
     if not webhook_secret:
         app.logger.error(
