@@ -76,17 +76,10 @@ def register():
 
     try:
         with get_db() as conn:
-<<<<<<< HEAD
-            conn.execute("""
-                INSERT INTO accounts (email, password_hash) VALUES (?, ?)
-            """, (email, generate_password_hash(password)))
-        return jsonify({"error": "Account Created, please proceed to login!"}), 409
-=======
             conn.execute(
                 "INSERT INTO accounts (email, password_hash) VALUES (?, ?)",
                 (email, generate_password_hash(password)),
             )
->>>>>>> 07989eb (new)
     except sqlite3.IntegrityError:
         return jsonify(message="This email is already registered"), 409
 
