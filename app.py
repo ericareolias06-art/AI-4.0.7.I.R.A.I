@@ -117,7 +117,6 @@ def has_active_premium(account):
         return False
 
     now = datetime.now(timezone.utc)
-
     promo_expiry = parse_expiry(account["premium_until"])
 
     if promo_expiry and promo_expiry > now:
@@ -554,12 +553,15 @@ def stripe_webhook():
     except stripe.error.SignatureVerificationError:
         return jsonify(message="Invalid signature"), 400
 
+    # Convert Stripe Event/StripeObject instances into ordinary dictionaries
+    # before using dictionary methods such as .get().
+    event = event.to_dict()
     event_type = event["type"]
-    obj = event["data"]["object"]
+    obj = (event.get("data") or {}).get("object") or {}
 
     try:
         if event_type == "checkout.session.completed":
-            subscription_id = obj["subscription"]
+            subscription_id = obj.get("subscription")
             account_id = (
                 obj.get("client_reference_id")
                 or (obj.get("metadata") or {}).get("account_id")
@@ -569,7 +571,7 @@ def stripe_webhook():
             if subscription_id:
                 subscription = stripe.Subscription.retrieve(
                     subscription_id
-                )
+                ).to_dict()
 
                 if (
                     not (subscription.get("metadata") or {}).get(
@@ -577,7 +579,6 @@ def stripe_webhook():
                     )
                     and account_id
                 ):
-                    subscription = dict(subscription)
                     subscription["metadata"] = {
                         "account_id": str(account_id)
                     }
@@ -614,7 +615,7 @@ def stripe_webhook():
             if subscription_id:
                 subscription = stripe.Subscription.retrieve(
                     subscription_id
-                )
+                ).to_dict()
                 sync_subscription(subscription)
 
     except (
