@@ -56,6 +56,28 @@ def initialize_database():
             )
         """)
 
+        columns = {
+            row["name"]
+            for row in conn.execute(
+                "PRAGMA table_info(accounts)"
+            ).fetchall()
+        }
+
+        if "premium_until" not in columns:
+            conn.execute(
+                "ALTER TABLE accounts ADD COLUMN premium_until TEXT"
+            )
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS promo_redemptions (
+                account_id INTEGER NOT NULL,
+                promo_hash TEXT NOT NULL,
+                redeemed_at TEXT NOT NULL,
+                PRIMARY KEY (account_id, promo_hash),
+                FOREIGN KEY (account_id) REFERENCES accounts(id)
+            )
+        """)
+
 @app.post("/api/register")
 def register():
     data = request.get_json(silent=True) or {}
