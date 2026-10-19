@@ -1,4 +1,10 @@
 
+
+
+    
+  
+    )
+
     if not webhook_secret:
         app.logger.error(
             "STRIPE_WEBHOOK_SECRET is not configured"
