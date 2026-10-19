@@ -554,7 +554,7 @@ def stripe_webhook():
     except stripe.error.SignatureVerificationError:
         return jsonify(message="Invalid signature"), 400
 
-    event_type = event.get("type")
+    event_type = event.get["type"]
     obj = (event.get("data") or {}).get("object") or {}
 
     try:
