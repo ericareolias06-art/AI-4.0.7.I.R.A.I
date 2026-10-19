@@ -559,7 +559,7 @@ def stripe_webhook():
 
     try:
         if event_type == "checkout.session.completed":
-            subscription_id = obj.get("subscription")
+            subscription_id = obj["subscription"]
             account_id = (
                 obj.get("client_reference_id")
                 or (obj.get("metadata") or {}).get("account_id")
