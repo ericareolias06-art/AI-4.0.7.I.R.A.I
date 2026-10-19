@@ -555,7 +555,7 @@ def stripe_webhook():
         return jsonify(message="Invalid signature"), 400
 
     event_type = event["type"]
-    obj = (event.get("data") or {}).get("object") or {}
+    obj = event["data"]["object"]
 
     try:
         if event_type == "checkout.session.completed":
