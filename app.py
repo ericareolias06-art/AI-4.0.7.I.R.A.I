@@ -151,7 +151,83 @@ def current_account():
 def logout():
     session.clear()
     return jsonify(message="Logged out"), 200
+@app.post("/api/redeem-promo")
+def redeem_promo():
+    if "account_id" not in session:
+        return jsonify(message="Please log in first"), 401
 
+    expected_code = os.environ.get("PREMIUM_PROMO_CODE", "").strip()
+    if not expected_code:
+        return jsonify(message="Promo codes are not configured"), 503
+
+    data = request.get_json(silent=True) or {}
+    submitted_code = str(data.get("code") or "").strip()
+
+    if not submitted_code or not hmac.compare_digest(
+        submitted_code.upper(), expected_code.upper()
+    ):
+        return jsonify(message="Invalid promo code"), 400
+
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(days=365)
+    promo_hash = hashlib.sha256(
+        expected_code.upper().encode("utf-8")
+    ).hexdigest()
+
+    try:
+        with get_db() as conn:
+            account = conn.execute(
+                "SELECT premium_until FROM accounts WHERE id = ?",
+                (session["account_id"],),
+            ).fetchone()
+
+            if account is None:
+                return jsonify(message="Account not found"), 404
+
+            if account["premium_until"]:
+                try:
+                    existing_expiry = datetime.fromisoformat(
+                        account["premium_until"]
+                    )
+                    if existing_expiry.tzinfo is None:
+                        existing_expiry = existing_expiry.replace(
+                            tzinfo=timezone.utc
+                        )
+                    if existing_expiry > now:
+                        return jsonify(
+                            message="Your account already has Premium access"
+                        ), 409
+                except ValueError:
+                    pass
+
+            conn.execute(
+                """
+                INSERT INTO promo_redemptions
+                    (account_id, promo_hash, redeemed_at)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    session["account_id"],
+                    promo_hash,
+                    now.isoformat(),
+                ),
+            )
+
+            conn.execute(
+                "UPDATE accounts SET premium_until = ? WHERE id = ?",
+                (expires.isoformat(), session["account_id"]),
+            )
+
+    except sqlite3.IntegrityError:
+        return jsonify(
+            message="You have already redeemed this promo code"
+        ), 409
+
+    return jsonify(
+        message="Promo code accepted! Premium access granted for one year.",
+        premium=True,
+        premium_until=expires.isoformat(),
+    ), 200
 if __name__ == "__main__":
     initialize_database()
     app.run(
