@@ -1,0 +1,42 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.iraitec"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="23"
+9        android:targetSdkVersion="35" />
+10
+11    <application
+11-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:3:5-16:19
+12        android:allowBackup="false"
+12-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:4:9-36
+13        android:debuggable="true"
+14        android:extractNativeLibs="false"
+15        android:label="Irai Tec"
+15-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:5:9-33
+16        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+16-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:6:9-72
+17        android:usesCleartextTraffic="false" >
+17-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:7:9-45
+18        <activity
+18-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:8:9-15:20
+19            android:name="com.iraitec.MainActivity"
+19-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:9:13-41
+20            android:exported="true" >
+20-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:10:13-36
+21            <intent-filter>
+21-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:11:13-14:29
+22                <action android:name="android.intent.action.MAIN" />
+22-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:12:17-69
+22-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:12:25-66
+23
+24                <category android:name="android.intent.category.LAUNCHER" />
+24-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:13:17-77
+24-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:13:27-74
+25            </intent-filter>
+26        </activity>
+27    </application>
+28
+29</manifest>
