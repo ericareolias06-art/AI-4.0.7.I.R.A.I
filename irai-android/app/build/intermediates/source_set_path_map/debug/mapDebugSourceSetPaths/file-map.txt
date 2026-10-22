@@ -1,0 +1,7 @@
+com.iraitec.app-pngs-0 /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/build/generated/res/pngs/debug
+com.iraitec.app-resValues-1 /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/build/generated/res/resValues/debug
+com.iraitec.app-packageDebugResources-2 /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.iraitec.app-packageDebugResources-3 /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.iraitec.app-debug-4 /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/build/intermediates/merged_res/debug/mergeDebugResources
+com.iraitec.app-debug-5 /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/debug/res
+com.iraitec.app-main-6 /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/res
