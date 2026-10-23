@@ -1,4 +1,6 @@
 package com.iraitec
+import android.content.Intent
+import android.net.Uri
 import java.net.CookieHandler
 import java.net.CookieManager
 import java.net.CookiePolicy
@@ -216,7 +218,23 @@ class MainActivity : Activity() {
         root.addView(label("✦", 58, accent))
         root.addView(label("Welcome to IRAI TEC", 26, white))
         root.addView(label("Signed in as $email", 15, muted))
-        root.addView(label("Premium plans are coming next.", 16, white))
+        root.addView(label("Unlock IRAI TEC Premium", 20, white))
+        root.addView(label("$3/month", 18, accent))
+        root.addView(Button(this).apply {
+            text = "Subscribe Monthly"
+            setOnClickListener { startCheckout("monthly") }
+        }, params())
+
+        root.addView(label("$30/year", 18, accent))
+        root.addView(Button(this).apply {
+            text = "Subscribe Yearly"
+            setOnClickListener { startCheckout("yearly") }
+        }, params())
+
+        root.addView(Button(this).apply {
+            text = "Redeem Promo Code"
+            setOnClickListener { showPromoInput() }
+        }, params())
         root.addView(Button(this).apply {
             text = "Log Out"
             setOnClickListener { showAuth() }

@@ -1,1 +1,0 @@
-/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/java/com/iraitec/MainActivity.kt
