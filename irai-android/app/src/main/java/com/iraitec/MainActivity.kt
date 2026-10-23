@@ -1,24 +1,25 @@
+
 package com.iraitec
+
+import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
+import android.graphics.Color
+import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.widget.*
+import org.json.JSONObject
 import java.net.CookieHandler
 import java.net.CookieManager
 import java.net.CookiePolicy
-import android.app.Activity
-import android.os.Bundle
-import android.graphics.Color
-import android.view.Gravity
-import android.view.View
-import android.view.inputmethod.InputMethodManager
-import android.content.Context
-import android.widget.*
-import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
+
     private val api = "https://ai-4-0-7-i-r-a-i-1.onrender.com"
     private val bg = Color.rgb(18, 18, 32)
     private val accent = Color.rgb(150, 120, 255)
@@ -30,15 +31,20 @@ class MainActivity : Activity() {
     private lateinit var passwordInput: EditText
     private lateinit var confirmInput: EditText
     private lateinit var message: TextView
+
     private var registering = false
+    private var currentEmail = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        CookieHandler.setDefault(
-    CookieManager(null, CookiePolicy.ACCEPT_ALL)
-    )
         super.onCreate(savedInstanceState)
+
+        CookieHandler.setDefault(
+            CookieManager(null, CookiePolicy.ACCEPT_ALL)
+        )
+
         window.statusBarColor = bg
         window.navigationBarColor = bg
+
         showAuth()
     }
 
@@ -51,6 +57,7 @@ class MainActivity : Activity() {
         }
 
         val scroll = ScrollView(this)
+
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -59,9 +66,12 @@ class MainActivity : Activity() {
         content.addView(label("✦", 58, accent))
         content.addView(label("IRAI TEC", 30, white))
         content.addView(label("Your AI companion", 16, muted))
-        content.addView(label("Sign in to your Irai Tec account", 18, white).apply {
-            setPadding(0, 28, 0, 20)
-        })
+
+        content.addView(
+            label("Sign in to your Irai Tec account", 18, white).apply {
+                setPadding(0, 28, 0, 20)
+            }
+        )
 
         emailInput = field("Email address")
         emailInput.inputType = 33
@@ -90,15 +100,24 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setTextColor(accent)
             setPadding(8, 22, 8, 22)
+
             setOnClickListener {
                 registering = !registering
-                action.text = if (registering) "Create Account" else "Log In"
+
+                action.text =
+                    if (registering) "Create Account" else "Log In"
+
                 confirmInput.visibility =
                     if (registering) View.VISIBLE else View.GONE
+
                 message.text = ""
-                (it as TextView).text =
-                    if (registering) "Already have an account? Log in"
-                    else "Don't have an account? Register"
+
+                text =
+                    if (registering) {
+                        "Already have an account? Log in"
+                    } else {
+                        "Don't have an account? Register"
+                    }
             }
         }
         content.addView(toggle)
@@ -147,66 +166,92 @@ class MainActivity : Activity() {
             message.text = "Enter a valid email and password."
             return
         }
+
         if (registering && password.length < 12) {
             message.text = "Password must be at least 12 characters."
             return
         }
+
         if (registering && password != confirm) {
             message.text = "Passwords do not match."
             return
         }
 
         message.text = "Connecting securely..."
-        val endpoint = if (registering) "/api/register" else "/api/login"
+
+        val endpoint =
+            if (registering) "/api/register" else "/api/login"
+
         val body = JSONObject().apply {
             put("email", email)
             put("password", password)
-            if (registering) put("confirmPassword", confirm)
+
+            if (registering) {
+                put("confirmPassword", confirm)
+            }
         }
 
         thread {
             var result = ""
             var success = false
+
             try {
-                val connection = (URL(api + endpoint).openConnection()
-                    as HttpURLConnection)
+                val connection =
+                    (URL(api + endpoint).openConnection()
+                        as HttpURLConnection)
+
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 20000
                 connection.readTimeout = 20000
                 connection.doOutput = true
                 connection.setRequestProperty(
-                    "Content-Type", "application/json"
+                    "Content-Type",
+                    "application/json"
                 )
+
                 connection.outputStream.use {
                     it.write(body.toString().toByteArray(Charsets.UTF_8))
                 }
+
                 val code = connection.responseCode
-                val stream = if (code in 200..299)
-                    connection.inputStream else connection.errorStream
-                result = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                val stream =
+                    if (code in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
+
+                result =
+                    stream?.bufferedReader()?.use { it.readText() } ?: ""
+
                 success = code in 200..299
                 connection.disconnect()
             } catch (e: Exception) {
-                result = "Could not connect. Check your internet and try again."
+                result =
+                    "Could not connect. Check your internet and try again."
             }
 
             runOnUiThread {
-                val text = try {
-                    val json = JSONObject(result)
-                    json.optString(
-                        "message",
-                        json.optString("error", result)
-                    )
+                val responseJson = try {
+                    JSONObject(result)
                 } catch (_: Exception) {
-                    result
+                    JSONObject()
                 }
-                message.text = text
+
+                val responseText = responseJson.optString(
+                    "message",
+                    responseJson.optString("error", result)
+                )
+
+                message.text = responseText
+
                 if (success && registering) {
                     registering = false
                     confirmInput.visibility = View.GONE
                     passwordInput.text.clear()
                     message.text = "Account created! You can now log in."
                 } else if (success) {
+                    currentEmail = email
                     showHome(email)
                 }
             }
@@ -216,105 +261,262 @@ class MainActivity : Activity() {
     private fun showHome(email: String) {
         root.removeAllViews()
         root.gravity = Gravity.CENTER
+
         root.addView(label("✦", 58, accent))
         root.addView(label("Welcome to IRAI TEC", 26, white))
         root.addView(label("Signed in as $email", 15, muted))
         root.addView(label("Unlock IRAI TEC Premium", 20, white))
+
         root.addView(label("$3/month", 18, accent))
+
         root.addView(Button(this).apply {
             text = "Subscribe Monthly"
-            setOnClickListener { startCheckout("monthly") }
+            setOnClickListener {
+                startCheckout("monthly")
+            }
         }, params())
 
         root.addView(label("$30/year", 18, accent))
+
         root.addView(Button(this).apply {
             text = "Subscribe Yearly"
-            setOnClickListener { startCheckout("yearly") }
+            setOnClickListener {
+                startCheckout("yearly")
+            }
         }, params())
 
         root.addView(Button(this).apply {
             text = "Redeem Promo Code"
-            setOnClickListener { showPromoInput() }
+            setOnClickListener {
+                showPromoInput()
+            }
         }, params())
+
         root.addView(Button(this).apply {
             text = "Log Out"
-            setOnClickListener { showAuth() }
+            setOnClickListener {
+                logout()
+            }
         }, params())
     }
+
     private fun startCheckout(plan: String) {
-    message.text = "Preparing secure checkout..."
+        Toast.makeText(
+            this,
+            "Preparing secure checkout...",
+            Toast.LENGTH_SHORT
+        ).show()
 
-    thread {
-        var checkoutUrl = ""
-        var errorMessage = ""
+        thread {
+            var checkoutUrl = ""
+            var errorMessage = ""
 
-        try {
-            val body = JSONObject().put("plan", plan)
-            val connection = (URL("$api/api/create-checkout-session")
-                .openConnection() as HttpURLConnection)
+            try {
+                val body = JSONObject().put("plan", plan)
 
-            connection.requestMethod = "POST"
-            connection.connectTimeout = 20000
-            connection.readTimeout = 20000
-            connection.doOutput = true
-            connection.setRequestProperty(
-                "Content-Type", "application/json"
-            )
+                val connection =
+                    (URL("$api/api/create-checkout-session")
+                        .openConnection() as HttpURLConnection)
 
-            connection.outputStream.use {
-                it.write(body.toString().toByteArray(Charsets.UTF_8))
-            }
-
-            val code = connection.responseCode
-            val stream = if (code in 200..299)
-                connection.inputStream else connection.errorStream
-            val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
-            val json = JSONObject(result)
-
-            if (code in 200..299) {
-                checkoutUrl = json.optString("url")
-            } else {
-                errorMessage = json.optString(
-                    "error", "Could not start checkout."
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 20000
+                connection.readTimeout = 20000
+                connection.doOutput = true
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json"
                 )
+
+                connection.outputStream.use {
+                    it.write(body.toString().toByteArray(Charsets.UTF_8))
+                }
+
+                val code = connection.responseCode
+                val stream =
+                    if (code in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
+
+                val result =
+                    stream?.bufferedReader()?.use { it.readText() } ?: ""
+
+                val json = try {
+                    JSONObject(result)
+                } catch (_: Exception) {
+                    JSONObject()
+                }
+
+                if (code in 200..299) {
+                    checkoutUrl = json.optString("url")
+                } else {
+                    errorMessage = json.optString(
+                        "error",
+                        json.optString(
+                            "message",
+                            "Could not start checkout."
+                        )
+                    )
+                }
+
+                connection.disconnect()
+            } catch (e: Exception) {
+                errorMessage =
+                    "Could not connect to checkout. Please try again."
             }
 
-            connection.disconnect()
-        } catch (e: Exception) {
-            errorMessage = "Could not connect to checkout. Please try again."
+            runOnUiThread {
+                if (checkoutUrl.startsWith("https://")) {
+                    startActivity(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(checkoutUrl)
+                        )
+                    )
+                } else {
+                    Toast.makeText(
+                        this,
+                        if (errorMessage.isNotBlank()) {
+                            errorMessage
+                        } else {
+                            "Checkout link was not returned."
+                        },
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun showPromoInput() {
+        val input = EditText(this).apply {
+            hint = "Enter promo code"
+            setSingleLine(true)
         }
 
-        runOnUiThread {
-            if (checkoutUrl.startsWith("https://")) {
-                startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(checkoutUrl))
+        AlertDialog.Builder(this)
+            .setTitle("Redeem Premium Code")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Redeem") { _, _ ->
+                redeemPromo(input.text.toString().trim())
+            }
+            .show()
+    }
+
+    private fun redeemPromo(code: String) {
+        if (code.isBlank()) {
+            Toast.makeText(
+                this,
+                "Enter a promo code.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        Toast.makeText(
+            this,
+            "Checking promo code...",
+            Toast.LENGTH_SHORT
+        ).show()
+
+        thread {
+            var responseMessage = "Could not redeem promo code."
+            var success = false
+
+            try {
+                val body = JSONObject().put("code", code)
+
+                val connection =
+                    (URL("$api/api/redeem-promo")
+                        .openConnection() as HttpURLConnection)
+
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 20000
+                connection.readTimeout = 20000
+                connection.doOutput = true
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json"
                 )
-            } else {
+
+                connection.outputStream.use {
+                    it.write(body.toString().toByteArray(Charsets.UTF_8))
+                }
+
+                val status = connection.responseCode
+                val stream =
+                    if (status in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
+
+                val result =
+                    stream?.bufferedReader()?.use { it.readText() } ?: ""
+
+                val json = try {
+                    JSONObject(result)
+                } catch (_: Exception) {
+                    JSONObject()
+                }
+
+                success = status in 200..299
+
+                responseMessage = json.optString(
+                    "message",
+                    json.optString(
+                        "error",
+                        if (success) {
+                            "Promo code redeemed."
+                        } else {
+                            "Could not redeem promo code."
+                        }
+                    )
+                )
+
+                connection.disconnect()
+            } catch (e: Exception) {
+                responseMessage =
+                    "Could not connect. Please try again."
+            }
+
+            runOnUiThread {
                 Toast.makeText(
                     this,
-                    if (errorMessage.isNotBlank()) errorMessage
-                    else "Checkout link was not returned.",
+                    responseMessage,
                     Toast.LENGTH_LONG
                 ).show()
+
+                if (success) {
+                    showHome(currentEmail)
+                }
+            }
+        }
+    }
+
+    private fun logout() {
+        thread {
+            try {
+                val connection =
+                    (URL("$api/api/logout")
+                        .openConnection() as HttpURLConnection)
+
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+
+                connection.responseCode
+                connection.disconnect()
+            } catch (_: Exception) {
+                // Return to the login screen even if logout fails.
+            }
+
+            runOnUiThread {
+                currentEmail = ""
+                showAuth()
             }
         }
     }
 }
-
-private fun showPromoInput() {
-    val input = EditText(this).apply {
-        hint = "Enter promo code"
-        setSingleLine(true)
-    }
-
-    AlertDialog.Builder(this)
-        .setTitle("Redeem Premium Code")
-        .setView(input)
-        .setNegativeButton("Cancel", null)
-        .setPositiveButton("Redeem") { _, _ ->
-            redeemPromo(input.text.toString().trim())
-        }
-        .show()
-   }
-}
-
