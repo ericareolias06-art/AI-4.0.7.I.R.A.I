@@ -1,6 +1,7 @@
-
 package com.iraitec
-
+import java.net.CookieHandler
+import java.net.CookieManager
+import java.net.CookiePolicy
 import android.app.Activity
 import android.os.Bundle
 import android.graphics.Color
@@ -29,6 +30,9 @@ class MainActivity : Activity() {
     private var registering = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        CookieHandler.setDefault(
+    CookieManager(null, CookiePolicy.ACCEPT_ALL)
+    )
         super.onCreate(savedInstanceState)
         window.statusBarColor = bg
         window.navigationBarColor = bg
