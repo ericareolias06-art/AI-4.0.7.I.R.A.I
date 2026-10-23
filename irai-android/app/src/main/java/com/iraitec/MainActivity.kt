@@ -1,4 +1,5 @@
 package com.iraitec
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import java.net.CookieHandler
@@ -240,5 +241,80 @@ class MainActivity : Activity() {
             setOnClickListener { showAuth() }
         }, params())
     }
+    private fun startCheckout(plan: String) {
+    message.text = "Preparing secure checkout..."
+
+    thread {
+        var checkoutUrl = ""
+        var errorMessage = ""
+
+        try {
+            val body = JSONObject().put("plan", plan)
+            val connection = (URL("$api/api/create-checkout-session")
+                .openConnection() as HttpURLConnection)
+
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 20000
+            connection.readTimeout = 20000
+            connection.doOutput = true
+            connection.setRequestProperty(
+                "Content-Type", "application/json"
+            )
+
+            connection.outputStream.use {
+                it.write(body.toString().toByteArray(Charsets.UTF_8))
+            }
+
+            val code = connection.responseCode
+            val stream = if (code in 200..299)
+                connection.inputStream else connection.errorStream
+            val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
+            val json = JSONObject(result)
+
+            if (code in 200..299) {
+                checkoutUrl = json.optString("url")
+            } else {
+                errorMessage = json.optString(
+                    "error", "Could not start checkout."
+                )
+            }
+
+            connection.disconnect()
+        } catch (e: Exception) {
+            errorMessage = "Could not connect to checkout. Please try again."
+        }
+
+        runOnUiThread {
+            if (checkoutUrl.startsWith("https://")) {
+                startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(checkoutUrl))
+                )
+            } else {
+                Toast.makeText(
+                    this,
+                    if (errorMessage.isNotBlank()) errorMessage
+                    else "Checkout link was not returned.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+}
+
+private fun showPromoInput() {
+    val input = EditText(this).apply {
+        hint = "Enter promo code"
+        setSingleLine(true)
+    }
+
+    AlertDialog.Builder(this)
+        .setTitle("Redeem Premium Code")
+        .setView(input)
+        .setNegativeButton("Cancel", null)
+        .setPositiveButton("Redeem") { _, _ ->
+            redeemPromo(input.text.toString().trim())
+        }
+        .show()
+   }
 }
 
