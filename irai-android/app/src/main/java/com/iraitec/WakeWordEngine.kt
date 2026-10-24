@@ -1,5 +1,6 @@
 package com.iraitec
 
+import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
@@ -16,6 +17,7 @@ import kotlin.math.sqrt
  */
 internal class WakeWordEngine(context: android.content.Context) : AutoCloseable {
     companion object {
+        private const val TAG = "IraiWakeDebug"
         private const val RATE = 16000
         private const val WINDOW_SIZE = 16000
         private const val FFT_SIZE = 512

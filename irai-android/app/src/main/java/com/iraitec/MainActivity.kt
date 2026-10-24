@@ -4,6 +4,9 @@ package com.iraitec
 import android.app.Activity
 import android.app.AlertDialog
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.content.Intent
@@ -34,9 +37,29 @@ class MainActivity : Activity() {
     private lateinit var passwordInput: EditText
     private lateinit var confirmInput: EditText
     private lateinit var message: TextView
+    private lateinit var diagnosticText: TextView
 
     private var registering = false
     private var currentEmail = ""
+    private var receiverRegistered = false
+    private var latestDiagnostic = "Waiting for listening service..."
+
+    private val diagnosticReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != IraiListeningService.ACTION_DIAGNOSTIC) return
+
+            val status = intent.getStringExtra(
+                IraiListeningService.EXTRA_STATUS
+            ) ?: return
+
+            runOnUiThread {
+                latestDiagnostic = status
+                if (::diagnosticText.isInitialized) {
+                    diagnosticText.text = "WAKE-WORD DIAGNOSTICS\n$status"
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +70,20 @@ class MainActivity : Activity() {
 
         window.statusBarColor = bg
         window.navigationBarColor = bg
+
+        val filter = IntentFilter(IraiListeningService.ACTION_DIAGNOSTIC)
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(
+                diagnosticReceiver,
+                filter,
+                Context.RECEIVER_NOT_EXPORTED
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(diagnosticReceiver, filter)
+        }
+        receiverRegistered = true
 
         showAuth()
     }
@@ -83,6 +120,8 @@ class MainActivity : Activity() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
         ) {
+            latestDiagnostic = "Microphone permission has not been granted."
+            refreshDiagnostic()
             return
         }
 
@@ -94,10 +133,16 @@ class MainActivity : Activity() {
             } else {
                 startService(serviceIntent)
             }
+
+            latestDiagnostic = "Starting listening service..."
+            refreshDiagnostic()
         } catch (e: Exception) {
+            latestDiagnostic = "Could not start listening: ${e.message}"
+            refreshDiagnostic()
+
             Toast.makeText(
                 this,
-                "Could not start Irai listening. Reopen the app and try again.",
+                latestDiagnostic,
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -111,11 +156,7 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         when (requestCode) {
-            1002 -> {
-                // Notification permission was answered.
-                // Continue to microphone permission either way.
-                requestMicrophonePermissionAfterNotifications()
-            }
+            1002 -> requestMicrophonePermissionAfterNotifications()
 
             1001 -> {
                 if (grantResults.isNotEmpty() &&
@@ -123,6 +164,9 @@ class MainActivity : Activity() {
                 ) {
                     startIraiListeningService()
                 } else {
+                    latestDiagnostic = "Microphone permission denied."
+                    refreshDiagnostic()
+
                     Toast.makeText(
                         this,
                         "Microphone permission is needed for Irai voice features.",
@@ -311,7 +355,7 @@ class MainActivity : Activity() {
 
                 success = code in 200..299
                 connection.disconnect()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 result =
                     "Could not connect. Check your internet and try again."
             }
@@ -383,9 +427,11 @@ class MainActivity : Activity() {
 
             runOnUiThread {
                 root.removeAllViews()
+                root.orientation = LinearLayout.VERTICAL
                 root.gravity = Gravity.CENTER
+                root.setPadding(24, 20, 24, 20)
 
-                root.addView(label("✦", 58, accent))
+                root.addView(label("✦", 48, accent))
                 root.addView(label("Welcome to IRAI TEC", 26, white))
                 root.addView(label("Signed in as $email", 15, muted))
 
@@ -421,13 +467,49 @@ class MainActivity : Activity() {
                     }, params())
                 }
 
+                val diagnosticPanel = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(12, 12, 12, 12)
+                    setBackgroundColor(Color.rgb(30, 30, 48))
+                }
+
+                diagnosticPanel.addView(label("WAKE-WORD DIAGNOSTICS", 16, accent))
+
+                diagnosticText = TextView(this).apply {
+                    text = latestDiagnostic
+                    textSize = 14f
+                    setTextColor(white)
+                    gravity = Gravity.CENTER
+                    setPadding(8, 8, 8, 8)
+                }
+
+                diagnosticPanel.addView(diagnosticText)
+                root.addView(diagnosticPanel, params())
+
+                root.addView(Button(this).apply {
+                    text = "Restart Listening"
+                    setOnClickListener {
+                        latestDiagnostic = "Restarting listening service..."
+                        refreshDiagnostic()
+                        startIraiListeningService()
+                    }
+                }, params())
+
                 root.addView(Button(this).apply {
                     text = "Log Out"
                     setOnClickListener {
                         logout()
                     }
                 }, params())
+
+                refreshDiagnostic()
             }
+        }
+    }
+
+    private fun refreshDiagnostic() {
+        if (::diagnosticText.isInitialized) {
+            diagnosticText.text = "WAKE-WORD DIAGNOSTICS\n$latestDiagnostic"
         }
     }
 
@@ -492,7 +574,7 @@ class MainActivity : Activity() {
                 }
 
                 connection.disconnect()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 errorMessage =
                     "Could not connect to checkout. Please try again."
             }
@@ -608,7 +690,7 @@ class MainActivity : Activity() {
                 )
 
                 connection.disconnect()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 responseMessage =
                     "Could not connect. Please try again."
             }
@@ -646,8 +728,20 @@ class MainActivity : Activity() {
 
             runOnUiThread {
                 currentEmail = ""
+                latestDiagnostic = "Waiting for listening service..."
                 showAuth()
             }
         }
+    }
+
+    override fun onDestroy() {
+        if (receiverRegistered) {
+            try {
+                unregisterReceiver(diagnosticReceiver)
+            } catch (_: Exception) {
+            }
+            receiverRegistered = false
+        }
+        super.onDestroy()
     }
 }

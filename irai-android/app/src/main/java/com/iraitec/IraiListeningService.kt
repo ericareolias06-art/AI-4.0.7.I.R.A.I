@@ -1,3 +1,4 @@
+
 package com.iraitec
 
 import android.app.Notification
@@ -15,50 +16,76 @@ import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 
 class IraiListeningService : Service() {
+
     companion object {
         private const val TAG = "IraiListening"
         private const val CHANNEL_ID = "irai_listening"
         private const val NOTIFICATION_ID = 1001
+
+        const val ACTION_DIAGNOSTIC = "com.iraitec.WAKE_DIAGNOSTIC"
+        const val EXTRA_STATUS = "status"
     }
 
     private val running = AtomicBoolean(false)
-    @Volatile private var recorder: AudioRecord? = null
-    @Volatile private var engine: WakeWordEngine? = null
-    @Volatile private var detected = false
+
+    @Volatile
+    private var recorder: AudioRecord? = null
+
+    @Volatile
+    private var engine: WakeWordEngine? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("Preparing wake-word detector…"))
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification("Preparing wake-word detector…")
+        )
+        reportStatus("Service started; preparing detector")
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int
+    ): Int {
         if (!running.get()) {
             if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
                 PackageManager.PERMISSION_GRANTED
             ) {
+                reportStatus("ERROR: Microphone permission is not granted")
+                updateNotification("Microphone permission required")
                 stopSelf()
                 return START_NOT_STICKY
             }
+
             running.set(true)
             Thread({ listenLoop() }, "IraiAudioLoop").start()
         }
+
         return START_STICKY
     }
 
     private fun listenLoop() {
         var localEngine: WakeWordEngine? = null
         var localRecorder: AudioRecord? = null
+
         try {
+            reportStatus("Loading wake-word model")
             localEngine = WakeWordEngine(this)
             engine = localEngine
+
+            reportStatus("Model loaded; preparing microphone")
 
             val minBuffer = AudioRecord.getMinBufferSize(
                 16000,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT
             )
-            if (minBuffer <= 0) error("AudioRecord does not support 16 kHz mono input")
+
+            if (minBuffer <= 0) {
+                error("AudioRecord does not support 16 kHz mono input")
+            }
 
             localRecorder = AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
@@ -67,41 +94,91 @@ class IraiListeningService : Service() {
                 AudioFormat.ENCODING_PCM_16BIT,
                 maxOf(minBuffer, 6400)
             )
+
             if (localRecorder.state != AudioRecord.STATE_INITIALIZED) {
                 error("Microphone initialization failed")
             }
+
             recorder = localRecorder
             localRecorder.startRecording()
+
             updateNotification("Listening for “Irai”")
+            reportStatus("LISTENING: Microphone recording at 16 kHz")
 
             val shorts = ShortArray(1600)
             val floats = FloatArray(shorts.size)
+            var totalSamples = 0L
 
             while (running.get()) {
-                val count = localRecorder.read(shorts, 0, shorts.size, AudioRecord.READ_BLOCKING)
+                val count = localRecorder.read(
+                    shorts,
+                    0,
+                    shorts.size,
+                    AudioRecord.READ_BLOCKING
+                )
+
                 if (count <= 0) {
-                    if (count < 0) Log.e(TAG, "AudioRecord read error: $count")
+                    if (count < 0) {
+                        val message = "Microphone read error: $count"
+                        Log.e(TAG, message)
+                        reportStatus("ERROR: $message")
+                    }
                     continue
                 }
-                for (i in 0 until count) floats[i] = shorts[i] / 32768.0f
+
+                totalSamples += count
+
+                for (i in 0 until count) {
+                    floats[i] = shorts[i] / 32768.0f
+                }
+
+                // Report that audio is flowing, approximately every 5 seconds.
+                if (totalSamples % 80000 < count) {
+                    reportStatus("LISTENING: Microphone audio is arriving")
+                }
 
                 if (localEngine.accept(floats.copyOf(count))) {
-                    detected = true
+                    val message = "DETECTED: Irai heard you!"
+                    Log.i(TAG, message)
                     updateNotification("Irai heard you!")
-                    Log.i(TAG, "Wake word detected")
+                    reportStatus(message)
                 }
             }
         } catch (t: Throwable) {
+            val message = "ERROR: ${t.javaClass.simpleName}: ${t.message ?: "Unknown error"}"
             Log.e(TAG, "Wake-word listening stopped", t)
             updateNotification("Listening error — reopen Irai Tec")
+            reportStatus(message)
         } finally {
             running.set(false)
-            try { localRecorder?.stop() } catch (_: Exception) {}
+
+            try {
+                localRecorder?.stop()
+            } catch (_: Exception) {
+            }
+
             localRecorder?.release()
             recorder = null
-            try { localEngine?.close() } catch (_: Exception) {}
+
+            try {
+                localEngine?.close()
+            } catch (_: Exception) {
+            }
+
             engine = null
+            reportStatus("Listening service stopped")
         }
+    }
+
+    private fun reportStatus(message: String) {
+        Log.d(TAG, message)
+
+        val intent = Intent(ACTION_DIAGNOSTIC).apply {
+            setPackage(packageName)
+            putExtra(EXTRA_STATUS, message)
+        }
+
+        sendBroadcast(intent)
     }
 
     private fun createNotificationChannel() {
@@ -111,6 +188,7 @@ class IraiListeningService : Service() {
                 "Irai listening",
                 NotificationManager.IMPORTANCE_LOW
             )
+
             getSystemService(NotificationManager::class.java)
                 .createNotificationChannel(channel)
         }
@@ -123,6 +201,7 @@ class IraiListeningService : Service() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
+
         return builder
             .setContentTitle("Irai Tec")
             .setContentText(message)
@@ -138,7 +217,12 @@ class IraiListeningService : Service() {
 
     override fun onDestroy() {
         running.set(false)
-        try { recorder?.stop() } catch (_: Exception) {}
+
+        try {
+            recorder?.stop()
+        } catch (_: Exception) {
+        }
+
         super.onDestroy()
     }
 
