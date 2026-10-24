@@ -52,41 +52,54 @@ class MainActivity : Activity() {
     }
 
     private fun requestMicrophonePermission() {
-    if (Build.VERSION.SDK_INT >= 33 &&
-        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
-        PackageManager.PERMISSION_GRANTED
-    ) {
-        requestPermissions(
-            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-            1002
-        )
-        return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                1002
+            )
+        } else {
+            requestMicrophonePermissionAfterNotifications()
+        }
     }
-
-    requestMicrophonePermissionAfterNotifications()
-}
 
     private fun requestMicrophonePermissionAfterNotifications() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
-    ) {
-        requestPermissions(
-            arrayOf(Manifest.permission.RECORD_AUDIO),
-            1001
-        )
-    }   else {
-        startIraiListeningService()
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                1001
+            )
+        } else {
+            startIraiListeningService()
+        }
     }
-}
 
     private fun startIraiListeningService() {
-        val serviceIntent = Intent(this, IraiListeningService::class.java)
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
+        try {
+            val serviceIntent = Intent(this, IraiListeningService::class.java)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                "Could not start Irai listening. Reopen the app and try again.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -97,17 +110,25 @@ class MainActivity : Activity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        if (requestCode == 1001) {
-            if (grantResults.isNotEmpty() &&
-                grantResults[0] == PackageManager.PERMISSION_GRANTED
-            ) {
-                startIraiListeningService()
-            } else {
-                Toast.makeText(
-                    this,
-                    "Microphone permission is needed for Irai voice features.",
-                    Toast.LENGTH_LONG
-                ).show()
+        when (requestCode) {
+            1002 -> {
+                // Notification permission was answered.
+                // Continue to microphone permission either way.
+                requestMicrophonePermissionAfterNotifications()
+            }
+
+            1001 -> {
+                if (grantResults.isNotEmpty() &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED
+                ) {
+                    startIraiListeningService()
+                } else {
+                    Toast.makeText(
+                        this,
+                        "Microphone permission is needed for Irai voice features.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
     }
@@ -356,7 +377,8 @@ class MainActivity : Activity() {
 
                 connection.disconnect()
             } catch (_: Exception) {
-                statusMessage = "Could not verify Premium status. Check your connection."
+                statusMessage =
+                    "Could not verify Premium status. Check your connection."
             }
 
             runOnUiThread {
