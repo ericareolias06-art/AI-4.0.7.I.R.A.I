@@ -72,7 +72,9 @@ class IraiListeningService : Service() {
 
         try {
             reportStatus("Loading wake-word model")
-            localEngine = WakeWordEngine(this)
+            localEngine = WakeWordEngine(this) { diagnostic ->
+            reportStatus(diagnostic)
+            }
             engine = localEngine
 
             reportStatus("Model loaded; preparing microphone")
