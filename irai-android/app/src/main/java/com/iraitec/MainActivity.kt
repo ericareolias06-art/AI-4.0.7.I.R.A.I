@@ -3,6 +3,9 @@ package com.iraitec
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.content.Intent
 import android.net.Uri
 import android.graphics.Color
@@ -46,6 +49,52 @@ class MainActivity : Activity() {
         window.navigationBarColor = bg
 
         showAuth()
+    }
+
+    private fun requestMicrophonePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                1001
+            )
+        } else {
+            startIraiListeningService()
+        }
+    }
+
+    private fun startIraiListeningService() {
+        val serviceIntent = Intent(this, IraiListeningService::class.java)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == 1001) {
+            if (grantResults.isNotEmpty() &&
+                grantResults[0] == PackageManager.PERMISSION_GRANTED
+            ) {
+                startIraiListeningService()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Microphone permission is needed for Irai voice features.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun showAuth() {
@@ -253,6 +302,7 @@ class MainActivity : Activity() {
                 } else if (success) {
                     currentEmail = email
                     showHome(email)
+                    requestMicrophonePermission()
                 }
             }
         }

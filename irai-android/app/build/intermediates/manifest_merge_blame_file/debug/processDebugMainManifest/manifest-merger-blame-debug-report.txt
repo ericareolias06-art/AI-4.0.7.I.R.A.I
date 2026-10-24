@@ -11,36 +11,54 @@
 11    <uses-permission android:name="android.permission.INTERNET" />
 11-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:3:5-67
 11-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:3:22-64
-12
-13    <application
-13-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:4:5-17:19
-14        android:allowBackup="false"
-14-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:5:9-36
-15        android:debuggable="true"
-16        android:extractNativeLibs="false"
-17        android:label="Irai Tec"
-17-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:6:9-33
-18        android:theme="@android:style/Theme.Material.Light.NoActionBar"
-18-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:7:9-72
-19        android:usesCleartextTraffic="false" >
-19-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:8:9-45
-20        <activity
-20-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:9:9-16:20
-21            android:name="com.iraitec.MainActivity"
-21-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:10:13-41
-22            android:exported="true" >
-22-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:11:13-36
-23            <intent-filter>
-23-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:12:13-15:29
-24                <action android:name="android.intent.action.MAIN" />
-24-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:13:17-69
-24-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:13:25-66
-25
-26                <category android:name="android.intent.category.LAUNCHER" />
-26-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:14:17-77
-26-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:14:27-74
-27            </intent-filter>
-28        </activity>
-29    </application>
-30
-31</manifest>
+12    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+12-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:4:5-71
+12-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:4:22-68
+13    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+13-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:5:5-77
+13-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:5:22-74
+14    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+14-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:6:5-88
+14-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:6:22-85
+15
+16    <application
+16-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:7:5-24:19
+17        android:allowBackup="false"
+17-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:8:9-36
+18        android:debuggable="true"
+19        android:extractNativeLibs="false"
+20        android:label="Irai Tec"
+20-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:9:9-33
+21        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+21-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:10:9-72
+22        android:usesCleartextTraffic="false" >
+22-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:11:9-45
+23        <activity
+23-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:12:9-19:20
+24            android:name="com.iraitec.MainActivity"
+24-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:13:13-41
+25            android:exported="true" >
+25-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:14:13-36
+26            <intent-filter>
+26-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:15:13-18:29
+27                <action android:name="android.intent.action.MAIN" />
+27-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:16:17-69
+27-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:16:25-66
+28
+29                <category android:name="android.intent.category.LAUNCHER" />
+29-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:17:17-77
+29-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:17:27-74
+30            </intent-filter>
+31        </activity>
+32
+33        <service
+33-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:20:9-23:58
+34            android:name="com.iraitec.IraiListeningService"
+34-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:21:13-49
+35            android:exported="false"
+35-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:22:13-37
+36            android:foregroundServiceType="microphone" />
+36-->/workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:23:13-55
+37    </application>
+38
+39</manifest>
