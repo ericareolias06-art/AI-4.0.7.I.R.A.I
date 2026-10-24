@@ -4,6 +4,7 @@ ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifes
 INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-25:12
 INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-25:12
 INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-25:12
+MERGED from [com.microsoft.onnxruntime:onnxruntime-android:1.20.0] /home/codespace/.gradle/caches/9.7.1/transforms/d5f4e66d8fd6b0fcaab1c9c4f7955591/transformed/onnxruntime-android-1.20.0/AndroidManifest.xml:2:1-7:12
 	package
 		INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml
 	android:versionName
@@ -69,6 +70,8 @@ uses-sdk
 INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml
 INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml
+MERGED from [com.microsoft.onnxruntime:onnxruntime-android:1.20.0] /home/codespace/.gradle/caches/9.7.1/transforms/d5f4e66d8fd6b0fcaab1c9c4f7955591/transformed/onnxruntime-android-1.20.0/AndroidManifest.xml:5:5-44
+MERGED from [com.microsoft.onnxruntime:onnxruntime-android:1.20.0] /home/codespace/.gradle/caches/9.7.1/transforms/d5f4e66d8fd6b0fcaab1c9c4f7955591/transformed/onnxruntime-android-1.20.0/AndroidManifest.xml:5:5-44
 	android:targetSdkVersion
 		INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml
 	android:minSdkVersion
