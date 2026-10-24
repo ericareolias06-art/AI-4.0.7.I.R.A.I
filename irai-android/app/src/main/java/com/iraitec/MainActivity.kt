@@ -94,6 +94,33 @@ class MainActivity : Activity() {
         }
     }
 
+    private val sessionPrefs by lazy {
+        getSharedPreferences("irai_session", Context.MODE_PRIVATE)
+    }
+
+    private fun openApiConnection(path: String): HttpURLConnection {
+        val connection =
+            URL(api + path).openConnection() as HttpURLConnection
+        sessionPrefs.getString("cookie", null)?.let {
+            connection.setRequestProperty("Cookie", it)
+        }
+        return connection
+    }
+
+    private fun saveSessionCookie(connection: HttpURLConnection) {
+        val cookies = connection.headerFields
+            .filterKeys { it.equals("Set-Cookie", ignoreCase = true) }
+            .values.flatten()
+
+        val sessionCookie = cookies.firstOrNull {
+            it.substringBefore("=").trim() == "session"
+        }?.substringBefore(";")
+
+        if (sessionCookie != null) {
+            sessionPrefs.edit().putString("cookie", sessionCookie).apply()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -130,8 +157,8 @@ class MainActivity : Activity() {
 
                     speechTts?.setSpeechRate(0.92f)
                     speechTts?.setPitch(1.18f)
-                    if (result == TextToSpeech.LANG_MISSING_DATA ||
-                        result == TextToSpeech.LANG_NOT_SUPPORTED
+                    if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                        languageResult == TextToSpeech.LANG_NOT_SUPPORTED
                     ) {
                         latestDiagnostic =
                             "Text-to-speech language unavailable."
@@ -142,6 +169,58 @@ class MainActivity : Activity() {
         }
 
         showAuth()
+    }
+
+    private fun restoreSession() {
+        val cookie = sessionPrefs.getString("cookie", null)
+        if (cookie.isNullOrBlank()) {
+            showAuth()
+            return
+        }
+
+        thread {
+            var email = ""
+            var valid = false
+
+            try {
+                val connection = openApiConnection("/api/me")
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+
+                val code = connection.responseCode
+                val stream = if (code in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
+                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                connection.disconnect()
+
+                if (code in 200..299) {
+                    val json = JSONObject(result)
+                    email = json.optString("email", "")
+                    valid = email.isNotBlank()
+                }
+            } catch (_: Exception) {
+                // A network failure should not erase the saved session.
+            }
+
+            runOnUiThread {
+                if (valid) {
+                    currentEmail = email
+                    loggedIn = true
+                    showHome(email)
+                    requestMicrophonePermission()
+                } else if (cookie.isNotBlank()) {
+                    // Keep the cookie if the network is unavailable; show sign-in
+                    // only when the server explicitly rejects the session.
+                    showAuth()
+                } else {
+                    showAuth()
+                }
+            }
+        }
     }
 
     private fun showAuth() {
@@ -263,7 +342,7 @@ class MainActivity : Activity() {
 
             try {
                 val connection =
-                    URL(api + endpoint).openConnection() as HttpURLConnection
+                    openApiConnection(endpoint)
 
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 20000
@@ -278,6 +357,7 @@ class MainActivity : Activity() {
                 }
 
                 val code = connection.responseCode
+                saveSessionCookie(connection)
                 val stream = if (code in 200..299) {
                     connection.inputStream
                 } else {
@@ -593,7 +673,7 @@ class MainActivity : Activity() {
 
             try {
                 val connection =
-                    URL("$api/api/me").openConnection() as HttpURLConnection
+                    openApiConnection("/api/me")
 
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 15000
@@ -728,8 +808,7 @@ class MainActivity : Activity() {
             try {
                 val body = JSONObject().put("plan", plan)
                 val connection =
-                    URL("$api/api/create-checkout-session")
-                        .openConnection() as HttpURLConnection
+                    openApiConnection("/api/create-checkout-session")
 
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 20000
@@ -818,8 +897,7 @@ class MainActivity : Activity() {
             try {
                 val body = JSONObject().put("code", code)
                 val connection =
-                    URL("$api/api/redeem-promo")
-                        .openConnection() as HttpURLConnection
+                    openApiConnection("/api/redeem-promo")
 
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 20000
@@ -883,7 +961,7 @@ class MainActivity : Activity() {
         thread {
             try {
                 val connection =
-                    URL("$api/api/logout").openConnection() as HttpURLConnection
+                    openApiConnection("/api/logout")
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 15000
                 connection.readTimeout = 15000
