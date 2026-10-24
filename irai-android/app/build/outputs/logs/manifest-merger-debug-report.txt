@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-25:12
-INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-25:12
-INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-25:12
-INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-25:12
+ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-26:12
+INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-26:12
+INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-26:12
+INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:2:1-26:12
 MERGED from [com.microsoft.onnxruntime:onnxruntime-android:1.20.0] /home/codespace/.gradle/caches/9.7.1/transforms/d5f4e66d8fd6b0fcaab1c9c4f7955591/transformed/onnxruntime-android-1.20.0/AndroidManifest.xml:2:1-7:12
 	package
 		INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml
@@ -21,51 +21,55 @@ uses-permission#android.permission.RECORD_AUDIO
 ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:4:5-71
 	android:name
 		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:4:22-68
-uses-permission#android.permission.FOREGROUND_SERVICE
+uses-permission#android.permission.POST_NOTIFICATIONS
 ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:5:5-77
 	android:name
 		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:5:22-74
-uses-permission#android.permission.FOREGROUND_SERVICE_MICROPHONE
-ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:6:5-88
+uses-permission#android.permission.FOREGROUND_SERVICE
+ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:6:5-77
 	android:name
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:6:22-85
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:6:22-74
+uses-permission#android.permission.FOREGROUND_SERVICE_MICROPHONE
+ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:7:5-88
+	android:name
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:7:22-85
 application
-ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:7:5-24:19
-INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:7:5-24:19
+ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:8:5-25:19
+INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:8:5-25:19
 	android:extractNativeLibs
 		INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml
 	android:label
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:9:9-33
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:10:9-33
 	android:allowBackup
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:8:9-36
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:9:9-36
 	android:theme
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:10:9-72
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:11:9-72
 	android:usesCleartextTraffic
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:11:9-45
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:12:9-45
 activity#com.iraitec.MainActivity
-ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:12:9-19:20
+ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:13:9-20:20
 	android:exported
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:14:13-36
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:15:13-36
 	android:name
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:13:13-41
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:14:13-41
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:15:13-18:29
+ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:16:13-19:29
 action#android.intent.action.MAIN
-ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:16:17-69
+ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:17:17-69
 	android:name
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:16:25-66
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:17:25-66
 category#android.intent.category.LAUNCHER
-ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:17:17-77
+ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:18:17-77
 	android:name
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:17:27-74
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:18:27-74
 service#com.iraitec.IraiListeningService
-ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:20:9-23:58
+ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:21:9-24:58
 	android:exported
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:22:13-37
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:23:13-37
 	android:foregroundServiceType
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:23:13-55
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:24:13-55
 	android:name
-		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:21:13-49
+		ADDED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml:22:13-49
 uses-sdk
 INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /workspaces/AI-4.0.7.I.R.A.I/irai-android/app/src/main/AndroidManifest.xml

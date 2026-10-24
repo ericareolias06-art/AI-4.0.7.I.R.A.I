@@ -52,18 +52,33 @@ class MainActivity : Activity() {
     }
 
     private fun requestMicrophonePermission() {
+    if (Build.VERSION.SDK_INT >= 33 &&
+        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+        PackageManager.PERMISSION_GRANTED
+    ) {
+        requestPermissions(
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            1002
+        )
+        return
+    }
+
+    requestMicrophonePermissionAfterNotifications()
+}
+
+    private fun requestMicrophonePermissionAfterNotifications() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(
-                arrayOf(Manifest.permission.RECORD_AUDIO),
-                1001
-            )
-        } else {
-            startIraiListeningService()
-        }
+    ) {
+        requestPermissions(
+            arrayOf(Manifest.permission.RECORD_AUDIO),
+            1001
+        )
+    }   else {
+        startIraiListeningService()
     }
+}
 
     private fun startIraiListeningService() {
         val serviceIntent = Intent(this, IraiListeningService::class.java)
