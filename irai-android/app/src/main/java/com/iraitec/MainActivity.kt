@@ -1,5 +1,4 @@
 
-
 package com.iraitec
 
 import android.Manifest
@@ -14,7 +13,11 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
@@ -47,15 +50,25 @@ class MainActivity : Activity() {
     private lateinit var message: TextView
     private lateinit var diagnosticText: TextView
 
+    private val handler = Handler(Looper.getMainLooper())
+
     private var registering = false
     private var currentEmail = ""
     private var receiverRegistered = false
     private var loggedIn = false
     private var awaitingCommand = false
+    private var listeningForCommand = false
     private var latestDiagnostic = "Waiting for listening service..."
 
+    private var speechRecognizer: SpeechRecognizer? = null
     private var speechTts: TextToSpeech? = null
     private var ttsReady = false
+
+    private val restartListeningRunnable = Runnable {
+        if (loggedIn && !awaitingCommand && !listeningForCommand) {
+            startIraiListeningService()
+        }
+    }
 
     private val diagnosticReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -113,13 +126,10 @@ class MainActivity : Activity() {
                 ttsReady = status == TextToSpeech.SUCCESS
 
                 if (ttsReady) {
-                    val languageResult =
-                        speechTts?.setLanguage(Locale.US)
+                    val result = speechTts?.setLanguage(Locale.US)
 
-                    if (languageResult ==
-                        TextToSpeech.LANG_MISSING_DATA ||
-                        languageResult ==
-                        TextToSpeech.LANG_NOT_SUPPORTED
+                    if (result == TextToSpeech.LANG_MISSING_DATA ||
+                        result == TextToSpeech.LANG_NOT_SUPPORTED
                     ) {
                         latestDiagnostic =
                             "Text-to-speech language unavailable."
@@ -132,10 +142,6 @@ class MainActivity : Activity() {
         showAuth()
     }
 
-    // ---------------------------------------------------------
-    // LOGIN AND REGISTRATION
-    // ---------------------------------------------------------
-
     private fun showAuth() {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -145,7 +151,6 @@ class MainActivity : Activity() {
         }
 
         val scroll = ScrollView(this)
-
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -154,11 +159,9 @@ class MainActivity : Activity() {
         content.addView(label("✦", 58, accent))
         content.addView(label("IRAI TEC", 30, white))
         content.addView(label("Your AI companion", 16, muted))
-
         content.addView(
-            label("Sign in to your Irai Tec account", 18, white).apply {
-                setPadding(0, 28, 0, 20)
-            }
+            label("Sign in to your Irai Tec account", 18, white)
+                .apply { setPadding(0, 28, 0, 20) }
         )
 
         emailInput = field("Email address").apply {
@@ -181,9 +184,7 @@ class MainActivity : Activity() {
             text = "Log In"
             setTextColor(white)
             setBackgroundColor(accent)
-            setOnClickListener {
-                submitAuth()
-            }
+            setOnClickListener { submitAuth() }
         }
         content.addView(action, params())
 
@@ -196,7 +197,6 @@ class MainActivity : Activity() {
 
             setOnClickListener {
                 registering = !registering
-
                 action.text =
                     if (registering) "Create Account" else "Log In"
 
@@ -204,13 +204,11 @@ class MainActivity : Activity() {
                     if (registering) View.VISIBLE else View.GONE
 
                 message.text = ""
-
-                text =
-                    if (registering) {
-                        "Already have an account? Log in"
-                    } else {
-                        "Don't have an account? Register"
-                    }
+                text = if (registering) {
+                    "Already have an account? Log in"
+                } else {
+                    "Don't have an account? Register"
+                }
             }
         }
         content.addView(toggle)
@@ -245,16 +243,16 @@ class MainActivity : Activity() {
 
         message.text = "Connecting securely..."
 
-        val endpoint =
-            if (registering) "/api/register" else "/api/login"
+        val endpoint = if (registering) {
+            "/api/register"
+        } else {
+            "/api/login"
+        }
 
         val body = JSONObject().apply {
             put("email", email)
             put("password", password)
-
-            if (registering) {
-                put("confirmPassword", confirm)
-            }
+            if (registering) put("confirmPassword", confirm)
         }
 
         thread {
@@ -263,16 +261,14 @@ class MainActivity : Activity() {
 
             try {
                 val connection =
-                    URL(api + endpoint).openConnection()
-                        as HttpURLConnection
+                    URL(api + endpoint).openConnection() as HttpURLConnection
 
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 20000
                 connection.readTimeout = 20000
                 connection.doOutput = true
                 connection.setRequestProperty(
-                    "Content-Type",
-                    "application/json"
+                    "Content-Type", "application/json"
                 )
 
                 connection.outputStream.use {
@@ -280,22 +276,17 @@ class MainActivity : Activity() {
                 }
 
                 val code = connection.responseCode
-                val stream =
-                    if (code in 200..299) {
-                        connection.inputStream
-                    } else {
-                        connection.errorStream
-                    }
+                val stream = if (code in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
 
-                result = stream?.bufferedReader()?.use {
-                    it.readText()
-                } ?: ""
-
+                result = stream?.bufferedReader()?.use { it.readText() } ?: ""
                 success = code in 200..299
                 connection.disconnect()
             } catch (_: Exception) {
-                result =
-                    "Could not connect. Check your internet and try again."
+                result = "Could not connect. Check your internet and try again."
             }
 
             runOnUiThread {
@@ -305,19 +296,16 @@ class MainActivity : Activity() {
                     JSONObject()
                 }
 
-                val responseText = json.optString(
+                message.text = json.optString(
                     "message",
                     json.optString("error", result)
                 )
-
-                message.text = responseText
 
                 if (success && registering) {
                     registering = false
                     confirmInput.visibility = View.GONE
                     passwordInput.text.clear()
-                    message.text =
-                        "Account created! You can now log in."
+                    message.text = "Account created! You can now log in."
                 } else if (success) {
                     currentEmail = email
                     loggedIn = true
@@ -328,18 +316,13 @@ class MainActivity : Activity() {
         }
     }
 
-    // ---------------------------------------------------------
-    // MICROPHONE PERMISSIONS AND LISTENING SERVICE
-    // ---------------------------------------------------------
-
     private fun requestMicrophonePermission() {
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissions(
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                1002
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1002
             )
         } else {
             requestMicrophonePermissionAfterNotifications()
@@ -351,8 +334,7 @@ class MainActivity : Activity() {
             PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissions(
-                arrayOf(Manifest.permission.RECORD_AUDIO),
-                1001
+                arrayOf(Manifest.permission.RECORD_AUDIO), 1001
             )
         } else {
             startIraiListeningService()
@@ -360,7 +342,7 @@ class MainActivity : Activity() {
     }
 
     private fun startIraiListeningService() {
-        if (!loggedIn) return
+        if (!loggedIn || awaitingCommand || listeningForCommand) return
 
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
@@ -383,17 +365,14 @@ class MainActivity : Activity() {
             latestDiagnostic = "Starting listening service..."
             refreshDiagnostic()
         } catch (e: Exception) {
-            latestDiagnostic =
-                "Could not start listening: ${e.message}"
+            latestDiagnostic = "Could not start listening: ${e.message}"
             refreshDiagnostic()
         }
     }
 
     private fun stopIraiListeningService() {
         try {
-            stopService(
-                Intent(this, IraiListeningService::class.java)
-            )
+            stopService(Intent(this, IraiListeningService::class.java))
         } catch (_: Exception) {
         }
     }
@@ -403,15 +382,10 @@ class MainActivity : Activity() {
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
-        super.onRequestPermissionsResult(
-            requestCode,
-            permissions,
-            grantResults
-        )
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         when (requestCode) {
             1002 -> requestMicrophonePermissionAfterNotifications()
-
             1001 -> {
                 if (grantResults.isNotEmpty() &&
                     grantResults[0] == PackageManager.PERMISSION_GRANTED
@@ -425,25 +399,90 @@ class MainActivity : Activity() {
         }
     }
 
-    // ---------------------------------------------------------
-    // WAKE WORD -> COMMAND RECOGNITION -> SPOKEN RESPONSE
-    // ---------------------------------------------------------
-
+    // In-app speech recognition: does not launch the Google voice UI.
     private fun startVoiceCommand() {
         if (awaitingCommand || !loggedIn) return
 
         awaitingCommand = true
+        listeningForCommand = true
+        handler.removeCallbacks(restartListeningRunnable)
 
-        // Release the microphone before Android speech recognition starts.
         stopIraiListeningService()
 
-        latestDiagnostic = "Wake word detected. Preparing command listener..."
+        latestDiagnostic = "Irai heard you. Listening for your command..."
         refreshDiagnostic()
 
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            awaitingCommand = false
+            listeningForCommand = false
+            speakResponse("Speech recognition is not available on this device.")
+            return
+        }
+
         try {
-            val intent = Intent(
-                RecognizerIntent.ACTION_RECOGNIZE_SPEECH
-            ).apply {
+            speechRecognizer?.destroy()
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+
+            speechRecognizer?.setRecognitionListener(
+                object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        runOnUiThread {
+                            latestDiagnostic = "Listening inside Irai Tec..."
+                            refreshDiagnostic()
+                        }
+                    }
+
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {
+                        runOnUiThread {
+                            latestDiagnostic = "Processing your command..."
+                            refreshDiagnostic()
+                        }
+                    }
+
+                    override fun onError(error: Int) {
+                        runOnUiThread {
+                            awaitingCommand = false
+                            listeningForCommand = false
+                            latestDiagnostic =
+                                "Speech recognition error ($error). Try again."
+                            refreshDiagnostic()
+                            restartListeningAfterDelay()
+                        }
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        val spokenText = results
+                            ?.getStringArrayList(
+                                SpeechRecognizer.RESULTS_RECOGNITION
+                            )
+                            ?.firstOrNull()
+                            .orEmpty()
+
+                        runOnUiThread {
+                            awaitingCommand = false
+                            listeningForCommand = false
+
+                            if (spokenText.isBlank()) {
+                                latestDiagnostic = "I didn't catch that."
+                                refreshDiagnostic()
+                                speakResponse("Sorry, I didn't catch that.")
+                            } else {
+                                latestDiagnostic = "You said: $spokenText"
+                                refreshDiagnostic()
+                                handleVoiceCommand(spokenText)
+                            }
+                        }
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                }
+            )
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(
                     RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
@@ -452,61 +491,18 @@ class MainActivity : Activity() {
                     RecognizerIntent.EXTRA_LANGUAGE,
                     Locale.US.toLanguageTag()
                 )
-                putExtra(
-                    RecognizerIntent.EXTRA_PROMPT,
-                    "Irai is listening. What do you need?"
-                )
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
             }
 
-            startActivityForResult(intent, 2001)
+            speechRecognizer?.startListening(intent)
         } catch (e: Exception) {
             awaitingCommand = false
-            latestDiagnostic =
-                "Speech recognition unavailable: ${e.message}"
-            refreshDiagnostic()
-            speakResponse("I can't open speech recognition right now.")
-            restartListeningAfterDelay()
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    override fun onActivityResult(
-        requestCode: Int,
-        resultCode: Int,
-        data: Intent?
-    ) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        if (requestCode != 2001) return
-
-        awaitingCommand = false
-
-        if (resultCode != RESULT_OK) {
-            latestDiagnostic =
-                "No command received. Restarting wake-word detection."
+            listeningForCommand = false
+            latestDiagnostic = "Could not start speech recognition: ${e.message}"
             refreshDiagnostic()
             restartListeningAfterDelay()
-            return
         }
-
-        val spokenText = data
-            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            ?.firstOrNull()
-            .orEmpty()
-
-        if (spokenText.isBlank()) {
-            latestDiagnostic = "No command recognized."
-            refreshDiagnostic()
-            speakResponse("Sorry, I didn't catch that.")
-            restartListeningAfterDelay()
-            return
-        }
-
-        latestDiagnostic = "You said: $spokenText"
-        refreshDiagnostic()
-
-        handleVoiceCommand(spokenText)
     }
 
     private fun handleVoiceCommand(command: String) {
@@ -514,20 +510,14 @@ class MainActivity : Activity() {
 
         when {
             "time" in text -> {
-                val time = SimpleDateFormat(
-                    "h:mm a",
-                    Locale.US
-                ).format(Date())
-
+                val time = SimpleDateFormat("h:mm a", Locale.US).format(Date())
                 speakResponse("The time is $time.")
             }
 
             "date" in text || "today" in text -> {
                 val date = SimpleDateFormat(
-                    "EEEE, MMMM d",
-                    Locale.US
+                    "EEEE, MMMM d", Locale.US
                 ).format(Date())
-
                 speakResponse("Today is $date.")
             }
 
@@ -536,54 +526,38 @@ class MainActivity : Activity() {
             }
 
             "your name" in text -> {
-                speakResponse(
-                    "My name is Irai. I'm ready to help."
-                )
+                speakResponse("My name is Irai. I'm ready to help.")
             }
 
             "open youtube" in text -> {
                 speakResponse("Opening YouTube.")
-
-                try {
-                    startActivity(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://www.youtube.com")
-                        )
-                    )
-                } catch (_: Exception) {
-                    speakResponse("I couldn't open YouTube.")
-                }
+                openWebPage("https://www.youtube.com")
             }
 
             "open google" in text -> {
                 speakResponse("Opening Google.")
-
-                try {
-                    startActivity(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://www.google.com")
-                        )
-                    )
-                } catch (_: Exception) {
-                    speakResponse("I couldn't open Google.")
-                }
+                openWebPage("https://www.google.com")
             }
 
-            "stop listening" in text ||
-            "go to sleep" in text -> {
-                speakResponse(
-                    "Okay. Say Irai when you need me again."
-                )
+            "stop listening" in text || "go to sleep" in text -> {
+                loggedIn = false
+                stopIraiListeningService()
+                speakResponse("Okay. Irai is going to sleep.")
             }
 
             else -> {
                 speakResponse(
-                    "I heard you say $command, " +
-                    "but I don't know how to do that yet."
+                    "I heard you say $command, but I don't know how to do that yet."
                 )
             }
+        }
+    }
+
+    private fun openWebPage(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (_: Exception) {
+            speakResponse("I couldn't open that page.")
         }
     }
 
@@ -599,29 +573,16 @@ class MainActivity : Activity() {
                 "irai_response"
             )
         } else {
-            Toast.makeText(
-                this,
-                text,
-                Toast.LENGTH_LONG
-            ).show()
+            Toast.makeText(this, text, Toast.LENGTH_LONG).show()
         }
 
         restartListeningAfterDelay()
     }
 
     private fun restartListeningAfterDelay() {
-        // Wait briefly so the spoken response can begin before reopening
-        // the wake-word microphone.
-        root.postDelayed({
-            if (loggedIn && !awaitingCommand) {
-                startIraiListeningService()
-            }
-        }, 1800)
+        handler.removeCallbacks(restartListeningRunnable)
+        handler.postDelayed(restartListeningRunnable, 1800)
     }
-
-    // ---------------------------------------------------------
-    // HOME SCREEN AND DIAGNOSTICS
-    // ---------------------------------------------------------
 
     private fun showHome(email: String) {
         thread {
@@ -630,32 +591,26 @@ class MainActivity : Activity() {
 
             try {
                 val connection =
-                    URL("$api/api/me").openConnection()
-                        as HttpURLConnection
+                    URL("$api/api/me").openConnection() as HttpURLConnection
 
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 15000
                 connection.readTimeout = 15000
 
                 val code = connection.responseCode
-                val stream =
-                    if (code in 200..299) {
-                        connection.inputStream
-                    } else {
-                        connection.errorStream
-                    }
+                val stream = if (code in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
 
-                val result = stream?.bufferedReader()?.use {
-                    it.readText()
-                } ?: ""
-
+                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
                 val json = JSONObject(result)
 
                 if (code in 200..299) {
                     premium = json.optBoolean("premium", false)
                 } else {
-                    statusMessage =
-                        "Could not verify Premium status."
+                    statusMessage = "Could not verify Premium status."
                 }
 
                 connection.disconnect()
@@ -677,48 +632,32 @@ class MainActivity : Activity() {
                 }
 
                 content.addView(label("✦", 48, accent))
-                content.addView(
-                    label("Welcome to IRAI TEC", 26, white)
-                )
-                content.addView(
-                    label("Signed in as $email", 15, muted)
-                )
+                content.addView(label("Welcome to IRAI TEC", 26, white))
+                content.addView(label("Signed in as $email", 15, muted))
 
                 if (statusMessage.isNotBlank()) {
-                    content.addView(
-                        label(statusMessage, 15, muted)
-                    )
+                    content.addView(label(statusMessage, 15, muted))
                 } else if (premium) {
-                    content.addView(
-                        label("✓ Premium Active", 22, accent)
-                    )
+                    content.addView(label("✓ Premium Active", 22, accent))
                 } else {
-                    content.addView(
-                        label("Unlock IRAI TEC Premium", 20, white)
-                    )
+                    content.addView(label("Unlock IRAI TEC Premium", 20, white))
                     content.addView(label("$3/month", 18, accent))
 
                     content.addView(Button(this).apply {
                         text = "Subscribe Monthly"
-                        setOnClickListener {
-                            startCheckout("monthly")
-                        }
+                        setOnClickListener { startCheckout("monthly") }
                     }, params())
 
                     content.addView(label("$30/year", 18, accent))
 
                     content.addView(Button(this).apply {
                         text = "Subscribe Yearly"
-                        setOnClickListener {
-                            startCheckout("yearly")
-                        }
+                        setOnClickListener { startCheckout("yearly") }
                     }, params())
 
                     content.addView(Button(this).apply {
                         text = "Redeem Promo Code"
-                        setOnClickListener {
-                            showPromoInput()
-                        }
+                        setOnClickListener { showPromoInput() }
                     }, params())
                 }
 
@@ -728,9 +667,7 @@ class MainActivity : Activity() {
                     setBackgroundColor(Color.rgb(30, 30, 48))
                 }
 
-                panel.addView(
-                    label("WAKE-WORD DIAGNOSTICS", 16, accent)
-                )
+                panel.addView(label("WAKE-WORD DIAGNOSTICS", 16, accent))
 
                 diagnosticText = TextView(this).apply {
                     textSize = 14f
@@ -739,7 +676,6 @@ class MainActivity : Activity() {
                     setPadding(8, 8, 8, 8)
                     text = latestDiagnostic
                 }
-
                 panel.addView(diagnosticText)
                 content.addView(panel, params())
 
@@ -755,15 +691,14 @@ class MainActivity : Activity() {
                 content.addView(Button(this).apply {
                     text = "Restart Listening"
                     setOnClickListener {
+                        loggedIn = true
                         startIraiListeningService()
                     }
                 }, params())
 
                 content.addView(Button(this).apply {
                     text = "Log Out"
-                    setOnClickListener {
-                        logout()
-                    }
+                    setOnClickListener { logout() }
                 }, params())
 
                 scroll.addView(content)
@@ -775,20 +710,13 @@ class MainActivity : Activity() {
 
     private fun refreshDiagnostic() {
         if (::diagnosticText.isInitialized) {
-            diagnosticText.text =
-                "WAKE-WORD DIAGNOSTICS\n$latestDiagnostic"
+            diagnosticText.text = "WAKE-WORD DIAGNOSTICS\n$latestDiagnostic"
         }
     }
 
-    // ---------------------------------------------------------
-    // STRIPE CHECKOUT
-    // ---------------------------------------------------------
-
     private fun startCheckout(plan: String) {
         Toast.makeText(
-            this,
-            "Preparing secure checkout...",
-            Toast.LENGTH_SHORT
+            this, "Preparing secure checkout...", Toast.LENGTH_SHORT
         ).show()
 
         thread {
@@ -797,7 +725,6 @@ class MainActivity : Activity() {
 
             try {
                 val body = JSONObject().put("plan", plan)
-
                 val connection =
                     URL("$api/api/create-checkout-session")
                         .openConnection() as HttpURLConnection
@@ -807,8 +734,7 @@ class MainActivity : Activity() {
                 connection.readTimeout = 20000
                 connection.doOutput = true
                 connection.setRequestProperty(
-                    "Content-Type",
-                    "application/json"
+                    "Content-Type", "application/json"
                 )
 
                 connection.outputStream.use {
@@ -816,17 +742,13 @@ class MainActivity : Activity() {
                 }
 
                 val code = connection.responseCode
-                val stream =
-                    if (code in 200..299) {
-                        connection.inputStream
-                    } else {
-                        connection.errorStream
-                    }
+                val stream = if (code in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
 
-                val result = stream?.bufferedReader()?.use {
-                    it.readText()
-                } ?: ""
-
+                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
                 val json = try {
                     JSONObject(result)
                 } catch (_: Exception) {
@@ -838,26 +760,19 @@ class MainActivity : Activity() {
                 } else {
                     errorMessage = json.optString(
                         "error",
-                        json.optString(
-                            "message",
-                            "Could not start checkout."
-                        )
+                        json.optString("message", "Could not start checkout.")
                     )
                 }
 
                 connection.disconnect()
             } catch (_: Exception) {
-                errorMessage =
-                    "Could not connect to checkout. Please try again."
+                errorMessage = "Could not connect to checkout. Please try again."
             }
 
             runOnUiThread {
                 if (checkoutUrl.startsWith("https://")) {
                     startActivity(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse(checkoutUrl)
-                        )
+                        Intent(Intent.ACTION_VIEW, Uri.parse(checkoutUrl))
                     )
                 } else {
                     Toast.makeText(
@@ -871,10 +786,6 @@ class MainActivity : Activity() {
             }
         }
     }
-
-    // ---------------------------------------------------------
-    // PROMO CODE
-    // ---------------------------------------------------------
 
     private fun showPromoInput() {
         val input = EditText(this).apply {
@@ -894,11 +805,7 @@ class MainActivity : Activity() {
 
     private fun redeemPromo(code: String) {
         if (code.isBlank()) {
-            Toast.makeText(
-                this,
-                "Enter a promo code.",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this, "Enter a promo code.", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -908,7 +815,6 @@ class MainActivity : Activity() {
 
             try {
                 val body = JSONObject().put("code", code)
-
                 val connection =
                     URL("$api/api/redeem-promo")
                         .openConnection() as HttpURLConnection
@@ -918,8 +824,7 @@ class MainActivity : Activity() {
                 connection.readTimeout = 20000
                 connection.doOutput = true
                 connection.setRequestProperty(
-                    "Content-Type",
-                    "application/json"
+                    "Content-Type", "application/json"
                 )
 
                 connection.outputStream.use {
@@ -927,17 +832,13 @@ class MainActivity : Activity() {
                 }
 
                 val status = connection.responseCode
-                val stream =
-                    if (status in 200..299) {
-                        connection.inputStream
-                    } else {
-                        connection.errorStream
-                    }
+                val stream = if (status in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
 
-                val result = stream?.bufferedReader()?.use {
-                    it.readText()
-                } ?: ""
-
+                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
                 val json = try {
                     JSONObject(result)
                 } catch (_: Exception) {
@@ -945,54 +846,42 @@ class MainActivity : Activity() {
                 }
 
                 success = status in 200..299
-
                 responseMessage = json.optString(
                     "message",
                     json.optString(
                         "error",
-                        if (success) {
-                            "Promo code redeemed."
-                        } else {
-                            "Could not redeem promo code."
-                        }
+                        if (success) "Promo code redeemed."
+                        else "Could not redeem promo code."
                     )
                 )
 
                 connection.disconnect()
             } catch (_: Exception) {
-                responseMessage =
-                    "Could not connect. Please try again."
+                responseMessage = "Could not connect. Please try again."
             }
 
             runOnUiThread {
                 Toast.makeText(
-                    this,
-                    responseMessage,
-                    Toast.LENGTH_LONG
+                    this, responseMessage, Toast.LENGTH_LONG
                 ).show()
 
-                if (success) {
-                    showHome(currentEmail)
-                }
+                if (success) showHome(currentEmail)
             }
         }
     }
 
-    // ---------------------------------------------------------
-    // LOGOUT AND UI HELPERS
-    // ---------------------------------------------------------
-
     private fun logout() {
         loggedIn = false
         awaitingCommand = false
+        listeningForCommand = false
+
+        handler.removeCallbacks(restartListeningRunnable)
         stopIraiListeningService()
 
         thread {
             try {
                 val connection =
-                    URL("$api/api/logout")
-                        .openConnection() as HttpURLConnection
-
+                    URL("$api/api/logout").openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 15000
                 connection.readTimeout = 15000
@@ -1040,6 +929,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(restartListeningRunnable)
+
         if (receiverRegistered) {
             try {
                 unregisterReceiver(diagnosticReceiver)
@@ -1047,6 +938,13 @@ class MainActivity : Activity() {
             }
             receiverRegistered = false
         }
+
+        try {
+            speechRecognizer?.cancel()
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {
+        }
+        speechRecognizer = null
 
         speechTts?.stop()
         speechTts?.shutdown()
