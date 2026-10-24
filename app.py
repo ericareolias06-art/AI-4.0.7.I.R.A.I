@@ -422,7 +422,8 @@ def create_checkout_session():
         account = conn.execute(
             """
             SELECT id, email, stripe_customer_id,
-                   stripe_subscription_status
+                   premium_until, stripe_subscription_status,
+                   stripe_period_end
             FROM accounts
             WHERE id = ?
             """,
@@ -432,6 +433,11 @@ def create_checkout_session():
     if account is None:
         session.clear()
         return jsonify(message="Account not found"), 401
+
+    if has_active_premium(account):
+        return jsonify(
+            message="Your account already has Premium access"
+        ), 409
 
     if account["stripe_subscription_status"] in (
         "active", "trialing"
