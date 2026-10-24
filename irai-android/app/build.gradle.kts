@@ -25,4 +25,5 @@ android {
 }
 dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
 }

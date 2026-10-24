@@ -309,45 +309,89 @@ class MainActivity : Activity() {
     }
 
     private fun showHome(email: String) {
-        root.removeAllViews()
-        root.gravity = Gravity.CENTER
+        thread {
+            var premium = false
+            var statusMessage = ""
 
-        root.addView(label("✦", 58, accent))
-        root.addView(label("Welcome to IRAI TEC", 26, white))
-        root.addView(label("Signed in as $email", 15, muted))
-        root.addView(label("Unlock IRAI TEC Premium", 20, white))
+            try {
+                val connection =
+                    (URL("$api/api/me").openConnection()
+                        as HttpURLConnection)
 
-        root.addView(label("$3/month", 18, accent))
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
 
-        root.addView(Button(this).apply {
-            text = "Subscribe Monthly"
-            setOnClickListener {
-                startCheckout("monthly")
+                val code = connection.responseCode
+                val stream = if (code in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
+
+                val result =
+                    stream?.bufferedReader()?.use { it.readText() } ?: ""
+                val json = JSONObject(result)
+
+                if (code in 200..299) {
+                    premium = json.optBoolean("premium", false)
+                } else {
+                    statusMessage = "Could not verify Premium status."
+                }
+
+                connection.disconnect()
+            } catch (_: Exception) {
+                statusMessage = "Could not verify Premium status. Check your connection."
             }
-        }, params())
 
-        root.addView(label("$30/year", 18, accent))
+            runOnUiThread {
+                root.removeAllViews()
+                root.gravity = Gravity.CENTER
 
-        root.addView(Button(this).apply {
-            text = "Subscribe Yearly"
-            setOnClickListener {
-                startCheckout("yearly")
+                root.addView(label("✦", 58, accent))
+                root.addView(label("Welcome to IRAI TEC", 26, white))
+                root.addView(label("Signed in as $email", 15, muted))
+
+                if (statusMessage.isNotBlank()) {
+                    root.addView(label(statusMessage, 15, muted))
+                } else if (premium) {
+                    root.addView(label("✓ Premium Active", 22, accent))
+                } else {
+                    root.addView(label("Unlock IRAI TEC Premium", 20, white))
+                    root.addView(label("$3/month", 18, accent))
+
+                    root.addView(Button(this).apply {
+                        text = "Subscribe Monthly"
+                        setOnClickListener {
+                            startCheckout("monthly")
+                        }
+                    }, params())
+
+                    root.addView(label("$30/year", 18, accent))
+
+                    root.addView(Button(this).apply {
+                        text = "Subscribe Yearly"
+                        setOnClickListener {
+                            startCheckout("yearly")
+                        }
+                    }, params())
+
+                    root.addView(Button(this).apply {
+                        text = "Redeem Promo Code"
+                        setOnClickListener {
+                            showPromoInput()
+                        }
+                    }, params())
+                }
+
+                root.addView(Button(this).apply {
+                    text = "Log Out"
+                    setOnClickListener {
+                        logout()
+                    }
+                }, params())
             }
-        }, params())
-
-        root.addView(Button(this).apply {
-            text = "Redeem Promo Code"
-            setOnClickListener {
-                showPromoInput()
-            }
-        }, params())
-
-        root.addView(Button(this).apply {
-            text = "Log Out"
-            setOnClickListener {
-                logout()
-            }
-        }, params())
+        }
     }
 
     private fun startCheckout(plan: String) {
