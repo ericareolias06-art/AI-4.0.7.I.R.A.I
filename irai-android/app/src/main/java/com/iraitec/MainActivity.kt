@@ -126,8 +126,10 @@ class MainActivity : Activity() {
                 ttsReady = status == TextToSpeech.SUCCESS
 
                 if (ttsReady) {
-                    val result = speechTts?.setLanguage(Locale.US)
+                    val languageResult = speechTts?.setLanguage(Locale.US)
 
+                    speechTts?.setSpeechRate(0.92f)
+                    speechTts?.setPitch(1.18f)
                     if (result == TextToSpeech.LANG_MISSING_DATA ||
                         result == TextToSpeech.LANG_NOT_SUPPORTED
                     ) {
