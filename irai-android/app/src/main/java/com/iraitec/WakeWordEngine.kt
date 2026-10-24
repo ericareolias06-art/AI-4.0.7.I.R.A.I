@@ -30,7 +30,7 @@ internal class WakeWordEngine(
         private const val HOP = 160
         private const val FRAMES = 101
         private const val MELS = 40
-        private const val THRESHOLD = 0.65f
+        private const val THRESHOLD = 0.613f
     }
 
     private data class Sos(
