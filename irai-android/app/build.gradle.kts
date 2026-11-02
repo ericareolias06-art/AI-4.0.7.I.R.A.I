@@ -26,4 +26,6 @@ android {
 dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+    implementation(files("libs/sherpa-onnx-2.0.1.aar"))
 }
+
