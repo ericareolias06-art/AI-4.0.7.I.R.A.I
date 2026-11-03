@@ -1,6 +1,6 @@
 {
   "phrase": "eye ray",
-  "threshold": 0.613,
+  "threshold": 0.500,
   "sample_rate": 16000,
   "audio_window_samples": 16000,
   "n_mels": 40,
