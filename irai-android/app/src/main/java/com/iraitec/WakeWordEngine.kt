@@ -49,7 +49,7 @@ internal class WakeWordEngine(
             maxActivePaths = 4,
             keywordsFile = "$MODEL_DIR/keywords.txt",
             keywordsScore = 1.5f,
-            keywordsThreshold = 0.25f,
+            keywordsThreshold = 0.20f,
             numTrailingBlanks = 2
         )
 
