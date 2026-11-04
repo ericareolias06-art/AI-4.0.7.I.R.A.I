@@ -628,13 +628,76 @@ class MainActivity : Activity() {
             }
 
             else -> {
-                speakResponse(
-                    "I heard you say $command, but I don't know how to do that yet."
-                )
-            }
+    sendMessageToIrai(command)
+             }
         }
     }
+private fun sendMessageToIrai(message: String) {
+    latestDiagnostic = "Irai is thinking..."
+    refreshDiagnostic()
 
+    thread {
+        var reply = ""
+
+        try {
+            val connection = openApiConnection("/api/ai/chat")
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 100000
+            connection.doOutput = true
+            connection.setRequestProperty(
+                "Content-Type",
+                "application/json; charset=UTF-8"
+            )
+
+            val payload = JSONObject()
+                .put("message", message)
+                .toString()
+
+            connection.outputStream.use { output ->
+                output.write(payload.toByteArray(Charsets.UTF_8))
+            }
+
+            saveSessionCookie(connection)
+
+            val status = connection.responseCode
+            val responseStream = if (status in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            }
+
+            val responseText = responseStream?.bufferedReader()?.use {
+                it.readText()
+            } ?: ""
+
+            val json = JSONObject(responseText)
+
+            reply = if (status in 200..299) {
+                json.optString("response", "I received an empty response.")
+            } else {
+                json.optString(
+                    "message",
+                    "Sorry, I couldn't reach my AI service."
+                )
+            }
+
+            connection.disconnect()
+
+        } catch (e: Exception) {
+            reply = "I couldn't connect to my AI service. Please try again."
+            android.util.Log.e(
+                "IRAI_AI",
+                "AI request failed",
+                e
+            )
+        }
+
+        runOnUiThread {
+            speakResponse(reply)
+        }
+    }
+    }
     private fun openWebPage(url: String) {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))

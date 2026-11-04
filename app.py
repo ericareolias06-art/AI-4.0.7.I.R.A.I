@@ -1,4 +1,10 @@
 import os
+import json
+import time
+import threading
+from collections import deque
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 import sqlite3
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -682,6 +688,153 @@ def stripe_webhook():
         ), 500
 
     return jsonify(received=True), 200
+
+
+
+# AI request limit: 10 requests per account per minute.
+_ai_request_times = {}
+_ai_rate_lock = threading.Lock()
+
+
+@app.post("/api/ai/chat")
+def ai_chat():
+    if "account_id" not in session:
+        return jsonify(message="Please log in first."), 401
+
+    if request.content_length and request.content_length > 16000:
+        return jsonify(message="Request is too large."), 413
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(message="Invalid request."), 400
+
+    message = data.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return jsonify(message="Please enter a message."), 400
+
+    message = message.strip()
+    if len(message) > 4000:
+        return jsonify(message="Message is too long."), 400
+
+    history = data.get("history", [])
+    if not isinstance(history, list):
+        return jsonify(message="Invalid conversation history."), 400
+
+    messages = []
+    total_chars = len(message)
+
+    for item in history[-10:]:
+        if not isinstance(item, dict):
+            return jsonify(message="Invalid conversation history."), 400
+
+        role = item.get("role")
+        content = item.get("content")
+
+        if role not in ("user", "assistant"):
+            return jsonify(message="Invalid conversation history."), 400
+
+        if not isinstance(content, str) or not content.strip():
+            return jsonify(message="Invalid conversation history."), 400
+
+        content = content.strip()
+        total_chars += len(content)
+
+        if len(content) > 4000 or total_chars > 12000:
+            return jsonify(message="Conversation is too long."), 400
+
+        messages.append({"role": role, "content": content})
+
+    messages.append({"role": "user", "content": message})
+
+    account_id = session["account_id"]
+
+    try:
+        with get_db() as conn:
+            account = conn.execute(
+                "SELECT id FROM accounts WHERE id = ?",
+                (account_id,),
+            ).fetchone()
+    except (sqlite3.Error, psycopg2.Error):
+        app.logger.exception("Could not verify AI account")
+        return jsonify(message="Account verification unavailable."), 503
+
+    if account is None:
+        session.clear()
+        return jsonify(message="Account not found. Please log in again."), 401
+
+    now = time.monotonic()
+
+    with _ai_rate_lock:
+        recent = _ai_request_times.setdefault(account_id, deque())
+        while recent and now - recent[0] >= 60:
+            recent.popleft()
+
+        if len(recent) >= 10:
+            return jsonify(message="Please wait a moment before sending another message."), 429
+
+        recent.append(now)
+
+        # Remove inactive accounts from the in-memory limiter.
+        if len(_ai_request_times) > 5000:
+            for key in list(_ai_request_times):
+                entries = _ai_request_times[key]
+                while entries and now - entries[0] >= 60:
+                    entries.popleft()
+                if not entries:
+                    del _ai_request_times[key]
+
+    ollama_url = os.environ.get("OLLAMA_URL", "").strip().rstrip("/")
+    access_id = os.environ.get("CF_ACCESS_CLIENT_ID", "").strip()
+    access_secret = os.environ.get("CF_ACCESS_CLIENT_SECRET", "").strip()
+
+    if not ollama_url or not access_id or not access_secret:
+        app.logger.error("Ollama connection environment variables are not configured")
+        return jsonify(message="AI service is not configured yet."), 503
+
+    if not ollama_url.startswith("https://"):
+        app.logger.error("OLLAMA_URL must use HTTPS")
+        return jsonify(message="AI service configuration error."), 503
+
+    payload = json.dumps({
+        "model": "irai:latest",
+        "messages": messages,
+        "stream": False,
+    }).encode("utf-8")
+
+    outbound = Request(
+        ollama_url + "/api/chat",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "CF-Access-Client-Id": access_id,
+            "CF-Access-Client-Secret": access_secret,
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(outbound, timeout=90) as response:
+            result = json.loads(response.read().decode("utf-8"))
+
+        answer = result.get("message", {}).get("content")
+
+        if not isinstance(answer, str) or not answer.strip():
+            app.logger.error("Ollama returned an empty or invalid response")
+            return jsonify(message="AI returned an invalid response."), 502
+
+        return jsonify(response=answer.strip()), 200
+
+    except HTTPError as exc:
+        app.logger.error("Ollama request returned HTTP status %s", exc.code)
+        return jsonify(message="AI service is temporarily unavailable."), 502
+
+    except (URLError, TimeoutError, OSError):
+        app.logger.exception("Could not reach Ollama")
+        return jsonify(message="AI service is temporarily unavailable."), 503
+
+    except (ValueError, UnicodeDecodeError):
+        app.logger.exception("Could not read Ollama response")
+        return jsonify(message="AI returned an invalid response."), 502
 
 
 @app.post("/api/logout")

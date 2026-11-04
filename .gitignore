@@ -1,3 +1,12 @@
 
 # Android build outputs
 /irai-android/app/build/
+
+# Android build files
+/irai-android/IraiTec.apk
+/irai-android/iraitec-apk.zip
+
+__pycache__/
+/irai-android/.gradle/
+*.before_ai
+*.pre_ollama

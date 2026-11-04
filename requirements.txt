@@ -4,3 +4,5 @@ gunicorn
 stripe
 psycopg2-binary
 psycopg
+
+openai
