@@ -825,9 +825,13 @@ def ai_chat():
         return jsonify(response=answer.strip()), 200
 
     except HTTPError as exc:
-        app.logger.error("Ollama request returned HTTP status %s", exc.code)
+        error_body = exc.read().decode("utf-8", errors="replace")
+        app.logger.error(
+            "Ollama HTTP error %s: %s",
+            exc.code,
+            error_body[:1000]
+        )
         return jsonify(message="AI service is temporarily unavailable."), 502
-
     except (URLError, TimeoutError, OSError):
         app.logger.exception("Could not reach Ollama")
         return jsonify(message="AI service is temporarily unavailable."), 503
