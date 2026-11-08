@@ -75,6 +75,8 @@ class MainActivity : Activity() {
     private var stickyNoteView: LinearLayout? = null
     private var stickyTitleView: TextView? = null
     private var stickyBodyView: TextView? = null
+    private var avatarPermissionPrompted = false
+    private var avatarHiddenUntilWake = false
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private var latestDiagnostic = "Waiting for listening service..."
     private var lastRecognizedPhrase = ""
@@ -109,10 +111,11 @@ class MainActivity : Activity() {
                 latestDiagnostic = status
                 refreshDiagnostic()
 
-                if (status == "READY_FOR_COMMAND" &&
-                    loggedIn &&
-                    !awaitingCommand
-                ) {
+                if (status == "READY_FOR_COMMAND" && loggedIn && !awaitingCommand) {
+                    // A fresh wake word restores the companion after "go away".
+                    avatarHiddenUntilWake = false
+                    showAvatarOverlay()
+                    IraiAvatarOverlay.setStatus("Listening...")
                     startVoiceCommand()
                 }
             }
@@ -512,6 +515,28 @@ class MainActivity : Activity() {
             )
         } else {
             startIraiListeningService()
+            requestAvatarOverlayPermissionIfNeeded()
+        }
+    }
+
+    private fun requestAvatarOverlayPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            !Settings.canDrawOverlays(this) && !avatarPermissionPrompted
+        ) {
+            avatarPermissionPrompted = true
+            Toast.makeText(this, "Allow Display over other apps so Irai can appear over your other apps.", Toast.LENGTH_LONG).show()
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Enable Display over other apps for Irai Tec in Android Settings.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun showAvatarOverlay() {
+        if (!loggedIn || avatarHiddenUntilWake) return
+        if (IraiAvatarOverlay.hasPermission(this)) {
+            IraiAvatarOverlay.show(applicationContext)
         }
     }
 
@@ -739,6 +764,26 @@ class MainActivity : Activity() {
             .trim()
         val text = routedCommand.lowercase(Locale.US)
 
+        when {
+            text in listOf("go away", "hide", "hide yourself", "disappear", "dismiss yourself") -> {
+                avatarHiddenUntilWake = true
+                IraiAvatarOverlay.hide()
+                speakResponse("Okay. I will stay out of sight until you call me again.")
+                return
+            }
+            text in listOf("minimize", "minimize yourself", "shrink") -> {
+                IraiAvatarOverlay.minimize()
+                speakResponse("I will stay here in the corner.")
+                return
+            }
+            text in listOf("show yourself", "come back", "restore yourself") -> {
+                avatarHiddenUntilWake = false
+                showAvatarOverlay()
+                speakResponse("I'm back.")
+                return
+            }
+        }
+
         // Match the note target separately from the action so polite,
         // expanded phrases still route locally instead of reaching Ollama.
         val mentionsNotes = Regex("\\b(notes|notepad)\\b").containsMatchIn(text)
@@ -819,6 +864,7 @@ class MainActivity : Activity() {
 
     private fun sendMessageToIrai(message: String) {
     latestDiagnostic = "Irai is thinking..."
+    IraiAvatarOverlay.setStatus("Thinking...")
     refreshDiagnostic()
 
     thread {
@@ -1171,6 +1217,7 @@ class MainActivity : Activity() {
 
     private fun speakResponse(text: String) {
         latestDiagnostic = "Irai: $text"
+        IraiAvatarOverlay.setStatus("Speaking...")
         refreshDiagnostic()
 
         if (ttsReady) {
@@ -1539,6 +1586,7 @@ class MainActivity : Activity() {
                             awaitingCommand = false
                             listeningForCommand = false
                             handler.removeCallbacks(restartListeningRunnable)
+                            IraiAvatarOverlay.hide()
                             stopIraiListeningService()
                             sessionPrefs.edit().clear().apply()
                             currentEmail = ""
@@ -1558,6 +1606,7 @@ class MainActivity : Activity() {
         listeningForCommand = false
 
         handler.removeCallbacks(restartListeningRunnable)
+        IraiAvatarOverlay.hide()
         stopIraiListeningService()
 
         // Clear the local session and show login immediately.
