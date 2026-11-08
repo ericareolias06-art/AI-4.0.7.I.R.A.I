@@ -293,6 +293,16 @@ class MainActivity : Activity() {
             }
         }
         content.addView(toggle)
+        content.addView(TextView(this).apply {
+            text = "Privacy Policy"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(accent)
+            setPadding(8, 14, 8, 14)
+            setOnClickListener {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://iraitec.dev/privacy")))
+            }
+        })
 
         message = label("", 14, muted)
         content.addView(message)
@@ -842,6 +852,18 @@ private fun sendMessageToIrai(message: String) {
                 }, params())
 
                 content.addView(Button(this).apply {
+                    text = "Privacy Policy"
+                    setOnClickListener {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://iraitec.dev/privacy")))
+                    }
+                }, params())
+
+                content.addView(Button(this).apply {
+                    text = "Delete Account"
+                    setOnClickListener { confirmAccountDeletion() }
+                }, params())
+
+                content.addView(Button(this).apply {
                     text = "Log Out"
                     setOnClickListener { logout() }
                 }, params())
@@ -1011,6 +1033,56 @@ private fun sendMessageToIrai(message: String) {
                 if (success) showHome(currentEmail)
             }
         }
+    }
+
+    private fun confirmAccountDeletion() {
+        AlertDialog.Builder(this)
+            .setTitle("Delete Irai Tec account?")
+            .setMessage(
+                "This permanently deletes your account and associated Irai Tec account data. " +
+                "If you have an active Premium subscription, Irai will attempt to cancel it first. " +
+                "This action cannot be undone."
+            )
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Delete Account") { _, _ ->
+                thread {
+                    var responseMessage = "Could not delete your account. Please try again."
+                    var success = false
+                    try {
+                        val connection = openApiConnection("/api/delete-account")
+                        connection.requestMethod = "POST"
+                        connection.connectTimeout = 20000
+                        connection.readTimeout = 20000
+                        connection.doOutput = true
+                        connection.setRequestProperty("Content-Type", "application/json")
+                        connection.outputStream.use {
+                            it.write("{}".toByteArray(Charsets.UTF_8))
+                        }
+                        val code = connection.responseCode
+                        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                        val body = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                        val json = JSONObject(body)
+                        responseMessage = json.optString("message", responseMessage)
+                        success = code in 200..299
+                        connection.disconnect()
+                    } catch (_: Exception) {
+                    }
+                    runOnUiThread {
+                        Toast.makeText(this, responseMessage, Toast.LENGTH_LONG).show()
+                        if (success) {
+                            loggedIn = false
+                            awaitingCommand = false
+                            listeningForCommand = false
+                            handler.removeCallbacks(restartListeningRunnable)
+                            stopIraiListeningService()
+                            sessionPrefs.edit().clear().apply()
+                            currentEmail = ""
+                            showAuth()
+                        }
+                    }
+                }
+            }
+            .show()
     }
 
     private fun logout() {
