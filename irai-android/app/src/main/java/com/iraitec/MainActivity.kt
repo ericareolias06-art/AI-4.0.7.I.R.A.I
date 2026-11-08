@@ -69,6 +69,7 @@ class MainActivity : Activity() {
     private var currentNoteTitle = ""
     private var currentNoteBody = ""
     private var noteHasChanges = false
+    private var awaitingNoteTitle = false
     private var pendingDeleteNoteId: Long? = null
     private var stickyWindowManager: WindowManager? = null
     private var stickyNoteView: LinearLayout? = null
@@ -956,6 +957,7 @@ class MainActivity : Activity() {
         currentNoteTitle = "Untitled note"
         currentNoteBody = ""
         noteHasChanges = false
+        awaitingNoteTitle = true
         pendingDeleteNoteId = null
         handler.removeCallbacks(restartListeningRunnable)
         stopIraiListeningService()
@@ -963,7 +965,7 @@ class MainActivity : Activity() {
         refreshDiagnostic()
         ensureStickyNotePermission()
         updateStickyNote()
-        speakResponse("Notes is open. Say the note title, then start dictating.")
+        speakResponse("Notes is open. What would you like to call this note?")
     }
 
     private fun handleNotesCommand(command: String) {
@@ -991,6 +993,8 @@ class MainActivity : Activity() {
                     currentNoteTitle = "Untitled note"
                     currentNoteBody = ""
                     noteHasChanges = false
+                    awaitingNoteTitle = true
+                    updateStickyNote()
                     speakResponse("A new note is ready. What should I call it?")
                 }
             }
@@ -1004,6 +1008,7 @@ class MainActivity : Activity() {
                 if (newTitle.isBlank()) speakResponse("What would you like to name this note?")
                 else {
                     currentNoteTitle = newTitle
+                    awaitingNoteTitle = false
                     noteHasChanges = true
                     updateStickyNote()
                     speakResponse("I'll call this note $newTitle.")
@@ -1040,6 +1045,13 @@ class MainActivity : Activity() {
                 speakResponse("Okay, I'll keep the note.")
             }
             lower == "read my notes" || lower == "list my notes" -> speakSavedNoteList()
+            awaitingNoteTitle -> {
+                currentNoteTitle = spoken
+                awaitingNoteTitle = false
+                noteHasChanges = true
+                updateStickyNote()
+                speakResponse("I'll call this note $currentNoteTitle. Go ahead and dictate.")
+            }
             else -> {
                 currentNoteBody = if (currentNoteBody.isBlank()) spoken else currentNoteBody.trimEnd() + "\n" + spoken
                 noteHasChanges = true
@@ -1065,6 +1077,7 @@ class MainActivity : Activity() {
         currentNoteTitle = ""
         currentNoteBody = ""
         noteHasChanges = false
+        awaitingNoteTitle = false
         pendingDeleteNoteId = null
         removeStickyNote()
         speakResponse("Okay, I'm closing Notes.")
@@ -1081,6 +1094,7 @@ class MainActivity : Activity() {
         currentNoteTitle = note.title
         currentNoteBody = note.content
         noteHasChanges = false
+        awaitingNoteTitle = false
         ensureStickyNotePermission()
         updateStickyNote()
         handler.removeCallbacks(restartListeningRunnable)
