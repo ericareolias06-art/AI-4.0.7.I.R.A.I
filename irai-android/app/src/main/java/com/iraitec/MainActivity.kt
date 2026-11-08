@@ -667,7 +667,7 @@ class MainActivity : Activity() {
         // Be tolerant of extra words from on-device speech recognition.
         // Any clear request to open/start/take notes is handled locally here,
         // before the general AI-chat fallback can run.
-        val requestsNotes = text.contains(Regex("\\\\b(open|start|take|begin|enter)\\\\b")) &&
+        val requestsNotes = text.contains(Regex("\\b(open|start|take|begin|enter)\\b")) &&
             text.contains(Regex("\\\\b(notes?|notepad)\\\\b"))
         if (!notesMode && requestsNotes) {
             startNotesMode()
