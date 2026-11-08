@@ -841,6 +841,70 @@ def ai_chat():
         return jsonify(message="AI returned an invalid response."), 502
 
 
+@app.post("/api/delete-account")
+def delete_account():
+    """Permanently delete the signed-in Irai Tec account."""
+    account_id = session.get("account_id")
+    if not account_id:
+        return jsonify(message="Please sign in before deleting your account."), 401
+
+    try:
+        with get_db() as conn:
+            account = conn.execute(
+                """
+                SELECT id, stripe_subscription_id
+                FROM accounts
+                WHERE id = ?
+                """,
+                (account_id,),
+            ).fetchone()
+
+            if account is None:
+                session.clear()
+                return jsonify(message="Account not found."), 404
+
+            subscription_id = account["stripe_subscription_id"]
+
+            # Stop an existing Stripe subscription before removing its account link.
+            if subscription_id and stripe.api_key:
+                try:
+                    stripe.Subscription.cancel(subscription_id)
+                except stripe.error.StripeError:
+                    app.logger.exception(
+                        "Could not cancel Stripe subscription during account deletion"
+                    )
+                    return jsonify(
+                        message=(
+                            "We couldn't cancel your Premium subscription. "
+                            "Please contact support at areobooks@gmail.com "
+                            "so we can help complete account deletion."
+                        )
+                    ), 502
+
+            conn.execute(
+                "DELETE FROM promo_redemptions WHERE account_id = ?",
+                (account_id,),
+            )
+            conn.execute(
+                "DELETE FROM accounts WHERE id = ?",
+                (account_id,),
+            )
+
+        session.clear()
+        return jsonify(
+            message=(
+                "Your Irai Tec account and associated account data have been deleted. "
+                "Payment records held by Stripe remain subject to Stripe's retention policy."
+            )
+        ), 200
+
+    except (sqlite3.Error, psycopg2.Error):
+        app.logger.exception("Account deletion failed")
+        return jsonify(
+            message="We couldn't delete your account right now. Please try again or contact areobooks@gmail.com."
+        ), 500
+
+
 @app.post("/api/logout")
 def logout():
     session.clear()
