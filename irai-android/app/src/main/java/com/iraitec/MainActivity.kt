@@ -19,6 +19,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.view.Gravity
 import android.view.View
 import android.widget.*
@@ -58,6 +59,13 @@ class MainActivity : Activity() {
     private var loggedIn = false
     private var awaitingCommand = false
     private var listeningForCommand = false
+    private var notesMode = false
+    private var currentNoteId: Long? = null
+    private var currentNoteTitle = ""
+    private var currentNoteBody = ""
+    private var noteHasChanges = false
+    private var pendingDeleteNoteId: Long? = null
+    private val notesDb by lazy { IraiNotesDatabase(this) }
     private var latestDiagnostic = "Waiting for listening service..."
 
     private var speechRecognizer: SpeechRecognizer? = null
@@ -66,7 +74,7 @@ class MainActivity : Activity() {
 
     private val restartListeningRunnable = Runnable {
         if (loggedIn && !awaitingCommand && !listeningForCommand) {
-            startIraiListeningService()
+            if (notesMode) startVoiceCommand() else startIraiListeningService()
         }
     }
 
@@ -153,6 +161,20 @@ class MainActivity : Activity() {
                 ttsReady = status == TextToSpeech.SUCCESS
 
                 if (ttsReady) {
+                    speechTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {}
+                        override fun onDone(utteranceId: String?) {
+                            if (utteranceId == "irai_response") runOnUiThread {
+                                if (notesMode && loggedIn && !awaitingCommand) startVoiceCommand()
+                            }
+                        }
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(utteranceId: String?) {
+                            if (utteranceId == "irai_response") runOnUiThread {
+                                if (notesMode && loggedIn && !awaitingCommand) handler.postDelayed({ startVoiceCommand() }, 800)
+                            }
+                        }
+                    })
                     val languageResult = speechTts?.setLanguage(Locale.US)
 
                     speechTts?.setSpeechRate(0.92f)
@@ -434,7 +456,7 @@ class MainActivity : Activity() {
     }
 
     private fun startIraiListeningService() {
-        if (!loggedIn || awaitingCommand || listeningForCommand) return
+        if (!loggedIn || awaitingCommand || listeningForCommand || notesMode) return
 
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
@@ -538,10 +560,15 @@ class MainActivity : Activity() {
                         runOnUiThread {
                             awaitingCommand = false
                             listeningForCommand = false
-                            latestDiagnostic =
-                                "Speech recognition error ($error). Try again."
-                            refreshDiagnostic()
-                            restartListeningAfterDelay()
+                            if (notesMode) {
+                                latestDiagnostic = "Notes mode is still open. Listening again..."
+                                refreshDiagnostic()
+                                handler.postDelayed({ startVoiceCommand() }, 1200)
+                            } else {
+                                latestDiagnostic = "Speech recognition error ($error). Try again."
+                                refreshDiagnostic()
+                                restartListeningAfterDelay()
+                            }
                         }
                     }
 
@@ -575,6 +602,7 @@ class MainActivity : Activity() {
             )
 
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                 putExtra(
                     RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
@@ -600,7 +628,17 @@ class MainActivity : Activity() {
     private fun handleVoiceCommand(command: String) {
         val text = command.lowercase(Locale.US).trim()
 
+        if (notesMode) {
+            handleNotesCommand(command)
+            return
+        }
+
         when {
+            text == "open notes" || text == "open my notes" || text == "take a note" -> startNotesMode()
+            text.startsWith("open note ") || text.startsWith("reopen note ") -> openSavedNote(command.substringAfter("note ").trim())
+            text == "read my notes" || text == "list my notes" -> speakSavedNoteList()
+            text.startsWith("read note ") -> readSavedNote(command.substringAfter("read note ").trim())
+            text.startsWith("delete note ") -> requestNoteDeletion(command.substringAfter("delete note ").trim())
             "time" in text -> {
                 val time = SimpleDateFormat("h:mm a", Locale.US).format(Date())
                 speakResponse("The time is $time.")
@@ -708,6 +746,150 @@ private fun sendMessageToIrai(message: String) {
         }
     }
     }
+    private fun startNotesMode() {
+        notesMode = true
+        currentNoteId = null
+        currentNoteTitle = "Untitled note"
+        currentNoteBody = ""
+        noteHasChanges = false
+        pendingDeleteNoteId = null
+        handler.removeCallbacks(restartListeningRunnable)
+        stopIraiListeningService()
+        latestDiagnostic = "Notes mode active. Waiting for a note."
+        refreshDiagnostic()
+        speakResponse("Notes is open. Tell me what to name your note, or start dictating.")
+    }
+
+    private fun handleNotesCommand(command: String) {
+        val spoken = command.trim()
+        val lower = spoken.lowercase(Locale.US)
+        when {
+            lower == "save and quit" || lower == "save and close" -> {
+                if (currentNoteBody.isNotBlank()) saveCurrentNote()
+                quitNotesMode()
+            }
+            lower == "save note" || lower == "save" -> {
+                if (saveCurrentNote()) speakResponse("Your note is saved.")
+                else speakResponse("There is no note text to save yet. Start dictating first.")
+            }
+            lower == "quit notes" || lower == "close notes" || lower == "exit notes" -> {
+                if (noteHasChanges && currentNoteBody.isNotBlank()) speakResponse("Would you like me to save this note before I quit? Say save and quit, or discard and quit.")
+                else quitNotesMode()
+            }
+            lower == "discard and quit" || lower == "discard note" -> quitNotesMode()
+            lower == "new note" -> {
+                if (noteHasChanges && currentNoteBody.isNotBlank()) {
+                    speakResponse("Save this note before starting another one, or say discard and quit.")
+                } else {
+                    currentNoteId = null
+                    currentNoteTitle = "Untitled note"
+                    currentNoteBody = ""
+                    noteHasChanges = false
+                    speakResponse("A new note is ready. What should I call it?")
+                }
+            }
+            lower.startsWith("name this note ") || lower.startsWith("rename note ") -> {
+                val newTitle = if (lower.startsWith("name this note ")) spoken.substringAfter("name this note ").trim() else spoken.substringAfter("rename note ").trim()
+                if (newTitle.isBlank()) speakResponse("What would you like to name this note?")
+                else {
+                    currentNoteTitle = newTitle
+                    noteHasChanges = true
+                    speakResponse("I'll call this note $newTitle.")
+                }
+            }
+            lower == "read this note" || lower == "read my note" -> {
+                speakResponse(if (currentNoteBody.isBlank()) "This note is empty." else "$currentNoteTitle. $currentNoteBody")
+            }
+            lower.startsWith("open note ") || lower.startsWith("reopen note ") -> {
+                if (noteHasChanges && currentNoteBody.isNotBlank()) speakResponse("Save this note before opening another one, or say discard and quit.")
+                else openSavedNote(spoken.substringAfter("note ").trim())
+            }
+            lower == "delete this note" || lower.startsWith("delete note ") -> {
+                val title = if (lower == "delete this note") currentNoteTitle else spoken.substringAfter("delete note ").trim()
+                requestNoteDeletion(title)
+            }
+            lower == "yes delete it" || lower == "confirm delete" -> {
+                val id = pendingDeleteNoteId
+                if (id == null) speakResponse("There is no note waiting to be deleted.")
+                else {
+                    notesDb.deleteNote(id)
+                    pendingDeleteNoteId = null
+                    if (currentNoteId == id) {
+                        currentNoteId = null
+                        currentNoteBody = ""
+                        currentNoteTitle = "Untitled note"
+                        noteHasChanges = false
+                    }
+                    speakResponse("The note has been deleted.")
+                }
+            }
+            lower == "no keep it" || lower == "cancel delete" -> {
+                pendingDeleteNoteId = null
+                speakResponse("Okay, I'll keep the note.")
+            }
+            lower == "read my notes" || lower == "list my notes" -> speakSavedNoteList()
+            else -> {
+                currentNoteBody = if (currentNoteBody.isBlank()) spoken else currentNoteBody.trimEnd() + "\n" + spoken
+                noteHasChanges = true
+                speakResponse("Added to $currentNoteTitle.")
+            }
+        }
+    }
+
+    private fun saveCurrentNote(): Boolean {
+        if (currentNoteBody.isBlank()) return false
+        currentNoteId = notesDb.saveNote(currentNoteId, currentNoteTitle, currentNoteBody)
+        noteHasChanges = false
+        latestDiagnostic = "Saved note: $currentNoteTitle"
+        refreshDiagnostic()
+        return true
+    }
+
+    private fun quitNotesMode() {
+        notesMode = false
+        currentNoteId = null
+        currentNoteTitle = ""
+        currentNoteBody = ""
+        noteHasChanges = false
+        pendingDeleteNoteId = null
+        speakResponse("Okay, I'm closing Notes.")
+    }
+
+    private fun openSavedNote(title: String) {
+        val note = notesDb.findNote(title)
+        if (note == null) {
+            speakResponse("I couldn't find a note named $title.")
+            return
+        }
+        notesMode = true
+        currentNoteId = note.id
+        currentNoteTitle = note.title
+        currentNoteBody = note.content
+        noteHasChanges = false
+        handler.removeCallbacks(restartListeningRunnable)
+        stopIraiListeningService()
+        speakResponse("I've opened \${note.title}. You can add to it, ask me to read it, or say save and quit.")
+    }
+
+    private fun speakSavedNoteList() {
+        val notes = notesDb.getNotes()
+        speakResponse(if (notes.isEmpty()) "You do not have any saved notes yet." else "Your saved notes are: " + notes.joinToString(", ") { it.title })
+    }
+
+    private fun readSavedNote(title: String) {
+        val note = notesDb.findNote(title)
+        speakResponse(if (note == null) "I couldn't find a note named $title." else "\${note.title}. \${note.content}")
+    }
+
+    private fun requestNoteDeletion(title: String) {
+        val note = notesDb.findNote(title)
+        if (note == null) speakResponse("I couldn't find a note named $title.")
+        else {
+            pendingDeleteNoteId = note.id
+            speakResponse("Are you sure you want to delete \${note.title}? Say yes delete it, or cancel delete.")
+        }
+    }
+
     private fun openWebPage(url: String) {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -731,7 +913,7 @@ private fun sendMessageToIrai(message: String) {
             Toast.makeText(this, text, Toast.LENGTH_LONG).show()
         }
 
-        restartListeningAfterDelay()
+        if (!notesMode || !ttsReady) restartListeningAfterDelay()
     }
 
     private fun restartListeningAfterDelay() {
@@ -833,6 +1015,11 @@ private fun sendMessageToIrai(message: String) {
                 }
                 panel.addView(diagnosticText)
                 content.addView(panel, params())
+
+                content.addView(Button(this).apply {
+                    text = "Open Notes"
+                    setOnClickListener { startNotesMode() }
+                }, params())
 
                 content.addView(Button(this).apply {
                     text = "Test Voice Response"
