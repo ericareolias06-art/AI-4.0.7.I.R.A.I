@@ -67,6 +67,7 @@ class MainActivity : Activity() {
     private var pendingDeleteNoteId: Long? = null
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private var latestDiagnostic = "Waiting for listening service..."
+    private var lastRecognizedPhrase = ""
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var speechTts: TextToSpeech? = null
@@ -77,10 +78,9 @@ class MainActivity : Activity() {
             if (notesMode) {
                 startVoiceCommand()
             } else {
-                sendBroadcast(
-                    Intent(IraiListeningService.ACTION_RESUME_LISTENING)
-                        .setPackage(packageName)
-                )
+                // The service is stopped while Notes is open. Start it again
+                // instead of broadcasting to a receiver that no longer exists.
+                startIraiListeningService()
             }
         }
     }
@@ -588,13 +588,39 @@ class MainActivity : Activity() {
                         runOnUiThread {
                             awaitingCommand = false
                             listeningForCommand = false
-                            if (notesMode) {
-                                latestDiagnostic = "Notes mode is still open. Listening again..."
-                                refreshDiagnostic()
-                                handler.postDelayed({ startVoiceCommand() }, 1200)
+
+                            val description = when (error) {
+                                SpeechRecognizer.ERROR_AUDIO -> "Microphone audio error"
+                                SpeechRecognizer.ERROR_CLIENT -> "Speech recognizer was interrupted"
+                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is missing"
+                                SpeechRecognizer.ERROR_NETWORK,
+                                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech service network error"
+                                SpeechRecognizer.ERROR_NO_MATCH -> "No speech was recognized"
+                                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy"
+                                SpeechRecognizer.ERROR_SERVER,
+                                SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "Speech service disconnected"
+                                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech heard before timeout"
+                                SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,
+                                SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ->
+                                    "Offline English speech pack is unavailable. Install English (United States) offline speech recognition in your phone settings."
+                                else -> "Speech recognition error ($error)"
+                            }
+
+                            latestDiagnostic = if (notesMode) {
+                                "Notes mode: $description"
                             } else {
-                                latestDiagnostic = "Speech recognition error ($error). Try again."
-                                refreshDiagnostic()
+                                "$description. Say Irai to try again."
+                            }
+                            refreshDiagnostic()
+
+                            val needsUserAction =
+                                error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ||
+                                error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
+                                error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE
+
+                            if (notesMode && !needsUserAction) {
+                                handler.postDelayed({ startVoiceCommand() }, 1200)
+                            } else if (!notesMode) {
                                 restartListeningAfterDelay()
                             }
                         }
@@ -617,7 +643,8 @@ class MainActivity : Activity() {
                                 refreshDiagnostic()
                                 speakResponse("Sorry, I didn't catch that.")
                             } else {
-                                latestDiagnostic = "You said: $spokenText"
+                                lastRecognizedPhrase = spokenText
+                                latestDiagnostic = "Routing recognized command..."
                                 refreshDiagnostic()
                                 handleVoiceCommand(spokenText)
                             }
@@ -661,14 +688,20 @@ class MainActivity : Activity() {
                 Regex("(?i)^(?:hey\\s+)?(?:irai|i\\s*ray)[,\\s:.-]+"),
                 ""
             )
+            // Normalize punctuation added by speech recognition.
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+            .replace(Regex("\\s+"), " ")
             .trim()
         val text = routedCommand.lowercase(Locale.US)
 
-        // Be tolerant of extra words from on-device speech recognition.
-        // Any clear request to open/start/take notes is handled locally here,
-        // before the general AI-chat fallback can run.
-        val requestsNotes = text.contains(Regex("\\b(open|start|take|begin|enter)\\b")) &&
-            text.contains(Regex("\\\\b(notes?|notepad)\\\\b"))
+        // Match the note target separately from the action so polite,
+        // expanded phrases still route locally instead of reaching Ollama.
+        val mentionsNotes = Regex("\\b(notes?|notepad)\\b").containsMatchIn(text)
+        val asksForNotes = Regex("\\b(open|start|take|begin|enter|launch|create|make)\\b")
+            .containsMatchIn(text)
+        val requestsNotes = mentionsNotes && (
+            asksForNotes || text == "notes" || text == "my notes" || text == "notepad"
+        )
         if (!notesMode && requestsNotes) {
             startNotesMode()
             return
@@ -1125,7 +1158,13 @@ class MainActivity : Activity() {
 
     private fun refreshDiagnostic() {
         if (::diagnosticText.isInitialized) {
-            diagnosticText.text = "WAKE-WORD DIAGNOSTICS\n$latestDiagnostic"
+            val heard = if (lastRecognizedPhrase.isBlank()) {
+                "Last heard: (waiting)"
+            } else {
+                "Last heard: $lastRecognizedPhrase"
+            }
+            diagnosticText.text =
+                "WAKE-WORD DIAGNOSTICS\\n$heard\\nStatus: $latestDiagnostic"
         }
     }
 
