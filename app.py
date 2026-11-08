@@ -42,7 +42,16 @@ stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
 CORS(
     app,
-    resources={r"/api/*": {"origins": [FRONTEND_ORIGIN]}},
+    resources={
+        r"/api/*": {
+            "origins": list({
+                FRONTEND_ORIGIN,
+                "https://iraitec.dev",
+                "https://www.iraitec.dev",
+                "https://ericareolias06-art.github.io",
+            })
+        }
+    },
     supports_credentials=True,
 )
 
