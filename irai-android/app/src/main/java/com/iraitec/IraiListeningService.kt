@@ -6,6 +6,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -24,9 +27,24 @@ class IraiListeningService : Service() {
 
         const val ACTION_DIAGNOSTIC = "com.iraitec.WAKE_DIAGNOSTIC"
         const val EXTRA_STATUS = "status"
+        const val ACTION_RESUME_LISTENING = "com.iraitec.RESUME_LISTENING"
     }
 
     private val running = AtomicBoolean(false)
+
+    private val resumeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ACTION_RESUME_LISTENING) return
+            if (running.get()) return
+
+            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                running.set(true)
+                Thread({ listenLoop() }, "IraiAudioLoop").start()
+            }
+        }
+    }
 
     @Volatile
     private var recorder: AudioRecord? = null
@@ -37,6 +55,15 @@ class IraiListeningService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+
+        val resumeFilter = IntentFilter(ACTION_RESUME_LISTENING)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(resumeReceiver, resumeFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(resumeReceiver, resumeFilter)
+        }
+
         startForeground(
             NOTIFICATION_ID,
             buildNotification("Preparing wake-word detector…")
@@ -69,6 +96,7 @@ class IraiListeningService : Service() {
     private fun listenLoop() {
         var localEngine: WakeWordEngine? = null
         var localRecorder: AudioRecord? = null
+        var detectedWakeWord = false
 
         try {
             reportStatus("Loading wake-word model")
@@ -143,7 +171,9 @@ class IraiListeningService : Service() {
                     val message = "DETECTED: Irai heard you!"
                     Log.i(TAG, message)
                     updateNotification("Irai heard you!")
+                    detectedWakeWord = true
                     reportStatus(message)
+                    break
                 }
             }
         } catch (t: Throwable) {
@@ -168,7 +198,13 @@ class IraiListeningService : Service() {
             }
 
             engine = null
-            reportStatus("Listening service stopped")
+
+            if (detectedWakeWord) {
+                updateNotification("Waiting for your command…")
+                reportStatus("READY_FOR_COMMAND")
+            } else {
+                reportStatus("Listening service stopped")
+            }
         }
     }
 
@@ -222,6 +258,11 @@ class IraiListeningService : Service() {
 
         try {
             recorder?.stop()
+        } catch (_: Exception) {
+        }
+
+        try {
+            unregisterReceiver(resumeReceiver)
         } catch (_: Exception) {
         }
 

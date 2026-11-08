@@ -74,7 +74,14 @@ class MainActivity : Activity() {
 
     private val restartListeningRunnable = Runnable {
         if (loggedIn && !awaitingCommand && !listeningForCommand) {
-            if (notesMode) startVoiceCommand() else startIraiListeningService()
+            if (notesMode) {
+                startVoiceCommand()
+            } else {
+                sendBroadcast(
+                    Intent(IraiListeningService.ACTION_RESUME_LISTENING)
+                        .setPackage(packageName)
+                )
+            }
         }
     }
 
@@ -92,7 +99,7 @@ class MainActivity : Activity() {
                 latestDiagnostic = status
                 refreshDiagnostic()
 
-                if (status.startsWith("DETECTED:") &&
+                if (status == "READY_FOR_COMMAND" &&
                     loggedIn &&
                     !awaitingCommand
                 ) {
@@ -138,6 +145,15 @@ class MainActivity : Activity() {
 
         window.statusBarColor = bg
         window.navigationBarColor = bg
+
+        root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(28, 24, 28, 24)
+            setBackgroundColor(bg)
+        }
+
+        setContentView(root)
 
         val filter = IntentFilter(
             IraiListeningService.ACTION_DIAGNOSTIC
@@ -190,7 +206,7 @@ class MainActivity : Activity() {
             }
         }
 
-        showAuth()
+        restoreSession()
     }
 
     private fun restoreSession() {
@@ -203,6 +219,8 @@ class MainActivity : Activity() {
         thread {
             var email = ""
             var valid = false
+            var rejected = false
+            var connectionFailed = false
 
             try {
                 val connection = openApiConnection("/api/me")
@@ -211,35 +229,46 @@ class MainActivity : Activity() {
                 connection.readTimeout = 15000
 
                 val code = connection.responseCode
-                val stream = if (code in 200..299) {
-                    connection.inputStream
-                } else {
-                    connection.errorStream
-                }
-                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
-                connection.disconnect()
 
-                if (code in 200..299) {
+                if (code == 401 || code == 403) {
+                    rejected = true
+                } else if (code in 200..299) {
+                    val result = connection.inputStream
+                        .bufferedReader().use { it.readText() }
                     val json = JSONObject(result)
                     email = json.optString("email", "")
                     valid = email.isNotBlank()
+                } else {
+                    connectionFailed = true
                 }
+
+                connection.disconnect()
             } catch (_: Exception) {
-                // A network failure should not erase the saved session.
+                connectionFailed = true
             }
 
             runOnUiThread {
-                if (valid) {
-                    currentEmail = email
-                    loggedIn = true
-                    showHome(email)
-                    requestMicrophonePermission()
-                } else if (cookie.isNotBlank()) {
-                    // Keep the cookie if the network is unavailable; show sign-in
-                    // only when the server explicitly rejects the session.
-                    showAuth()
-                } else {
-                    showAuth()
+                when {
+                    valid -> {
+                        currentEmail = email
+                        loggedIn = true
+                        showHome(email)
+                        requestMicrophonePermission()
+                    }
+                    rejected -> {
+                        sessionPrefs.edit().remove("cookie").apply()
+                        loggedIn = false
+                        showAuth()
+                        message.text = "Your session expired. Please log in again."
+                    }
+                    connectionFailed -> {
+                        showAuth()
+                        message.text = "Unable to verify your session. Check your internet and try again. Your saved session has been kept."
+                    }
+                    else -> {
+                        showAuth()
+                        message.text = "Unable to verify your session. Please try again."
+                    }
                 }
             }
         }
@@ -521,7 +550,6 @@ class MainActivity : Activity() {
         listeningForCommand = true
         handler.removeCallbacks(restartListeningRunnable)
 
-        stopIraiListeningService()
 
         latestDiagnostic = "Irai heard you. Listening for your command..."
         refreshDiagnostic()
@@ -670,7 +698,6 @@ class MainActivity : Activity() {
             }
 
             "stop listening" in text || "go to sleep" in text -> {
-                loggedIn = false
                 stopIraiListeningService()
                 speakResponse("Okay. Irai is going to sleep.")
             }
@@ -1036,8 +1063,9 @@ private fun sendMessageToIrai(message: String) {
                 content.addView(Button(this).apply {
                     text = "Restart Listening"
                     setOnClickListener {
-                        loggedIn = true
-                        startIraiListeningService()
+                        if (loggedIn) {
+                            startIraiListeningService()
+                        }
                     }
                 }, params())
 
@@ -1276,6 +1304,8 @@ private fun sendMessageToIrai(message: String) {
     }
 
     private fun logout() {
+        val sessionCookie = sessionPrefs.getString("cookie", null)
+
         loggedIn = false
         awaitingCommand = false
         listeningForCommand = false
@@ -1283,22 +1313,32 @@ private fun sendMessageToIrai(message: String) {
         handler.removeCallbacks(restartListeningRunnable)
         stopIraiListeningService()
 
+        // Clear the local session and show login immediately.
+        sessionPrefs.edit().remove("cookie").apply()
+        currentEmail = ""
+        latestDiagnostic = "Signed out."
+        showAuth()
+
+        // Notify the server in the background without delaying logout.
         thread {
             try {
                 val connection =
-                    openApiConnection("/api/logout")
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 15000
-                connection.readTimeout = 15000
-                connection.responseCode
-                connection.disconnect()
-            } catch (_: Exception) {
-            }
+                    URL(api + "/api/logout").openConnection() as HttpURLConnection
 
-            runOnUiThread {
-                currentEmail = ""
-                latestDiagnostic = "Signed out."
-                showAuth()
+                try {
+                    connection.requestMethod = "POST"
+                    connection.connectTimeout = 10000
+                    connection.readTimeout = 10000
+
+                    sessionCookie?.let {
+                        connection.setRequestProperty("Cookie", it)
+                    }
+
+                    connection.responseCode
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (_: Exception) {
             }
         }
     }
