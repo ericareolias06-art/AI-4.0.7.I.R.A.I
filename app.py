@@ -874,10 +874,21 @@ def delete_account():
 
             subscription_id = account["stripe_subscription_id"]
 
-            # Stop an existing Stripe subscription before removing its account link.
-            if subscription_id and stripe.api_key:
+            # Never delete the local account while a known Stripe subscription
+            # could remain billable because Stripe is not configured.
+            if subscription_id:
+                if not stripe.api_key:
+                    return jsonify(
+                        message=(
+                            "We couldn't verify or cancel your Premium subscription. "
+                            "Please contact areobooks@gmail.com so we can complete deletion safely."
+                        )
+                    ), 503
+
                 try:
-                    stripe.Subscription.cancel(subscription_id)
+                    subscription = stripe.Subscription.retrieve(subscription_id)
+                    if subscription.get("status") != "canceled":
+                        stripe.Subscription.cancel(subscription_id)
                 except stripe.error.StripeError:
                     app.logger.exception(
                         "Could not cancel Stripe subscription during account deletion"
