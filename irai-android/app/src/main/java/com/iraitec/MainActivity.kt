@@ -664,6 +664,16 @@ class MainActivity : Activity() {
             .trim()
         val text = routedCommand.lowercase(Locale.US)
 
+        // Be tolerant of extra words from on-device speech recognition.
+        // Any clear request to open/start/take notes is handled locally here,
+        // before the general AI-chat fallback can run.
+        val requestsNotes = text.contains(Regex("\\\\b(open|start|take|begin|enter)\\\\b")) &&
+            text.contains(Regex("\\\\b(notes?|notepad)\\\\b"))
+        if (!notesMode && requestsNotes) {
+            startNotesMode()
+            return
+        }
+
         if (notesMode) {
             handleNotesCommand(routedCommand)
             return
