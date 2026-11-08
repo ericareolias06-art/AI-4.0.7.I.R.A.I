@@ -1039,7 +1039,7 @@ class MainActivity : Activity() {
                 lower == "read this note aloud" || lower == "read note aloud" -> {
                 speakResponse(if (currentNoteBody.isBlank()) "This note is empty." else "$currentNoteTitle. $currentNoteBody")
             }
-            lower == "read my notes aloud" || lower == "read all my notes" -> speakSavedNoteList()
+            lower == "read my notes aloud" || lower == "read all my notes" -> speakAllSavedNotes()
             lower.startsWith("read note ") -> readSavedNote(spoken.substringAfter("read note ").trim())
             lower.startsWith("open note ") || lower.startsWith("reopen note ") -> {
                 if (noteHasChanges && currentNoteBody.isNotBlank()) speakResponse("Save this note before opening another one, or say discard and quit.")
@@ -1137,6 +1137,16 @@ class MainActivity : Activity() {
     private fun readSavedNote(title: String) {
         val note = notesDb.findNote(title)
         speakResponse(if (note == null) "I couldn't find a note named $title." else "${note.title}. ${note.content}")
+    }
+
+    private fun speakAllSavedNotes() {
+        val notes = notesDb.getNotes()
+        if (notes.isEmpty()) {
+            speakResponse("You do not have any saved notes yet.")
+            return
+        }
+        val spokenNotes = notes.joinToString(".\n\n") { "${it.title}. ${it.content}" }
+        speakResponse(spokenNotes)
     }
 
     private fun requestNoteDeletion(title: String) {
