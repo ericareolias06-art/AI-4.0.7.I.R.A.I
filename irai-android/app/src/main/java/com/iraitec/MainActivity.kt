@@ -590,6 +590,7 @@ class MainActivity : Activity() {
                     grantResults[0] == PackageManager.PERMISSION_GRANTED
                 ) {
                     startIraiListeningService()
+                    requestAvatarOverlayPermissionIfNeeded()
                 } else {
                     latestDiagnostic = "Microphone permission denied."
                     refreshDiagnostic()
