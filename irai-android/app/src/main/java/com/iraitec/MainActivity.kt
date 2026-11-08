@@ -288,19 +288,40 @@ class MainActivity : Activity() {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(28, 24, 28, 24)
-            setBackgroundColor(bg)
+            setPadding(20, 24, 20, 24)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(
+                    Color.rgb(34, 23, 65),
+                    Color.rgb(112, 55, 100),
+                    Color.rgb(218, 105, 83),
+                    Color.rgb(247, 174, 105)
+                )
+            )
         }
 
-        val scroll = ScrollView(this)
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(Color.TRANSPARENT)
+        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
+            setPadding(22, 26, 22, 24)
+            background = GradientDrawable().apply {
+                setColor(Color.argb(218, 24, 22, 43))
+                cornerRadius = 26f * resources.displayMetrics.density
+                setStroke(
+                    (1 * resources.displayMetrics.density).toInt(),
+                    Color.argb(110, 255, 220, 205)
+                )
+            }
+            elevation = 10f * resources.displayMetrics.density
         }
 
-        content.addView(label("✦", 58, accent))
-        content.addView(label("IRAI TEC", 30, white))
-        content.addView(label("Your AI companion", 16, muted))
+        content.addView(label("☀", 54, Color.rgb(255, 190, 130)))
+        content.addView(label("IRAI TEC", 32, white))
+        content.addView(label("A little light in your day.", 16, Color.rgb(255, 218, 205)))
         content.addView(
             label("Sign in to your Irai Tec account", 18, white)
                 .apply { setPadding(0, 28, 0, 20) }
@@ -1014,9 +1035,12 @@ class MainActivity : Activity() {
                     speakResponse("I'll call this note $newTitle.")
                 }
             }
-            lower == "read this note" || lower == "read my note" -> {
+            lower == "read this note" || lower == "read my note" ||
+                lower == "read this note aloud" || lower == "read note aloud" -> {
                 speakResponse(if (currentNoteBody.isBlank()) "This note is empty." else "$currentNoteTitle. $currentNoteBody")
             }
+            lower == "read my notes aloud" || lower == "read all my notes" -> speakSavedNoteList()
+            lower.startsWith("read note ") -> readSavedNote(spoken.substringAfter("read note ").trim())
             lower.startsWith("open note ") || lower.startsWith("reopen note ") -> {
                 if (noteHasChanges && currentNoteBody.isNotBlank()) speakResponse("Save this note before opening another one, or say discard and quit.")
                 else openSavedNote(spoken.substringAfter("note ").trim())
@@ -1056,7 +1080,10 @@ class MainActivity : Activity() {
                 currentNoteBody = if (currentNoteBody.isBlank()) spoken else currentNoteBody.trimEnd() + "\n" + spoken
                 noteHasChanges = true
                 updateStickyNote()
-                speakResponse("Added to $currentNoteTitle.")
+                // Save each dictated segment immediately so a missed save command
+                // or unexpected app interruption does not lose the latest text.
+                saveCurrentNote()
+                speakResponse("Added to $currentNoteTitle. Saved.")
             }
         }
     }
