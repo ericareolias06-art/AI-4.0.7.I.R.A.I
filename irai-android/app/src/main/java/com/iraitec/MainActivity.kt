@@ -1164,7 +1164,7 @@ class MainActivity : Activity() {
                 "Last heard: $lastRecognizedPhrase"
             }
             diagnosticText.text =
-                "WAKE-WORD DIAGNOSTICS\\n$heard\\nStatus: $latestDiagnostic"
+                "WAKE-WORD DIAGNOSTICS\n$heard\nStatus: $latestDiagnostic"
         }
     }
 
