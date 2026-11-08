@@ -300,7 +300,7 @@ class MainActivity : Activity() {
             setTextColor(accent)
             setPadding(8, 14, 8, 14)
             setOnClickListener {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://iraitec.dev/privacy")))
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://iraitec.dev/privacy.html")))
             }
         })
 
@@ -854,7 +854,7 @@ private fun sendMessageToIrai(message: String) {
                 content.addView(Button(this).apply {
                     text = "Privacy Policy"
                     setOnClickListener {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://iraitec.dev/privacy")))
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://iraitec.dev/privacy.html")))
                     }
                 }, params())
 
