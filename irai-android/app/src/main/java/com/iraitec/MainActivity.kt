@@ -696,12 +696,14 @@ class MainActivity : Activity() {
 
         // Match the note target separately from the action so polite,
         // expanded phrases still route locally instead of reaching Ollama.
-        val mentionsNotes = Regex("\\b(notes?|notepad)\\b").containsMatchIn(text)
+        val mentionsNotes = Regex("\\b(notes|notepad)\\b").containsMatchIn(text)
         val asksForNotes = Regex("\\b(open|start|take|begin|enter|launch|create|make)\\b")
             .containsMatchIn(text)
-        val requestsNotes = mentionsNotes && (
+        val requestsNewNote = Regex("\\b(take|start|begin|create|make)\\s+(?:a\\s+)?note\\b")
+            .containsMatchIn(text)
+        val requestsNotes = requestsNewNote || (mentionsNotes && (
             asksForNotes || text == "notes" || text == "my notes" || text == "notepad"
-        )
+        ))
         if (!notesMode && requestsNotes) {
             startNotesMode()
             return
