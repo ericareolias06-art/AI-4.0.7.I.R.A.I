@@ -868,7 +868,7 @@ private fun sendMessageToIrai(message: String) {
         noteHasChanges = false
         handler.removeCallbacks(restartListeningRunnable)
         stopIraiListeningService()
-        speakResponse("I've opened \${note.title}. You can add to it, ask me to read it, or say save and quit.")
+        speakResponse("I've opened ${note.title}. You can add to it, ask me to read it, or say save and quit.")
     }
 
     private fun speakSavedNoteList() {
@@ -878,15 +878,18 @@ private fun sendMessageToIrai(message: String) {
 
     private fun readSavedNote(title: String) {
         val note = notesDb.findNote(title)
-        speakResponse(if (note == null) "I couldn't find a note named $title." else "\${note.title}. \${note.content}")
+        speakResponse(if (note == null) "I couldn't find a note named $title." else "${note.title}. ${note.content}")
     }
 
     private fun requestNoteDeletion(title: String) {
         val note = notesDb.findNote(title)
         if (note == null) speakResponse("I couldn't find a note named $title.")
         else {
+            notesMode = true
+            handler.removeCallbacks(restartListeningRunnable)
+            stopIraiListeningService()
             pendingDeleteNoteId = note.id
-            speakResponse("Are you sure you want to delete \${note.title}? Say yes delete it, or cancel delete.")
+            speakResponse("Are you sure you want to delete ${note.title}? Say yes delete it, or cancel delete.")
         }
     }
 
