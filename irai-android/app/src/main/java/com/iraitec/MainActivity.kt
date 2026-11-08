@@ -10,11 +10,13 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -22,6 +24,9 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
+import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.widget.*
 import org.json.JSONObject
 import java.net.CookieHandler
@@ -65,6 +70,10 @@ class MainActivity : Activity() {
     private var currentNoteBody = ""
     private var noteHasChanges = false
     private var pendingDeleteNoteId: Long? = null
+    private var stickyWindowManager: WindowManager? = null
+    private var stickyNoteView: LinearLayout? = null
+    private var stickyTitleView: TextView? = null
+    private var stickyBodyView: TextView? = null
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private var latestDiagnostic = "Waiting for listening service..."
     private var lastRecognizedPhrase = ""
@@ -852,6 +861,95 @@ class MainActivity : Activity() {
         }
     }
     }
+    private fun ensureStickyNotePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Allow Irai Tec to display over other apps so your Notes sticky note can stay visible.", Toast.LENGTH_LONG).show()
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Enable Display over other apps for Irai Tec in Android Settings.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun updateStickyNote() {
+        if (!notesMode) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) return
+        runOnUiThread {
+            try {
+                if (stickyNoteView == null) {
+                    stickyWindowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+                    val density = resources.displayMetrics.density
+                    val card = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding((16 * density).toInt(), (14 * density).toInt(), (16 * density).toInt(), (14 * density).toInt())
+                        background = GradientDrawable().apply {
+                            setColor(Color.rgb(255, 246, 170))
+                            cornerRadius = 12 * density
+                            setStroke((1 * density).toInt(), Color.rgb(220, 196, 105))
+                        }
+                        elevation = 12 * density
+                    }
+                    card.addView(TextView(this).apply {
+                        text = "IRAI NOTES"
+                        textSize = 11f
+                        setTextColor(Color.rgb(112, 87, 25))
+                        typeface = Typeface.DEFAULT_BOLD
+                        letterSpacing = 0.12f
+                    })
+                    stickyTitleView = TextView(this).apply {
+                        textSize = 19f
+                        setTextColor(Color.rgb(45, 39, 24))
+                        typeface = Typeface.DEFAULT_BOLD
+                        setPadding(0, (5 * density).toInt(), 0, (8 * density).toInt())
+                    }
+                    card.addView(stickyTitleView)
+                    val scroll = ScrollView(this)
+                    stickyBodyView = TextView(this).apply {
+                        textSize = 16f
+                        setTextColor(Color.rgb(55, 49, 34))
+                        setLineSpacing(3f, 1.05f)
+                    }
+                    scroll.addView(stickyBodyView)
+                    card.addView(scroll, LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, (270 * density).toInt()
+                    ))
+                    stickyNoteView = card
+                    val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        WindowManager.LayoutParams.TYPE_PHONE
+                    }
+                    val params = WindowManager.LayoutParams(
+                        (290 * density).toInt(),
+                        WindowManager.LayoutParams.WRAP_CONTENT,
+                        type,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                        PixelFormat.TRANSLUCENT
+                    ).apply {
+                        gravity = Gravity.TOP or Gravity.END
+                        x = (12 * density).toInt()
+                        y = (90 * density).toInt()
+                    }
+                    stickyWindowManager?.addView(card, params)
+                }
+                stickyTitleView?.text = currentNoteTitle.ifBlank { "Untitled note" }
+                stickyBodyView?.text = currentNoteBody.ifBlank { "Your dictated words will appear here..." }
+            } catch (e: Exception) {
+                android.util.Log.e("IRAI_NOTES", "Could not display sticky note", e)
+            }
+        }
+    }
+
+    private fun removeStickyNote() {
+        try { stickyNoteView?.let { stickyWindowManager?.removeView(it) } } catch (_: Exception) {}
+        stickyNoteView = null
+        stickyTitleView = null
+        stickyBodyView = null
+        stickyWindowManager = null
+    }
+
     private fun startNotesMode() {
         notesMode = true
         currentNoteId = null
@@ -863,7 +961,9 @@ class MainActivity : Activity() {
         stopIraiListeningService()
         latestDiagnostic = "Notes mode active. Waiting for a note."
         refreshDiagnostic()
-        speakResponse("Notes is open. Tell me what to name your note, or start dictating.")
+        ensureStickyNotePermission()
+        updateStickyNote()
+        speakResponse("Notes is open. Say the note title, then start dictating.")
     }
 
     private fun handleNotesCommand(command: String) {
@@ -894,12 +994,18 @@ class MainActivity : Activity() {
                     speakResponse("A new note is ready. What should I call it?")
                 }
             }
-            lower.startsWith("name this note ") || lower.startsWith("rename note ") -> {
-                val newTitle = if (lower.startsWith("name this note ")) spoken.substringAfter("name this note ").trim() else spoken.substringAfter("rename note ").trim()
+            lower.startsWith("name this note ") || lower.startsWith("rename note ") || lower.startsWith("name note ") -> {
+                val prefix = when {
+                    lower.startsWith("name this note ") -> "name this note "
+                    lower.startsWith("rename note ") -> "rename note "
+                    else -> "name note "
+                }
+                val newTitle = spoken.drop(prefix.length).trim()
                 if (newTitle.isBlank()) speakResponse("What would you like to name this note?")
                 else {
                     currentNoteTitle = newTitle
                     noteHasChanges = true
+                    updateStickyNote()
                     speakResponse("I'll call this note $newTitle.")
                 }
             }
@@ -937,6 +1043,7 @@ class MainActivity : Activity() {
             else -> {
                 currentNoteBody = if (currentNoteBody.isBlank()) spoken else currentNoteBody.trimEnd() + "\n" + spoken
                 noteHasChanges = true
+                updateStickyNote()
                 speakResponse("Added to $currentNoteTitle.")
             }
         }
@@ -946,6 +1053,7 @@ class MainActivity : Activity() {
         if (currentNoteBody.isBlank()) return false
         currentNoteId = notesDb.saveNote(currentNoteId, currentNoteTitle, currentNoteBody)
         noteHasChanges = false
+        updateStickyNote()
         latestDiagnostic = "Saved note: $currentNoteTitle"
         refreshDiagnostic()
         return true
@@ -958,6 +1066,7 @@ class MainActivity : Activity() {
         currentNoteBody = ""
         noteHasChanges = false
         pendingDeleteNoteId = null
+        removeStickyNote()
         speakResponse("Okay, I'm closing Notes.")
     }
 
@@ -972,6 +1081,8 @@ class MainActivity : Activity() {
         currentNoteTitle = note.title
         currentNoteBody = note.content
         noteHasChanges = false
+        ensureStickyNotePermission()
+        updateStickyNote()
         handler.removeCallbacks(restartListeningRunnable)
         stopIraiListeningService()
         speakResponse("I've opened ${note.title}. You can add to it, ask me to read it, or say save and quit.")
@@ -1459,6 +1570,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        removeStickyNote()
         handler.removeCallbacks(restartListeningRunnable)
 
         if (receiverRegistered) {
