@@ -654,38 +654,59 @@ class MainActivity : Activity() {
     }
 
     private fun handleVoiceCommand(command: String) {
-        val text = command.lowercase(Locale.US).trim()
+        // Speech recognition may include the wake word in the recognized phrase.
+        // Remove it before routing so Notes commands never fall through to Ollama.
+        val routedCommand = command.trim()
+            .replace(
+                Regex("(?i)^(?:hey\\s+)?(?:irai|i\\s*ray)[,\\s:.-]+"),
+                ""
+            )
+            .trim()
+        val text = routedCommand.lowercase(Locale.US)
 
         if (notesMode) {
-            handleNotesCommand(command)
+            handleNotesCommand(routedCommand)
             return
         }
 
         when {
-            text == "open notes" || text == "open my notes" || text == "take a note" -> startNotesMode()
-            text.startsWith("open note ") || text.startsWith("reopen note ") -> openSavedNote(command.substringAfter("note ").trim())
-            text == "read my notes" || text == "list my notes" -> speakSavedNoteList()
-            text.startsWith("read note ") -> readSavedNote(command.substringAfter("read note ").trim())
-            text.startsWith("delete note ") -> requestNoteDeletion(command.substringAfter("delete note ").trim())
+            text == "open notes" ||
+                text == "open my notes" ||
+                text == "open the notes" ||
+                text == "open notepad" ||
+                text == "notepad" ||
+                text == "take a note" ||
+                text == "take notes" ||
+                text.startsWith("open notes ") -> startNotesMode()
+
+            text.startsWith("open note ") ||
+                text.startsWith("reopen note ") ->
+                openSavedNote(routedCommand.substringAfter("note ").trim())
+
+            text == "read my notes" || text == "list my notes" ->
+                speakSavedNoteList()
+
+            text.startsWith("read note ") ->
+                readSavedNote(routedCommand.substringAfter("read note ").trim())
+
+            text.startsWith("delete note ") ->
+                requestNoteDeletion(routedCommand.substringAfter("delete note ").trim())
+
             "time" in text -> {
                 val time = SimpleDateFormat("h:mm a", Locale.US).format(Date())
                 speakResponse("The time is $time.")
             }
 
             "date" in text || "today" in text -> {
-                val date = SimpleDateFormat(
-                    "EEEE, MMMM d", Locale.US
-                ).format(Date())
+                val date = SimpleDateFormat("EEEE, MMMM d", Locale.US).format(Date())
                 speakResponse("Today is $date.")
             }
 
-            "hello" in text || text == "hi" -> {
+            "hello" in text || text == "hi" ->
                 speakResponse("Hello! I'm Irai. How can I help?")
-            }
 
-            "your name" in text -> {
+            "your name" in text ->
                 speakResponse("My name is Irai. I'm ready to help.")
-            }
 
             "open youtube" in text -> {
                 speakResponse("Opening YouTube.")
@@ -702,12 +723,11 @@ class MainActivity : Activity() {
                 speakResponse("Okay. Irai is going to sleep.")
             }
 
-            else -> {
-    sendMessageToIrai(command)
-             }
+            else -> sendMessageToIrai(routedCommand)
         }
     }
-private fun sendMessageToIrai(message: String) {
+
+    private fun sendMessageToIrai(message: String) {
     latestDiagnostic = "Irai is thinking..."
     refreshDiagnostic()
 
