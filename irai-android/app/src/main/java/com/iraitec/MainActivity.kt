@@ -1123,7 +1123,7 @@ class MainActivity : Activity() {
                 return
             }
 
-            (text in listOf("read this screen", "read the screen", "what is on my screen", "help me with this screen", "help me with this page", "help me with this app", "walk me through this", "help me fill this out", "help me order this") || text.startsWith("walk me through ")) -> {
+            (text in listOf("read this screen", "read the screen", "what is on my screen", "help me with this screen", "help me with this page", "help me with this app", "walk me through this", "help me fill this out", "help me order this", "help me shop", "shop with me", "start guided assistance", "start shopping assistance") || text.startsWith("walk me through ")) -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
                     speakResponse("Please enable Guided Assistance in Settings first.")
                     return
@@ -1165,6 +1165,10 @@ class MainActivity : Activity() {
             }
 
             text in listOf("next page", "go to next page", "next section", "continue to next section", "next step") -> {
+                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    return
+                }
                 confirmAssistedAction(
                     "Go to the next section?",
                     "Irai will look for a visible Next or Continue control and activate it. Check that you have completed the current section first."
@@ -1192,6 +1196,10 @@ class MainActivity : Activity() {
             }
 
             text == "scroll down" || text == "scroll up" || text == "scroll to the bottom" || text == "scroll to the top" -> {
+                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    return
+                }
                 val worked = if (text == "scroll down" || text == "scroll to the bottom") IraiAssistAccessibilityService.scrollForward()
                     else IraiAssistAccessibilityService.scrollBackward()
                 speakResponse(if (worked) "Okay." else "I couldn't scroll this screen.")
@@ -1199,6 +1207,10 @@ class MainActivity : Activity() {
             }
 
             text == "go back" || text == "press back" -> {
+                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    return
+                }
                 val worked = IraiAssistAccessibilityService.goBack()
                 speakResponse(if (worked) "Going back." else "I couldn't go back.")
                 return
