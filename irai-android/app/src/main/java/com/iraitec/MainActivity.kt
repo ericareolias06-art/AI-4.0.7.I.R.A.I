@@ -1206,7 +1206,7 @@ class MainActivity : Activity() {
                     ).containsMatchIn(target)
                     val actionTitle = if (highImpact) "Final confirmation: $target" else "Tap $target?"
                     val actionMessage = if (highImpact) {
-                        "This may submit an application, make a purchase or payment, send information, or create a legal agreement. Irai will only proceed if you explicitly approve this exact action. Review the page carefully first."
+                        "This may submit information, place or cancel an order, make a payment, book an appointment, delete an account, send a message, or create a legal agreement. Review every detail on the current screen. Irai will only proceed if you explicitly approve this exact action."
                     } else {
                         "Irai will tap the visible control matching '$target' in the current app. Please make sure it is the right control."
                     }
