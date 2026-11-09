@@ -900,7 +900,7 @@ class MainActivity : Activity() {
         val text = routedCommand.lowercase(Locale.US)
 
         when {
-            (text in listOf("scan a page", "scan this page", "scan paperwork", "scan a document", "read this document", "help me with paperwork", "scan my form", "scan this form", "scan this application", "scan a letter") || text.startsWith("scan ")) -> {
+            (text in listOf("scan a page", "scan this page", "scan paperwork", "scan a document", "read this page", "what does this page say", "read this form", "read this letter", "read this document", "help me with paperwork", "scan my form", "scan this form", "scan this application", "scan a letter") || text.startsWith("scan ")) -> {
                 launchPageScan()
                 return
             }
