@@ -1001,7 +1001,7 @@ class MainActivity : Activity() {
                 } else {
                     confirmAssistedAction(
                         "Enter text in $field?",
-                        "I will enter the text you said into the field called $field. Check that the information is correct before allowing it."
+                        "I will enter \"${value.take(240)}\" into the field called $field. Check the exact text before allowing it."
                     ) {
                         val worked = IraiAssistAccessibilityService.typeIntoField(field, value)
                         speakResponse(if (worked) "I entered that in $field." else "I couldn't find that field. Try saying the field name more clearly.")
