@@ -1089,14 +1089,27 @@ class MainActivity : Activity() {
                     else -> text.substringAfter("untick ")
                 }.trim()
                 if (target.isBlank()) speakResponse("Tell me which checkbox or option you mean.")
-                else confirmAssistedAction(
-                    if (wantsChecked) "Select $target?" else "Clear $target?",
-                    "Irai will change the checkbox or option named '$target' only if it can identify that control. Please verify the choice."
-                ) {
-                    val changed = IraiAssistAccessibilityService.setOptionChecked(target, wantsChecked)
-                    speakResponse(if (changed) {
-                        if (wantsChecked) "I selected $target." else "I cleared $target."
-                    } else "I couldn't find an accessible checkbox or radio option named $target.")
+                else {
+                    val isConsentChoice = Regex(
+                        "\\b(agree|consent|authorize|authorise|accept|terms|conditions|waiver|certify|attest|declaration|permission)\\b",
+                        RegexOption.IGNORE_CASE
+                    ).containsMatchIn(target)
+                    val actionTitle = when {
+                        isConsentChoice && wantsChecked -> "Confirm consent choice: $target"
+                        wantsChecked -> "Select $target?"
+                        else -> "Clear $target?"
+                    }
+                    val actionMessage = if (isConsentChoice && wantsChecked) {
+                        "This appears to be a consent, agreement, authorization, or legal declaration. Irai will only select it if you have personally read and agree with the exact statement. Irai cannot decide or consent on your behalf."
+                    } else {
+                        "Irai will change the checkbox or option named '$target' only if it can identify that control. Please verify the choice."
+                    }
+                    confirmAssistedAction(actionTitle, actionMessage) {
+                        val changed = IraiAssistAccessibilityService.setOptionChecked(target, wantsChecked)
+                        speakResponse(if (changed) {
+                            if (wantsChecked) "I selected $target." else "I cleared $target."
+                        } else "I couldn't find an accessible checkbox or radio option named $target.")
+                    }
                 }
                 return
             }
