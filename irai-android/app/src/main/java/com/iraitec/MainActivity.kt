@@ -542,7 +542,6 @@ class MainActivity : Activity() {
             )
         } else {
             startIraiListeningService()
-            requestAvatarOverlayPermissionIfNeeded()
         }
     }
 
@@ -617,7 +616,6 @@ class MainActivity : Activity() {
                     grantResults[0] == PackageManager.PERMISSION_GRANTED
                 ) {
                     startIraiListeningService()
-                    requestAvatarOverlayPermissionIfNeeded()
                 } else {
                     latestDiagnostic = "Microphone permission denied."
                     refreshDiagnostic()
@@ -881,6 +879,19 @@ class MainActivity : Activity() {
                 openWebPage("https://www.google.com")
             }
 
+            Regex("^(open|launch|start|run|switch to|go to)\\s+(?:the\\s+)?(.+)$")
+                .matchEntire(text) != null -> {
+                val match = Regex("^(open|launch|start|run|switch to|go to)\\s+(?:the\\s+)?(.+)$")
+                    .matchEntire(text)
+                val appName = match?.groupValues?.get(2)
+                    ?.removePrefix("my ")
+                    ?.removePrefix("app ")
+                    ?.trim()
+                    .orEmpty()
+                if (appName.isNotBlank()) openInstalledApp(appName)
+                else speakResponse("Which app would you like me to open?")
+            }
+
             "stop listening" in text || "go to sleep" in text -> {
                 stopIraiListeningService()
                 speakResponse("Okay. Irai is going to sleep.")
@@ -888,6 +899,54 @@ class MainActivity : Activity() {
 
             else -> sendMessageToIrai(routedCommand)
         }
+    }
+
+    private fun openInstalledApp(requestedName: String) {
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val apps = try {
+            packageManager.queryIntentActivities(launcherIntent, 0)
+        } catch (e: Exception) {
+            android.util.Log.e("IRAI_APPS", "Could not list launchable apps", e)
+            emptyList()
+        }
+
+        val normalizedRequest = requestedName.lowercase(Locale.US)
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+            .replace(Regex("\\s+"), " ").trim()
+
+        val matches = apps.mapNotNull { info ->
+            val label = info.loadLabel(packageManager)?.toString().orEmpty()
+            val normalizedLabel = label.lowercase(Locale.US)
+                .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+                .replace(Regex("\\s+"), " ").trim()
+            if (normalizedLabel.isBlank()) null else Triple(info, label, normalizedLabel)
+        }
+
+        val selected = matches.firstOrNull { it.third == normalizedRequest }
+            ?: matches.firstOrNull { it.third.startsWith(normalizedRequest) }
+            ?: matches.firstOrNull { it.third.contains(normalizedRequest) }
+
+        if (selected == null) {
+            speakResponse("I couldn't find an installed app called " + requestedName + ".")
+            return
+        }
+
+        val launchIntent = packageManager.getLaunchIntentForPackage(selected.first.activityInfo.packageName)
+        if (launchIntent == null) {
+            speakResponse("I found " + selected.second + ", but Android wouldn't let me launch it.")
+            return
+        }
+
+        speakResponse("Opening " + selected.second + ".")
+        handler.postDelayed({
+            try {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(launchIntent)
+            } catch (e: Exception) {
+                android.util.Log.e("IRAI_APPS", "Could not launch " + selected.second, e)
+                speakResponse("I couldn't open " + selected.second + ".")
+            }
+        }, 500)
     }
 
     private fun sendMessageToIrai(message: String) {
@@ -1780,6 +1839,24 @@ class MainActivity : Activity() {
             gravity = Gravity.START
             setPadding(4, 0, 4, 18)
         })
+        content.addView(menuButton(
+            if (IraiAvatarOverlay.hasPermission(this)) "Floating Irai: Enabled" else "Enable Floating Irai",
+            "Allow Irai's avatar to appear over other apps. This is optional."
+        ) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                try {
+                    startActivity(Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    ))
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Open Android Settings and allow Display over other apps for Irai Tec.", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                showAvatarOverlay()
+                Toast.makeText(this, "Floating Irai is enabled.", Toast.LENGTH_SHORT).show()
+            }
+        })
         content.addView(menuButton("Account Information", "Email address, phone number, and account deletion") {
             showAccountInfo()
         })
@@ -2295,6 +2372,13 @@ class MainActivity : Activity() {
         LinearLayout.LayoutParams.WRAP_CONTENT
     ).apply {
         setMargins(0, 8, 0, 8)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (loggedIn && IraiAvatarOverlay.hasPermission(this) && !avatarHiddenUntilWake) {
+            showAvatarOverlay()
+        }
     }
 
     override fun onDestroy() {
