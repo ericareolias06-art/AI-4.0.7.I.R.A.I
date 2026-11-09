@@ -139,6 +139,12 @@ def initialize_database():
             "stripe_period_end": "TEXT",
             "stripe_price_id": "TEXT",
             "phone_number": "TEXT",
+            # Existing accounts are treated as having already passed onboarding.
+            # New accounts explicitly set this to FALSE during registration.
+            "tutorial_completed": (
+                "BOOLEAN NOT NULL DEFAULT TRUE"
+                if conn.is_postgres else "INTEGER NOT NULL DEFAULT 1"
+            ),
         }
         for column, column_type in migrations.items():
             if column not in columns:
@@ -319,10 +325,10 @@ def register():
         with get_db() as conn:
             conn.execute(
                 """
-                INSERT INTO accounts (email, password_hash)
-                VALUES (?, ?)
+                INSERT INTO accounts (email, password_hash, tutorial_completed)
+                VALUES (?, ?, ?)
                 """,
-                (email, generate_password_hash(password)),
+                (email, generate_password_hash(password), False),
             )
 
     except (sqlite3.IntegrityError, psycopg2.IntegrityError):
@@ -349,7 +355,8 @@ def login():
         account = conn.execute(
             """
             SELECT id, email, password_hash, premium_until,
-                   stripe_subscription_status, stripe_period_end
+                   stripe_subscription_status, stripe_period_end,
+                   tutorial_completed
             FROM accounts
             WHERE email = ?
             """,
@@ -370,6 +377,7 @@ def login():
         message="Login successful",
         premium=has_active_premium(account),
         premium_until=account["premium_until"],
+        tutorial_required=not bool(account["tutorial_completed"]),
     ), 200
 
 
@@ -382,7 +390,8 @@ def current_account():
         account = conn.execute(
             """
             SELECT id, email, phone_number, premium_until,
-                   stripe_subscription_status, stripe_period_end
+                   stripe_subscription_status, stripe_period_end,
+                   tutorial_completed
             FROM accounts
             WHERE id = ?
             """,
@@ -400,7 +409,23 @@ def current_account():
         premium_until=account["premium_until"],
         subscription_status=account["stripe_subscription_status"],
         subscription_period_end=account["stripe_period_end"],
+        tutorial_required=not bool(account["tutorial_completed"]),
     ), 200
+
+
+@app.post("/api/tutorial/complete")
+def complete_tutorial():
+    account_id = session.get("account_id")
+    if not account_id:
+        return jsonify(message="Please sign in first."), 401
+
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE accounts SET tutorial_completed = ? WHERE id = ?",
+            (True, account_id),
+        )
+
+    return jsonify(message="Tutorial completion saved."), 200
 
 
 @app.post("/api/update-phone")
