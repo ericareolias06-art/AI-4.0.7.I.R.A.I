@@ -103,6 +103,7 @@ class MainActivity : Activity() {
     private var tutorialInProgress = false
     private var pendingTutorialStart = false
     private val pageScanRequestCode = 2301
+    private var pendingScanImageUri: Uri? = null
     private var pendingScanPrompt = "Read this page and guide me through it"
 
     private val restartListeningRunnable = Runnable {
@@ -809,9 +810,25 @@ class MainActivity : Activity() {
         }
         speakResponse("Opening the camera. Hold the page steady and take a clear picture.")
         try {
+            val values = android.content.ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "IraiScan_${System.currentTimeMillis()}.jpg")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/IraiScans")
+                }
+            }
+            pendingScanImageUri = contentResolver.insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+            )
+            val outputUri = pendingScanImageUri
+                ?: throw IllegalStateException("Could not create scan image")
+            cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri)
+            cameraIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
             startActivityForResult(cameraIntent, pageScanRequestCode)
         } catch (_: Exception) {
-            speakResponse("I couldn't open the camera. Please check camera availability.")
+            pendingScanImageUri?.let { contentResolver.delete(it, null, null) }
+            pendingScanImageUri = null
+            speakResponse("I couldn't open the camera or save the picture. Please try again.")
         }
     }
 
@@ -823,15 +840,16 @@ class MainActivity : Activity() {
             speakResponse("The page scan was cancelled.")
             return
         }
-        val bitmap = data?.extras?.get("data") as? Bitmap
-        if (bitmap == null) {
+        val imageUri = pendingScanImageUri ?: data?.data
+        pendingScanImageUri = null
+        if (imageUri == null) {
             speakResponse("I didn't receive a picture. Please try taking the page photo again.")
             return
         }
         speakResponse("I have the picture. Let me read the page.")
         try {
             TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                .process(InputImage.fromBitmap(bitmap, 0))
+                .process(InputImage.fromFilePath(this, imageUri))
                 .addOnSuccessListener { result ->
                     val pageText = result.text.trim()
                     if (pageText.isBlank()) {
