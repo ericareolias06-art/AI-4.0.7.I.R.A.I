@@ -1599,6 +1599,20 @@ class MainActivity : Activity() {
             topMargin = dp(8)
         })
 
+        page.addView(Button(this).apply {
+            text = "Skip tutorial"
+            textSize = 13f
+            isAllCaps = false
+            setTextColor(Color.rgb(190, 180, 215))
+            background = ColorDrawable(Color.TRANSPARENT)
+            setOnClickListener {
+                speechTts?.stop()
+                finishFirstTimeTutorial()
+            }
+        }, LinearLayout.LayoutParams(-1, dp(44)).apply {
+            topMargin = dp(5)
+        })
+
         page.addView(TextView(this).apply {
             text = "You can take your time. Irai will guide you."
             textSize = 12f
