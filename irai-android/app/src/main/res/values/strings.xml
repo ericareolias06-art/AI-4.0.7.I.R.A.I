@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="irai_assist_accessibility_description">When enabled by you, Irai can read visible on-screen text and inspect visible form fields and checkboxes when you ask for help with websites, online paperwork, or other apps. That text is sent to the Irai AI service for a response. Irai can perform actions you request, such as tapping controls, entering text, and scrolling, after you approve each action.</string>
+    <string name="irai_assist_accessibility_description">When you enable this service and explicitly ask for help, Irai can inspect visible screen text and form controls in apps and websites. Relevant visible text may be sent to the Irai AI service. Text typed into editable fields is excluded from screen-reading requests. After you approve each action, Irai can tap controls, select options, enter ordinary text, and scroll. Assisted text entry is blocked for passwords, payment cards, banking details, PINs, and verification codes. Irai does not intentionally inspect screens in the background.</string>
 </resources>
