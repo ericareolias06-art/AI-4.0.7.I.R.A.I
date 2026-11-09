@@ -2,15 +2,12 @@ package com.iraitec
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
-import android.graphics.Bitmap
 import android.os.Build
 import android.provider.Settings
-import android.view.Display
 import android.text.TextUtils
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.os.Bundle
-import android.os.Build
 import java.util.Locale
 
 /**
@@ -33,36 +30,6 @@ class IraiAssistAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         if (activeService === this) activeService = null
         super.onDestroy()
-    }
-
-    /** Capture the display only after an explicit user request. */
-    fun captureCurrentScreen(callback: (Bitmap?, String?) -> Unit) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            callback(null, "Screen capture requires Android 11 or newer.")
-            return
-        }
-        try {
-            takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
-                override fun onSuccess(result: ScreenshotResult) {
-                    try {
-                        val hardware = result.hardwareBuffer
-                        val wrapped = Bitmap.wrapHardwareBuffer(hardware, result.colorSpace)
-                        val bitmap = wrapped?.copy(Bitmap.Config.ARGB_8888, false)
-                        hardware.close()
-                        if (bitmap == null) callback(null, "Android did not return a readable screenshot.")
-                        else callback(bitmap, null)
-                    } catch (error: Exception) {
-                        try { result.hardwareBuffer.close() } catch (_: Exception) {}
-                        callback(null, error.message ?: "Could not process the screen capture.")
-                    }
-                }
-                override fun onFailure(errorCode: Int) {
-                    callback(null, "Android blocked the screen capture (code $errorCode).")
-                }
-            })
-        } catch (error: Exception) {
-            callback(null, error.message ?: "Screen capture is unavailable.")
-        }
     }
 
     fun readVisibleText(maxChars: Int = 10000): String {
@@ -301,11 +268,6 @@ class IraiAssistAccessibilityService : AccessibilityService() {
 
         fun readCurrentScreen(): String = activeService?.readVisibleText().orEmpty()
         fun describeCurrentForm(): String = activeService?.describeVisibleForm().orEmpty()
-        fun captureCurrentScreen(callback: (Bitmap?, String?) -> Unit) {
-            val service = activeService
-            if (service == null) callback(null, "Guided Assistance is not connected.")
-            else service.captureCurrentScreen(callback)
-        }
         fun tapText(target: String): Boolean = activeService?.tapVisibleText(target) ?: false
         fun typeIntoField(target: String, value: String): Boolean = activeService?.enterText(target, value) ?: false
         fun setOptionChecked(target: String, checked: Boolean): Boolean = activeService?.setCheckableState(target, checked) ?: false
