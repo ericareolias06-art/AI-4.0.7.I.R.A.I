@@ -1276,6 +1276,28 @@ class MainActivity : Activity() {
                 return
             }
 
+            ((text.startsWith("fill ") || text.startsWith("set ")) && text.contains(" with ")) -> {
+                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                    requestGuidedAssistanceEnablement()
+                    return
+                }
+                val payload = routedCommand.substringAfter(" ", "")
+                val field = payload.substringBefore(" with ").trim()
+                val value = payload.substringAfter(" with ", "").trim()
+                if (value.isBlank() || field.isBlank()) {
+                    speakResponse("Tell me which field to fill and what value you want entered.")
+                } else {
+                    confirmAssistedAction(
+                        "Enter text in " + field + "?",
+                        "I will enter \"" + value.take(240) + "\" into the field called " + field + ". Check the exact text before allowing it."
+                    ) {
+                        val worked = IraiAssistAccessibilityService.typeIntoField(field, value)
+                        speakResponse(if (worked) "I entered that in " + field + "." else "I couldn't find that field, or it is protected from automated entry.")
+                    }
+                }
+                return
+            }
+
             (text.startsWith("type ") || text.startsWith("enter ") || text.startsWith("put ")) && text.contains(" into ") -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
                     requestGuidedAssistanceEnablement()
