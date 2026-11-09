@@ -7,4 +7,4 @@
     android:canPerformGestures="true"
     android:canRequestFilterKeyEvents="false"
     android:description="@string/irai_assist_accessibility_description"
-    android:packageNames="" />
+ />
