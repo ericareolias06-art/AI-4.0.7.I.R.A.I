@@ -1087,7 +1087,7 @@ class MainActivity : Activity() {
                             }
                             android.view.MotionEvent.ACTION_MOVE -> {
                                 if (lp != null) {
-                                    lp.x = (noteStartX + noteDownX - event.rawX).toInt().coerceAtLeast(0)
+                                    lp.x = (noteStartX + event.rawX - noteDownX).toInt().coerceAtLeast(0)
                                     lp.y = (noteStartY + event.rawY - noteDownY).toInt().coerceAtLeast(0)
                                     try { stickyWindowManager?.updateViewLayout(card, lp) } catch (_: Exception) {}
                                 }
