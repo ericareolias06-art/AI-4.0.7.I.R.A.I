@@ -78,6 +78,13 @@ class MainActivity : Activity() {
     private var stickyBodyView: TextView? = null
     private var avatarPermissionPrompted = false
     private var avatarHiddenUntilWake = false
+    private var stickyWindowParams: WindowManager.LayoutParams? = null
+    private val avatarInactivityRunnable = Runnable {
+        if (loggedIn && !avatarHiddenUntilWake) {
+            avatarHiddenUntilWake = true
+            IraiAvatarOverlay.hide()
+        }
+    }
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private var latestDiagnostic = "Waiting for listening service..."
     private var lastRecognizedPhrase = ""
@@ -121,6 +128,7 @@ class MainActivity : Activity() {
                     // A fresh wake word restores the companion after "go away".
                     avatarHiddenUntilWake = false
                     showAvatarOverlay()
+                    scheduleAvatarInactivityTimeout()
                     IraiAvatarOverlay.setStatus("Listening...")
                     startVoiceCommand()
                 }
@@ -200,6 +208,7 @@ class MainActivity : Activity() {
                         override fun onStart(utteranceId: String?) {}
                         override fun onDone(utteranceId: String?) {
                             if (utteranceId == "irai_response") runOnUiThread {
+                                scheduleAvatarInactivityTimeout()
                                 if (notesMode && loggedIn && !awaitingCommand) startVoiceCommand()
                             }
                         }
@@ -559,10 +568,18 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun scheduleAvatarInactivityTimeout() {
+        handler.removeCallbacks(avatarInactivityRunnable)
+        if (loggedIn && !avatarHiddenUntilWake) {
+            handler.postDelayed(avatarInactivityRunnable, 60_000L)
+        }
+    }
+
     private fun showAvatarOverlay() {
         if (!loggedIn || avatarHiddenUntilWake) return
         if (IraiAvatarOverlay.hasPermission(this)) {
             IraiAvatarOverlay.show(applicationContext)
+            scheduleAvatarInactivityTimeout()
         }
     }
 
@@ -726,6 +743,7 @@ class MainActivity : Activity() {
                                 speakResponse("Sorry, I didn't catch that.")
                             } else {
                                 lastRecognizedPhrase = spokenText
+                                scheduleAvatarInactivityTimeout()
                                 latestDiagnostic = "Routing recognized command..."
                                 refreshDiagnostic()
                                 handleVoiceCommand(spokenText)
@@ -754,15 +772,15 @@ class MainActivity : Activity() {
                 // Android decides the utterance is complete.
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    8000L
+                    if (notesMode) 15_000L else 8_000L
                 )
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    5000L
+                    if (notesMode) 10_000L else 5_000L
                 )
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
-                    1500L
+                    if (notesMode) 3_000L else 1_500L
                 )
             }
 
@@ -1045,13 +1063,42 @@ class MainActivity : Activity() {
                         }
                         elevation = 12 * density
                     }
-                    card.addView(TextView(this).apply {
-                        text = "IRAI NOTES"
+                    val dragHandle = TextView(this).apply {
+                        text = "IRAI NOTES  ⋮⋮"
                         textSize = 11f
                         setTextColor(Color.rgb(112, 87, 25))
                         typeface = Typeface.DEFAULT_BOLD
                         letterSpacing = 0.12f
-                    })
+                        setPadding(0, 0, 0, (8 * density).toInt())
+                    }
+                    var noteDownX = 0f
+                    var noteDownY = 0f
+                    var noteStartX = 0
+                    var noteStartY = 0
+                    dragHandle.setOnTouchListener { _, event ->
+                        val lp = stickyWindowParams
+                        when (event.action) {
+                            android.view.MotionEvent.ACTION_DOWN -> {
+                                noteDownX = event.rawX
+                                noteDownY = event.rawY
+                                noteStartX = lp?.x ?: 0
+                                noteStartY = lp?.y ?: 0
+                                true
+                            }
+                            android.view.MotionEvent.ACTION_MOVE -> {
+                                if (lp != null) {
+                                    lp.x = (noteStartX + noteDownX - event.rawX).toInt().coerceAtLeast(0)
+                                    lp.y = (noteStartY + event.rawY - noteDownY).toInt().coerceAtLeast(0)
+                                    try { stickyWindowManager?.updateViewLayout(card, lp) } catch (_: Exception) {}
+                                }
+                                true
+                            }
+                            android.view.MotionEvent.ACTION_UP,
+                            android.view.MotionEvent.ACTION_CANCEL -> true
+                            else -> false
+                        }
+                    }
+                    card.addView(dragHandle)
                     stickyTitleView = TextView(this).apply {
                         textSize = 19f
                         setTextColor(Color.rgb(45, 39, 24))
@@ -1076,17 +1123,19 @@ class MainActivity : Activity() {
                         @Suppress("DEPRECATION")
                         WindowManager.LayoutParams.TYPE_PHONE
                     }
+                    val noteWidth = (290 * density).toInt()
                     val params = WindowManager.LayoutParams(
-                        (290 * density).toInt(),
+                        noteWidth,
                         WindowManager.LayoutParams.WRAP_CONTENT,
                         type,
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                         PixelFormat.TRANSLUCENT
                     ).apply {
-                        gravity = Gravity.TOP or Gravity.END
-                        x = (12 * density).toInt()
+                        gravity = Gravity.TOP or Gravity.START
+                        x = (resources.displayMetrics.widthPixels - noteWidth - 12 * density).toInt().coerceAtLeast(0)
                         y = (90 * density).toInt()
                     }
+                    stickyWindowParams = params
                     stickyWindowManager?.addView(card, params)
                 }
                 stickyTitleView?.text = currentNoteTitle.ifBlank { "Untitled note" }
@@ -1102,6 +1151,7 @@ class MainActivity : Activity() {
         stickyNoteView = null
         stickyTitleView = null
         stickyBodyView = null
+        stickyWindowParams = null
         stickyWindowManager = null
     }
 
@@ -2291,6 +2341,7 @@ class MainActivity : Activity() {
                             awaitingCommand = false
                             listeningForCommand = false
                             handler.removeCallbacks(restartListeningRunnable)
+                            handler.removeCallbacks(avatarInactivityRunnable)
                             IraiAvatarOverlay.hide()
                             stopIraiListeningService()
                             sessionPrefs.edit().clear().apply()
@@ -2311,6 +2362,7 @@ class MainActivity : Activity() {
         listeningForCommand = false
 
         handler.removeCallbacks(restartListeningRunnable)
+        handler.removeCallbacks(avatarInactivityRunnable)
         IraiAvatarOverlay.hide()
         stopIraiListeningService()
 
