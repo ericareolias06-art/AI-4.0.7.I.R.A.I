@@ -84,6 +84,10 @@ class MainActivity : Activity() {
     private var speechRecognizer: SpeechRecognizer? = null
     private var speechTts: TextToSpeech? = null
     private var ttsReady = false
+    private var originalTtsVoice: android.speech.tts.Voice? = null
+    private var tutorialSteps = listOf<String>()
+    private var tutorialIndex = 0
+    private var tutorialInProgress = false
 
     private val restartListeningRunnable = Runnable {
         if (loggedIn && !awaitingCommand && !listeningForCommand) {
@@ -205,6 +209,7 @@ class MainActivity : Activity() {
                         }
                     })
                     val languageResult = speechTts?.setLanguage(Locale.US)
+                    originalTtsVoice = speechTts?.voice
 
                     speechTts?.setSpeechRate(0.92f)
                     speechTts?.setPitch(1.18f)
@@ -231,6 +236,7 @@ class MainActivity : Activity() {
 
         thread {
             var email = ""
+            var tutorialRequired = false
             var valid = false
             var rejected = false
             var connectionFailed = false
@@ -250,6 +256,7 @@ class MainActivity : Activity() {
                         .bufferedReader().use { it.readText() }
                     val json = JSONObject(result)
                     email = json.optString("email", "")
+                    tutorialRequired = json.optBoolean("tutorial_required", false)
                     valid = email.isNotBlank()
                 } else {
                     connectionFailed = true
@@ -265,8 +272,12 @@ class MainActivity : Activity() {
                     valid -> {
                         currentEmail = email
                         loggedIn = true
-                        showHome(email)
-                        requestMicrophonePermission()
+                        if (tutorialRequired) {
+                            startFirstTimeTutorial()
+                        } else {
+                            showHome(email)
+                            requestMicrophonePermission()
+                        }
                     }
                     rejected -> {
                         sessionPrefs.edit().remove("cookie").apply()
@@ -493,8 +504,12 @@ class MainActivity : Activity() {
                 } else if (success) {
                     currentEmail = email
                     loggedIn = true
-                    showHome(email)
-                    requestMicrophonePermission()
+                    if (json.optBoolean("tutorial_required", false)) {
+                        startFirstTimeTutorial()
+                    } else {
+                        showHome(email)
+                        requestMicrophonePermission()
+                    }
                 }
             }
         }
@@ -1306,6 +1321,121 @@ class MainActivity : Activity() {
             setTextColor(white)
         })
         return header
+    }
+
+    private fun startFirstTimeTutorial() {
+        tutorialSteps = listOf(
+            "Welcome to Irai Tec. I'm Irai, your personal assistant. I'll show you how to call me and get started.",
+            "First, my name is pronounced eye-ray. Say it slowly, like this: eye ... ray. Please don't rush the two parts together.",
+            "To wake me, say Irai slowly and clearly. Give the words a small pause: eye ... ray. Speaking slowly helps my wake-word listener recognize you.",
+            "When I respond, speak your request naturally. You can ask me questions, say things like open YouTube, or ask me to open Notes.",
+            "In Notes, you can dictate ideas, save them, reopen them, and ask me to read them aloud. You can also manage your account and settings from the gear icon."
+        )
+        tutorialIndex = 0
+        tutorialInProgress = true
+        applyTutorialVoice()
+        showTutorialStep()
+    }
+
+    private fun applyTutorialVoice() {
+        val tts = speechTts ?: return
+        val englishVoices = tts.voices.orEmpty().filter {
+            it.locale.language.equals("en", ignoreCase = true)
+        }
+        val maleVoice = englishVoices.firstOrNull { voice ->
+            val name = voice.name.lowercase(Locale.US)
+            listOf("male", "david", "daniel", "alex", "guy", "mark", "aaron", "james")
+                .any { hint -> name.contains(hint) }
+        }
+        if (maleVoice != null) {
+            tts.voice = maleVoice
+        }
+        // Lower pitch provides a masculine-sounding fallback on devices that
+        // don't expose a clearly named male English voice.
+        tts.setSpeechRate(0.88f)
+        tts.setPitch(0.82f)
+    }
+
+    private fun showTutorialStep() {
+        root.removeAllViews()
+        root.orientation = LinearLayout.VERTICAL
+        root.gravity = Gravity.CENTER
+        root.setPadding(24, 28, 24, 24)
+        root.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.rgb(34, 23, 65), Color.rgb(112, 55, 100), Color.rgb(18, 18, 32))
+        )
+
+        root.addView(label("WELCOME TO IRAI TEC", 19, white).apply {
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, 20)
+        })
+        root.addView(label("Getting to know Irai", 25, white))
+        root.addView(label("Step ${tutorialIndex + 1} of ${tutorialSteps.size}", 14, accent).apply {
+            setPadding(0, 8, 0, 18)
+        })
+        root.addView(label(tutorialSteps[tutorialIndex], 18, white).apply {
+            setPadding(8, 8, 8, 24)
+        })
+
+        val next = Button(this).apply {
+            text = if (tutorialIndex == tutorialSteps.lastIndex) "Finish tutorial" else "Next"
+            setTextColor(white)
+            setBackgroundColor(accent)
+            setOnClickListener {
+                if (tutorialIndex < tutorialSteps.lastIndex) {
+                    tutorialIndex++
+                    showTutorialStep()
+                } else {
+                    finishFirstTimeTutorial()
+                }
+            }
+        }
+        root.addView(next, params())
+        root.addView(label("Irai will read each step aloud.", 13, muted).apply {
+            setPadding(0, 16, 0, 0)
+        })
+        setContentView(root)
+
+        val spoken = tutorialSteps[tutorialIndex]
+        if (ttsReady) {
+            speechTts?.speak(
+                spoken,
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "irai_tutorial_step"
+            )
+        } else {
+            Toast.makeText(this, "Text-to-speech isn't ready. Please check your phone's speech settings.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun finishFirstTimeTutorial() {
+        tutorialInProgress = false
+        speechTts?.stop()
+        speechTts?.voice = originalTtsVoice
+        speechTts?.setSpeechRate(0.92f)
+        speechTts?.setPitch(1.18f)
+
+        thread {
+            try {
+                val connection = openApiConnection("/api/tutorial/complete")
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
+                connection.responseCode
+                connection.disconnect()
+            } catch (e: Exception) {
+                android.util.Log.e("IRAI_TUTORIAL", "Could not save tutorial completion", e)
+            }
+            runOnUiThread {
+                showHome(currentEmail)
+                requestMicrophonePermission()
+            }
+        }
     }
 
     private fun showHome(email: String) {
