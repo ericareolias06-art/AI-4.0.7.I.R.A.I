@@ -1779,7 +1779,7 @@ class MainActivity : Activity() {
             "To wake me, say Irai slowly and clearly. Give the words a small pause: eye ... ray. Speaking slowly helps my wake-word listener recognize you.",
             "When I respond, speak your request naturally. You can ask me questions, say things like open YouTube, or ask me to open Notes.",
             "In Notes, you can transcribe ideas, save them, reopen them, and ask me to read them aloud. You can also manage your account and settings from the gear icon.",
-            "I can scan a page with your camera and read paperwork or instructions. I'll explain what it means and walk you through it one step at a time. The text is sent to Irai AI for help, so avoid scanning information you do not want processed.",
+            "I can scan a page with your camera or import a PDF. I can read up to fifteen PDF pages at a time, explain what the document means, and walk you through it one step at a time. The extracted text is sent to Irai AI for help, so avoid scanning or importing information you do not want processed.",
             "I can also help with online paperwork in your browser or other apps. I can explain application questions, inspect visible form fields and checkboxes, point out what appears incomplete, help enter your answers, and move between sections. Say review this form or what is missing. Turn on Guided Assistance in Settings first. Android requires you to enable this permission yourself.",
             "Before I tap a control or enter information, I'll show you what I'm about to do and ask you to allow it. You stay in control of important steps like submitting forms, placing orders, sending messages, and making payments."
         )
