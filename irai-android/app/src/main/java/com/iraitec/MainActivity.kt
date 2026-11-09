@@ -1247,144 +1247,398 @@ class MainActivity : Activity() {
         handler.postDelayed(restartListeningRunnable, 1800)
     }
 
+    private fun menuButton(
+        title: String,
+        subtitle: String,
+        onClick: () -> Unit
+    ): LinearLayout {
+        val density = resources.displayMetrics.density
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((18 * density).toInt(), (15 * density).toInt(), (18 * density).toInt(), (15 * density).toInt())
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(34, 33, 57))
+                cornerRadius = 18 * density
+                setStroke((1 * density).toInt(), Color.argb(70, 190, 170, 255))
+            }
+            isClickable = true
+            isFocusable = true
+            elevation = 3 * density
+            addView(TextView(this@MainActivity).apply {
+                text = title
+                textSize = 17f
+                setTextColor(white)
+                typeface = Typeface.DEFAULT_BOLD
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = subtitle
+                textSize = 13f
+                setTextColor(muted)
+                setPadding(0, (4 * density).toInt(), 0, 0)
+            })
+            setOnClickListener { onClick() }
+        }.also {
+            it.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, (7 * density).toInt(), 0, (7 * density).toInt())
+            }
+        }
+    }
+
+    private fun screenHeader(title: String, onBack: () -> Unit): LinearLayout {
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(Button(this).apply {
+            text = "‹"
+            textSize = 25f
+            setTextColor(white)
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnClickListener { onBack() }
+        }, LinearLayout.LayoutParams((56 * resources.displayMetrics.density).toInt(), (52 * resources.displayMetrics.density).toInt()))
+        header.addView(TextView(this).apply {
+            text = title
+            textSize = 22f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(white)
+        })
+        return header
+    }
+
     private fun showHome(email: String) {
         thread {
             var premium = false
-            var statusMessage = ""
-
             try {
-                val connection =
-                    openApiConnection("/api/me")
-
+                val connection = openApiConnection("/api/me")
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 15000
                 connection.readTimeout = 15000
-
                 val code = connection.responseCode
-                val stream = if (code in 200..299) {
-                    connection.inputStream
-                } else {
-                    connection.errorStream
-                }
-
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
                 val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
-                val json = JSONObject(result)
-
-                if (code in 200..299) {
-                    premium = json.optBoolean("premium", false)
-                } else {
-                    statusMessage = "Could not verify Premium status."
-                }
-
+                if (code in 200..299) premium = JSONObject(result).optBoolean("premium", false)
                 connection.disconnect()
             } catch (_: Exception) {
-                statusMessage =
-                    "Could not verify Premium status. Check your connection."
             }
 
             runOnUiThread {
                 root.removeAllViews()
                 root.orientation = LinearLayout.VERTICAL
-                root.gravity = Gravity.CENTER
-                root.setPadding(24, 20, 24, 20)
+                root.gravity = Gravity.TOP
+                root.setPadding(20, 14, 20, 18)
+                root.background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(Color.rgb(25, 22, 49), Color.rgb(43, 31, 72), Color.rgb(18, 18, 32))
+                )
 
+                val topBar = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                topBar.addView(TextView(this).apply {
+                    text = "IRAI TEC"
+                    textSize = 20f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(white)
+                    letterSpacing = 0.12f
+                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                topBar.addView(Button(this).apply {
+                    text = "⚙"
+                    textSize = 23f
+                    contentDescription = "Settings"
+                    setTextColor(white)
+                    setBackgroundColor(Color.TRANSPARENT)
+                    setOnClickListener { showSettings() }
+                }, LinearLayout.LayoutParams((58 * resources.displayMetrics.density).toInt(), (52 * resources.displayMetrics.density).toInt()))
+                root.addView(topBar)
+
+                val scroll = ScrollView(this).apply { isFillViewport = true }
+                val content = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    setPadding(4, 18, 4, 18)
+                }
+
+                content.addView(label("✦", 66, Color.rgb(190, 164, 255)))
+                content.addView(label("Hello, I'm Irai.", 27, white))
+                content.addView(label("A little light in your day.", 15, muted))
+                content.addView(label(if (premium) "Premium is active" else "Your personal assistant", 13, accent).apply {
+                    setPadding(0, 8, 0, 20)
+                })
+
+                content.addView(menuButton("Open Notes", "Create, transcribe, and listen to your saved notes") {
+                    startNotesMode()
+                })
+                content.addView(menuButton("Test Irai's Voice", "Hear a quick voice response") {
+                    speakResponse("Hello! I'm Irai. My voice response is working.")
+                })
+                content.addView(menuButton("Restart Listening", "Reconnect Irai's wake-word listener") {
+                    if (loggedIn) startIraiListeningService()
+                })
+
+                content.addView(TextView(this).apply {
+                    text = "Signed in as $email"
+                    textSize = 12f
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.rgb(145, 143, 170))
+                    setPadding(0, 24, 0, 8)
+                })
+
+                scroll.addView(content)
+                root.addView(scroll, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+                ))
+                setContentView(root)
+            }
+        }
+    }
+
+    private fun showSettings() {
+        root.removeAllViews()
+        root.orientation = LinearLayout.VERTICAL
+        root.gravity = Gravity.TOP
+        root.setPadding(20, 14, 20, 20)
+        root.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.rgb(25, 22, 49), Color.rgb(43, 31, 72), Color.rgb(18, 18, 32))
+        )
+        root.addView(screenHeader("Settings") { showHome(currentEmail) })
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(4, 20, 4, 10)
+        }
+        content.addView(label("Manage your Irai Tec experience.", 14, muted).apply {
+            gravity = Gravity.START
+            setPadding(4, 0, 4, 18)
+        })
+        content.addView(menuButton("Account Information", "Email address, phone number, and account deletion") {
+            showAccountInfo()
+        })
+        content.addView(menuButton("Billing & Payments", "Premium plan, payment methods, and subscription") {
+            showBilling()
+        })
+        content.addView(menuButton("Privacy Policy", "Read how Irai Tec handles your information") {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://iraitec.dev/privacy.html")))
+        })
+        content.addView(menuButton("Log Out", "Sign out of this device") { logout() })
+        root.addView(content)
+    }
+
+    private fun showAccountInfo() {
+        thread {
+            var email = currentEmail
+            var phone = ""
+            var loadError = ""
+            try {
+                val connection = openApiConnection("/api/me")
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                val code = connection.responseCode
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                val json = JSONObject(result)
+                if (code in 200..299) {
+                    email = json.optString("email", currentEmail)
+                    phone = json.optString("phone_number", "")
+                } else {
+                    loadError = json.optString("message", "Could not load account information.")
+                }
+                connection.disconnect()
+            } catch (_: Exception) {
+                loadError = "Couldn't load your account information. Please try again."
+            }
+
+            runOnUiThread {
+                root.removeAllViews()
+                root.orientation = LinearLayout.VERTICAL
+                root.gravity = Gravity.TOP
+                root.setPadding(20, 14, 20, 20)
+                root.background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(Color.rgb(25, 22, 49), Color.rgb(43, 31, 72), Color.rgb(18, 18, 32))
+                )
+                root.addView(screenHeader("Account Information") { showSettings() })
                 val scroll = ScrollView(this)
                 val content = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
-                    gravity = Gravity.CENTER
+                    setPadding(4, 18, 4, 12)
                 }
+                content.addView(label("Email address", 13, muted).apply { gravity = Gravity.START })
+                content.addView(label(email, 17, white).apply { gravity = Gravity.START })
+                content.addView(label("Phone number", 13, muted).apply {
+                    gravity = Gravity.START
+                    setPadding(4, 22, 4, 4)
+                })
+                val phoneField = field("Add a phone number (optional)").apply {
+                    inputType = android.text.InputType.TYPE_CLASS_PHONE
+                    setText(phone)
+                }
+                content.addView(phoneField)
+                content.addView(Button(this).apply {
+                    text = "Save Phone Number"
+                    setOnClickListener { savePhoneNumber(phoneField.text.toString().trim()) }
+                }, params())
+                if (loadError.isNotBlank()) {
+                    content.addView(label(loadError, 13, Color.rgb(255, 170, 160)))
+                }
+                content.addView(label("Account deletion", 17, white).apply {
+                    gravity = Gravity.START
+                    setPadding(4, 30, 4, 4)
+                })
+                content.addView(label("Permanently delete your Irai Tec account and associated account data.", 13, muted).apply {
+                    gravity = Gravity.START
+                })
+                content.addView(Button(this).apply {
+                    text = "Delete Account"
+                    setTextColor(Color.WHITE)
+                    setBackgroundColor(Color.rgb(150, 55, 65))
+                    setOnClickListener { confirmAccountDeletion() }
+                }, params())
+                scroll.addView(content)
+                root.addView(scroll, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+                ))
+            }
+        }
+    }
 
-                content.addView(label("✦", 48, accent))
-                content.addView(label("Welcome to IRAI TEC", 26, white))
-                content.addView(label("Signed in as $email", 15, muted))
+    private fun savePhoneNumber(phone: String) {
+        thread {
+            var responseMessage = "Couldn't save your phone number. Please try again."
+            var success = false
+            try {
+                val body = JSONObject().put("phone_number", phone)
+                val connection = openApiConnection("/api/update-phone")
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                val code = connection.responseCode
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                val json = JSONObject(result)
+                responseMessage = json.optString("message", responseMessage)
+                success = code in 200..299
+                connection.disconnect()
+            } catch (_: Exception) {
+            }
+            runOnUiThread {
+                Toast.makeText(this, responseMessage, Toast.LENGTH_LONG).show()
+                if (success) showAccountInfo()
+            }
+        }
+    }
 
-                if (statusMessage.isNotBlank()) {
-                    content.addView(label(statusMessage, 15, muted))
-                } else if (premium) {
-                    content.addView(label("✓ Premium Active", 22, accent))
-                } else {
-                    content.addView(label("Unlock IRAI TEC Premium", 20, white))
-                    content.addView(label("$3/month", 18, accent))
+    private fun showBilling() {
+        thread {
+            var premium = false
+            var status = ""
+            var periodEnd = ""
+            try {
+                val connection = openApiConnection("/api/me")
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                val code = connection.responseCode
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                if (code in 200..299) {
+                    val json = JSONObject(result)
+                    premium = json.optBoolean("premium", false)
+                    status = json.optString("subscription_status", "")
+                    periodEnd = json.optString("subscription_period_end", "")
+                }
+                connection.disconnect()
+            } catch (_: Exception) {
+            }
 
+            runOnUiThread {
+                root.removeAllViews()
+                root.orientation = LinearLayout.VERTICAL
+                root.gravity = Gravity.TOP
+                root.setPadding(20, 14, 20, 20)
+                root.background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(Color.rgb(25, 22, 49), Color.rgb(43, 31, 72), Color.rgb(18, 18, 32))
+                )
+                root.addView(screenHeader("Billing & Payments") { showSettings() })
+                val scroll = ScrollView(this)
+                val content = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(4, 18, 4, 12)
+                }
+                content.addView(label(if (premium) "Premium is active" else "Free account", 22, if (premium) accent else white))
+                content.addView(label(
+                    if (status.isNotBlank()) "Subscription status: $status" else "Manage your Irai Tec subscription securely.",
+                    14, muted
+                ))
+                if (periodEnd.isNotBlank()) {
+                    content.addView(label("Current billing period ends: \${periodEnd.take(10)}", 13, muted))
+                }
+                content.addView(menuButton("Manage Payment Methods", "Update cards, billing details, or cancel a paid subscription") {
+                    openBillingPortal()
+                })
+                if (!premium) {
+                    content.addView(label("$3/month", 18, accent).apply { setPadding(4, 20, 4, 4) })
                     content.addView(Button(this).apply {
                         text = "Subscribe Monthly"
                         setOnClickListener { startCheckout("monthly") }
                     }, params())
-
                     content.addView(label("$30/year", 18, accent))
-
                     content.addView(Button(this).apply {
                         text = "Subscribe Yearly"
                         setOnClickListener { startCheckout("yearly") }
                     }, params())
-
                     content.addView(Button(this).apply {
                         text = "Redeem Promo Code"
                         setOnClickListener { showPromoInput() }
                     }, params())
                 }
-
-                val panel = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(12, 12, 12, 12)
-                    setBackgroundColor(Color.rgb(30, 30, 48))
-                }
-
-                panel.addView(label("WAKE-WORD DIAGNOSTICS", 16, accent))
-
-                diagnosticText = TextView(this).apply {
-                    textSize = 14f
-                    setTextColor(white)
-                    gravity = Gravity.CENTER
-                    setPadding(8, 8, 8, 8)
-                    text = latestDiagnostic
-                }
-                panel.addView(diagnosticText)
-                content.addView(panel, params())
-
-                content.addView(Button(this).apply {
-                    text = "Open Notes"
-                    setOnClickListener { startNotesMode() }
-                }, params())
-
-                content.addView(Button(this).apply {
-                    text = "Test Voice Response"
-                    setOnClickListener {
-                        speakResponse(
-                            "Hello! I'm Irai. My voice response is working."
-                        )
-                    }
-                }, params())
-
-                content.addView(Button(this).apply {
-                    text = "Restart Listening"
-                    setOnClickListener {
-                        if (loggedIn) {
-                            startIraiListeningService()
-                        }
-                    }
-                }, params())
-
-                content.addView(Button(this).apply {
-                    text = "Privacy Policy"
-                    setOnClickListener {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://iraitec.dev/privacy.html")))
-                    }
-                }, params())
-
-                content.addView(Button(this).apply {
-                    text = "Delete Account"
-                    setOnClickListener { confirmAccountDeletion() }
-                }, params())
-
-                content.addView(Button(this).apply {
-                    text = "Log Out"
-                    setOnClickListener { logout() }
-                }, params())
-
+                content.addView(label(
+                    "Payment information is handled through Stripe's secure billing page. Irai Tec does not store your full card number.",
+                    12, muted
+                ).apply { setPadding(4, 22, 4, 8) })
                 scroll.addView(content)
-                root.addView(scroll)
-                refreshDiagnostic()
+                root.addView(scroll, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+                ))
+            }
+        }
+    }
+
+    private fun openBillingPortal() {
+        thread {
+            var portalUrl = ""
+            var errorMessage = "Couldn't open billing management. Please try again."
+            try {
+                val connection = openApiConnection("/api/create-portal-session")
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 20000
+                connection.readTimeout = 20000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
+                val code = connection.responseCode
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                val json = JSONObject(result)
+                if (code in 200..299) portalUrl = json.optString("url")
+                else errorMessage = json.optString("message", errorMessage)
+                connection.disconnect()
+            } catch (_: Exception) {
+            }
+            runOnUiThread {
+                if (portalUrl.startsWith("https://")) {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(portalUrl)))
+                } else {
+                    Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
