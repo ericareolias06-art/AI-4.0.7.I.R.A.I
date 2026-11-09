@@ -1604,7 +1604,10 @@ class MainActivity : Activity() {
             "First, my name is pronounced eye-ray. Say it slowly, like this: eye ... ray. Please don't rush the two parts together.",
             "To wake me, say Irai slowly and clearly. Give the words a small pause: eye ... ray. Speaking slowly helps my wake-word listener recognize you.",
             "When I respond, speak your request naturally. You can ask me questions, say things like open YouTube, or ask me to open Notes.",
-            "In Notes, you can transcribe ideas, save them, reopen them, and ask me to read them aloud. You can also manage your account and settings from the gear icon."
+            "In Notes, you can transcribe ideas, save them, reopen them, and ask me to read them aloud. You can also manage your account and settings from the gear icon.",
+            "I can scan a page with your camera and read paperwork or instructions. I'll explain what it means and walk you through it one step at a time. The text is sent to Irai AI for help, so avoid scanning information you do not want processed.",
+            "I can also help while you use other apps, including shopping pages. Turn on Guided Assistance in Settings to let me read the screen, tap a control, enter text, and scroll when you ask. Android requires you to enable this permission yourself.",
+            "Before I tap a control or enter information, I'll show you what I'm about to do and ask you to allow it. You stay in control of important steps like submitting forms, placing orders, sending messages, and making payments."
         )
         tutorialIndex = 0
         tutorialInProgress = true
