@@ -1058,6 +1058,11 @@ class MainActivity : Activity() {
                 openWebPage("https://www.google.com")
             }
 
+            "stop listening" in text || "go to sleep" in text -> {
+                stopIraiListeningService()
+                speakResponse("Okay. Irai is going to sleep.")
+            }
+
             Regex("^(open|launch|start|run|switch to|go to)\\s+(?:the\\s+)?(.+)$")
                 .matchEntire(text) != null -> {
                 val match = Regex("^(open|launch|start|run|switch to|go to)\\s+(?:the\\s+)?(.+)$")
@@ -1069,11 +1074,6 @@ class MainActivity : Activity() {
                     .orEmpty()
                 if (appName.isNotBlank()) openInstalledApp(appName)
                 else speakResponse("Which app would you like me to open?")
-            }
-
-            "stop listening" in text || "go to sleep" in text -> {
-                stopIraiListeningService()
-                speakResponse("Okay. Irai is going to sleep.")
             }
 
             else -> sendMessageToIrai(routedCommand)
