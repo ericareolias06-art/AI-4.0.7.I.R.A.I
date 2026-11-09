@@ -1164,6 +1164,10 @@ class MainActivity : Activity() {
             }
 
             (text.startsWith("tap ") || text.startsWith("click ") || text.startsWith("press ") || text.startsWith("select ") || text.startsWith("choose ")) -> {
+                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                    requestGuidedAssistanceEnablement()
+                    return
+                }
                 val target = routedCommand.substringAfter(" ", "").trim()
                 if (target.isBlank()) {
                     speakResponse("Tell me which button or item you want me to tap.")
@@ -1238,6 +1242,10 @@ class MainActivity : Activity() {
             }
 
             (text.startsWith("type ") || text.startsWith("enter ") || text.startsWith("put ")) && text.contains(" into ") -> {
+                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                    requestGuidedAssistanceEnablement()
+                    return
+                }
                 val payload = routedCommand.substringAfter(" ", "")
                 val value = payload.substringBefore(" into ").trim()
                 val field = payload.substringAfter(" into ", "").trim()
