@@ -1184,7 +1184,10 @@ class MainActivity : Activity() {
                 if (target.isBlank()) {
                     speakResponse("Tell me which button or item you want me to tap.")
                 } else {
-                    val highImpact = Regex("submit|place order|buy now|pay|payment|send|sign|agree|consent|confirm application|finalize", RegexOption.IGNORE_CASE).containsMatchIn(target)
+                    val highImpact = Regex(
+                        "\\b(submit|submit application|place order|complete order|buy|buy now|purchase|checkout|pay|pay now|payment|send|send message|send email|sign|sign now|agree|consent|accept terms|confirm|confirm application|finalize|delete|remove account|cancel subscription)\\b",
+                        RegexOption.IGNORE_CASE
+                    ).containsMatchIn(target)
                     val actionTitle = if (highImpact) "Final confirmation: $target" else "Tap $target?"
                     val actionMessage = if (highImpact) {
                         "This may submit an application, make a purchase or payment, send information, or create a legal agreement. Irai will only proceed if you explicitly approve this exact action. Review the page carefully first."
@@ -2312,6 +2315,19 @@ class MainActivity : Activity() {
                 })
                 content.addView(menuButton("Import a PDF", "Read a PDF and get step-by-step help with its contents") {
                     launchPdfImport()
+                })
+                content.addView(menuButton("Shopping & Paperwork Help", "Get voice-guided help with online shopping, applications, forms, and websites") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Irai Shopping & Paperwork Assistant")
+                        .setMessage(
+                            "Open the app or webpage you need help with, then ask Irai to help you shop, compare products, choose a size, review your cart, understand a form, or complete a section.\\n\\nWith Guided Assistance enabled, Irai can read visible page details and, after your approval, tap controls or enter ordinary text. She will ask before consequential actions. Passwords, payment details, and verification codes are not entered by assisted text entry."
+                        )
+                        .setNegativeButton("Not now", null)
+                        .setPositiveButton(if (IraiAssistAccessibilityService.isEnabled(this)) "Got it" else "Enable Guided Assistance") { _, _ ->
+                            if (!IraiAssistAccessibilityService.isEnabled(this)) requestGuidedAssistanceEnablement()
+                            else speakResponse("I'm ready. Open the page you want help with and tell me what you'd like to do.")
+                        }
+                        .show()
                 })
                 content.addView(menuButton("Help with This Screen", "Let Irai explain the app or webpage you are viewing") {
                     if (!IraiAssistAccessibilityService.isEnabled(this)) {
