@@ -147,7 +147,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
     }
 
     private val protectedFieldPattern = Regex(
-        "\\b(password|passcode|passphrase|security pin|\\bpin\\b|cvv|cvc|card number|credit card|debit card|bank account|routing number|social security|\\bssn\\b|one.?time code|verification code|authentication code|\\botp\\b)\\b",
+        "\\b(password|passcode|passphrase|security pin|\\bpin\\b|cvv|cvc|card|cardholder|bank account|account number|routing number|social security|tax id|\\bssn\\b|one.?time code|verification code|authentication code|recovery code|security code|expiration date|expiry date|\\botp\\b)\\b",
         RegexOption.IGNORE_CASE
     )
 
