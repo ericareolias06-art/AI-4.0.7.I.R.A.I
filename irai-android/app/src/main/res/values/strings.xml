@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="irai_assist_accessibility_description">When enabled by you, Irai can read visible on-screen text when you ask for help. That text is sent to the Irai AI service for a response. Irai can perform actions you request, such as tapping controls, entering text, and scrolling, after you approve each action.</string>
+    <string name="irai_assist_accessibility_description">When enabled by you, Irai can read visible on-screen text and inspect visible form fields and checkboxes when you ask for help with websites, online paperwork, or other apps. That text is sent to the Irai AI service for a response. Irai can perform actions you request, such as tapping controls, entering text, and scrolling, after you approve each action.</string>
 </resources>
