@@ -1144,7 +1144,16 @@ class MainActivity : Activity() {
                 return
             }
 
-            (text in listOf("read this screen", "read the screen", "what is on my screen", "help me with this screen", "help me with this page", "help me with this app", "walk me through this", "help me fill this out", "help me order this", "help me shop", "shop with me", "start guided assistance", "start shopping assistance") || text.startsWith("walk me through ")) -> {
+            (text in listOf(
+                "read this screen", "read the screen", "what is on my screen",
+                "help me with this screen", "help me with this page", "help me with this app",
+                "walk me through this", "help me fill this out", "help me order this",
+                "help me shop", "shop with me", "start guided assistance", "start shopping assistance",
+                "help me choose a size", "help me choose a color", "help me find the size chart",
+                "review my cart", "check my cart", "compare these shoes", "compare these products",
+                "check shipping options", "help me check out", "what size should i buy",
+                "what is the return policy", "help me return this"
+            ) || text.startsWith("walk me through ")) -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
                     requestGuidedAssistanceEnablement()
                     return
