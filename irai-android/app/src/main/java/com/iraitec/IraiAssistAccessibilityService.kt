@@ -168,7 +168,9 @@ class IraiAssistAccessibilityService : AccessibilityService() {
             hint,
             node.viewIdResourceName?.substringAfterLast("/")?.replace('_', ' ').orEmpty()
         ).map { it.trim().lowercase(Locale.US) }.filter { it.isNotBlank() }
-        val eligible = if (editableOnly) node.isEditable else (node.isClickable || node.isCheckable)
+        // For taps, include labeled descendants too: many apps put the text
+        // on a child node while the actual click action belongs to its parent.
+        val eligible = if (editableOnly) node.isEditable else true
         if (eligible && parts.isNotEmpty()) {
             val exact = parts.any { it == wanted }
             val partial = parts.any { it.contains(wanted) }
