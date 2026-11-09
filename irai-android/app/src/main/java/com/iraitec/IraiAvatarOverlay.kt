@@ -31,6 +31,7 @@ object IraiAvatarOverlay {
     private var avatarImage: ImageView? = null
     private var idleAnimation: AnimatorSet? = null
     private var speakingAnimation: AnimatorSet? = null
+    private var avatarLayoutParams: WindowManager.LayoutParams? = null
 
     private fun dp(value: Int): Int {
         val context = appContext ?: return value
@@ -52,7 +53,7 @@ object IraiAvatarOverlay {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.BOTTOM or Gravity.START
+            gravity = Gravity.TOP or Gravity.START
             x = dp(8)
             y = dp(22)
         }
@@ -97,6 +98,36 @@ object IraiAvatarOverlay {
             contentDescription = "Irai animated floating companion"
         }
         avatarImage = avatar
+        var dragDownX = 0f
+        var dragDownY = 0f
+        var dragStartX = 0
+        var dragStartY = 0
+        avatar.setOnTouchListener { _, event ->
+            val lp = avatarLayoutParams
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    dragDownX = event.rawX
+                    dragDownY = event.rawY
+                    dragStartX = lp?.x ?: 0
+                    dragStartY = lp?.y ?: 0
+                    true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    if (lp != null) {
+                        val screen = appContext?.resources?.displayMetrics
+                        val maxX = ((screen?.widthPixels ?: 0) - dp(146)).coerceAtLeast(0)
+                        val maxY = ((screen?.heightPixels ?: 0) - dp(252)).coerceAtLeast(0)
+                        lp.x = (dragStartX + event.rawX - dragDownX).toInt().coerceIn(0, maxX)
+                        lp.y = (dragStartY + event.rawY - dragDownY).toInt().coerceIn(0, maxY)
+                        try { windowManager?.updateViewLayout(avatarWindow, lp) } catch (_: Exception) {}
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL -> true
+                else -> false
+            }
+        }
         panel.addView(avatar, LinearLayout.LayoutParams(dp(132), dp(198)))
 
         val controls = LinearLayout(appContext).apply {
@@ -126,7 +157,8 @@ object IraiAvatarOverlay {
         panel.addView(controls)
         avatarWindow = panel
         try {
-            windowManager?.addView(panel, params(dp(146), dp(252)))
+            avatarLayoutParams = params(dp(146), dp(252))
+            windowManager?.addView(panel, avatarLayoutParams)
             startIdleAnimation()
         } catch (_: Exception) {
             avatarWindow = null
@@ -241,6 +273,7 @@ object IraiAvatarOverlay {
         stopIdleAnimation()
         stopSpeakingAnimation()
         avatarImage = null
+        avatarLayoutParams = null
         try { avatarWindow?.let { windowManager?.removeView(it) } } catch (_: Exception) {}
         avatarWindow = null
         statusLabel = null
