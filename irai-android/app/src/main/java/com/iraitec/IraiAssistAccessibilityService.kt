@@ -86,8 +86,14 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         val fieldName = label.ifBlank { resourceLabel.ifBlank { "Unlabeled control" } }
         if (node.isEditable && !node.isPassword) {
             val currentValue = node.text?.toString()?.trim().orEmpty()
-            // Report completion state without copying personal answers into the AI request.
-            items.add("Text field: $fieldName" + if (currentValue.isNotBlank() && currentValue != label) "; has an answer entered (value hidden)" else "; appears empty or value unavailable")
+            // Report completion and validation state without copying personal answers into the AI request.
+            val completion = if (currentValue.isNotBlank() && currentValue != label) {
+                "; has an answer entered (value hidden)"
+            } else {
+                "; appears empty or value unavailable"
+            }
+            val validation = if (node.isContentInvalid) "; app marks this field invalid" else ""
+            items.add("Text field: $fieldName$completion$validation")
         } else if (node.isCheckable || className.contains("checkbox") || className.contains("radiobutton") || className.contains("switch")) {
             val state = if (node.isChecked) "selected" else "not selected"
             val kind = when {
