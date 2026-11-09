@@ -18,7 +18,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.provider.MediaStore
-import android.graphics.Bitmap
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -823,6 +822,7 @@ class MainActivity : Activity() {
             val outputUri = pendingScanImageUri
                 ?: throw IllegalStateException("Could not create scan image")
             cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri)
+            cameraIntent.clipData = android.content.ClipData.newRawUri("Irai page scan", outputUri)
             cameraIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
             startActivityForResult(cameraIntent, pageScanRequestCode)
         } catch (_: Exception) {
@@ -837,6 +837,8 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != pageScanRequestCode) return
         if (resultCode != RESULT_OK) {
+            pendingScanImageUri?.let { contentResolver.delete(it, null, null) }
+            pendingScanImageUri = null
             speakResponse("The page scan was cancelled.")
             return
         }
