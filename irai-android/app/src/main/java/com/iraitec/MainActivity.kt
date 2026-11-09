@@ -34,6 +34,7 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.ColorDrawable
 import android.widget.*
 import org.json.JSONObject
+import org.json.JSONArray
 import java.net.CookieHandler
 import java.net.CookieManager
 import java.net.CookiePolicy
@@ -104,6 +105,7 @@ class MainActivity : Activity() {
     private val pageScanRequestCode = 2301
     private var pendingScanImageUri: Uri? = null
     private var pendingScanPrompt = "Read this page and guide me through it"
+    private val aiConversationHistory = mutableListOf<JSONObject>()
 
     private val restartListeningRunnable = Runnable {
         if (loggedIn && !awaitingCommand && !listeningForCommand) {
@@ -1127,12 +1129,14 @@ class MainActivity : Activity() {
     }
 
     private fun sendMessageToIrai(message: String) {
+    val historySnapshot = aiConversationHistory.toList()
     latestDiagnostic = "Irai is thinking..."
     IraiAvatarOverlay.setStatus("Thinking...")
     refreshDiagnostic()
 
     thread {
         var reply = ""
+        var requestSucceeded = false
 
         try {
             val connection = openApiConnection("/api/ai/chat")
@@ -1145,8 +1149,11 @@ class MainActivity : Activity() {
                 "application/json; charset=UTF-8"
             )
 
+            val historyJson = JSONArray()
+            historySnapshot.takeLast(10).forEach { historyJson.put(it) }
             val payload = JSONObject()
                 .put("message", message)
+                .put("history", historyJson)
                 .toString()
 
             connection.outputStream.use { output ->
@@ -1169,6 +1176,7 @@ class MainActivity : Activity() {
             val json = JSONObject(responseText)
 
             reply = if (status in 200..299) {
+                requestSucceeded = true
                 json.optString("response", "I received an empty response.")
             } else {
                 json.optString(
@@ -1189,6 +1197,15 @@ class MainActivity : Activity() {
         }
 
         runOnUiThread {
+            if (requestSucceeded) {
+                aiConversationHistory.add(JSONObject().put("role", "user").put("content", message))
+                aiConversationHistory.add(JSONObject().put("role", "assistant").put("content", reply))
+                while (aiConversationHistory.size > 10) aiConversationHistory.removeAt(0)
+                var totalChars = aiConversationHistory.sumOf { it.optString("content").length }
+                while (aiConversationHistory.isNotEmpty() && totalChars > 10_000) {
+                    totalChars -= aiConversationHistory.removeAt(0).optString("content").length
+                }
+            }
             speakResponse(reply)
         }
     }
