@@ -276,11 +276,11 @@ class MainActivity : Activity() {
                     }
                     connectionFailed -> {
                         showAuth()
-                        message.text = "Unable to verify your session. Check your internet and try again. Your saved session has been kept."
+                        message.text = "Welcome back! I couldn't refresh your sign-in just now. Please try again in a moment."
                     }
                     else -> {
                         showAuth()
-                        message.text = "Unable to verify your session. Please try again."
+                        message.text = "I couldn't refresh your sign-in just now. Please try again in a moment."
                     }
                 }
             }
@@ -434,6 +434,7 @@ class MainActivity : Activity() {
         thread {
             var result = ""
             var success = false
+            var responseCode = -1
 
             try {
                 val connection =
@@ -452,6 +453,7 @@ class MainActivity : Activity() {
                 }
 
                 val code = connection.responseCode
+                responseCode = code
                 saveSessionCookie(connection)
                 val stream = if (code in 200..299) {
                     connection.inputStream
@@ -463,7 +465,7 @@ class MainActivity : Activity() {
                 success = code in 200..299
                 connection.disconnect()
             } catch (_: Exception) {
-                result = "Could not connect. Check your internet and try again."
+                result = "I'm having a little trouble reaching Irai Tec right now. Please try again in a moment."
             }
 
             runOnUiThread {
@@ -473,10 +475,15 @@ class MainActivity : Activity() {
                     JSONObject()
                 }
 
-                message.text = json.optString(
-                    "message",
-                    json.optString("error", result)
-                )
+                message.text = when {
+                    success -> json.optString("message", "You're all set!")
+                    responseCode >= 500 || result.isBlank() ->
+                        "I'm having a little trouble reaching Irai Tec right now. Please try again in a moment."
+                    else -> json.optString(
+                        "message",
+                        json.optString("error", "I couldn't complete that just now. Please try again.")
+                    )
+                }
 
                 if (success && registering) {
                     registering = false
@@ -1004,7 +1011,7 @@ class MainActivity : Activity() {
                     stickyWindowManager?.addView(card, params)
                 }
                 stickyTitleView?.text = currentNoteTitle.ifBlank { "Untitled note" }
-                stickyBodyView?.text = currentNoteBody.ifBlank { "Your dictated words will appear here..." }
+                stickyBodyView?.text = currentNoteBody.ifBlank { "Your transcription will appear here..." }
             } catch (e: Exception) {
                 android.util.Log.e("IRAI_NOTES", "Could not display sticky note", e)
             }
@@ -1046,7 +1053,7 @@ class MainActivity : Activity() {
             }
             lower == "save note" || lower == "save" -> {
                 if (saveCurrentNote()) speakResponse("Your note is saved.")
-                else speakResponse("There is no note text to save yet. Start dictating first.")
+                else speakResponse("There is no note text to save yet. Start transcribing first.")
             }
             lower == "quit notes" || lower == "close notes" || lower == "exit notes" -> {
                 if (noteHasChanges && currentNoteBody.isNotBlank()) speakResponse("Would you like me to save this note before I quit? Say save and quit, or discard and quit.")
@@ -1121,7 +1128,7 @@ class MainActivity : Activity() {
                 awaitingNoteTitle = false
                 noteHasChanges = true
                 updateStickyNote()
-                speakResponse("I'll call this note $currentNoteTitle. Go ahead and dictate.")
+                speakResponse("I'll call this note $currentNoteTitle. Go ahead and transcribe.")
             }
             else -> {
                 currentNoteBody = if (currentNoteBody.isBlank()) spoken else currentNoteBody.trimEnd() + "\n" + spoken
