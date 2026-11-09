@@ -1198,7 +1198,7 @@ class MainActivity : Activity() {
                     speakResponse("Tell me which button or item you want me to tap.")
                 } else {
                     val highImpact = Regex(
-                        "\\b(submit|submit application|place order|complete order|buy|buy now|purchase|checkout|pay|pay now|payment|send|send message|send email|sign|sign now|agree|consent|accept terms|confirm|confirm application|finalize|delete|remove account|cancel subscription)\\b",
+                        "\\b(submit|submit form|submit order|submit application|place order|place your order|complete order|complete purchase|finish checkout|buy|buy now|purchase|checkout|pay|pay now|payment|authorize payment|transfer money|send|send message|send email|send application|sign|sign now|sign document|agree|consent|accept terms|confirm|confirm application|finalize|delete|delete account|remove account|cancel subscription|cancel order|book appointment)\\b",
                         RegexOption.IGNORE_CASE
                     ).containsMatchIn(target)
                     val actionTitle = if (highImpact) "Final confirmation: $target" else "Tap $target?"
