@@ -63,7 +63,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         val root = rootInActiveWindow ?: return ""
         val items = mutableListOf<String>()
         appendFormControls(root, items, maxItems)
-        return items.distinct().joinToString("\\n")
+        return items.distinct().joinToString("\n")
     }
 
     private fun appendFormControls(node: AccessibilityNodeInfo, items: MutableList<String>, maxItems: Int) {
