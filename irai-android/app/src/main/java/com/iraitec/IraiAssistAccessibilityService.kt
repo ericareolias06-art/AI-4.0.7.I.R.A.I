@@ -74,19 +74,34 @@ class IraiAssistAccessibilityService : AccessibilityService() {
             node.contentDescription?.toString()?.trim().orEmpty(),
             hint.trim()
         ).firstOrNull { it.isNotBlank() }.orEmpty()
+        val className = node.className?.toString()?.substringAfterLast('.')?.lowercase(Locale.US).orEmpty()
+        val resourceLabel = node.viewIdResourceName
+            ?.substringAfterLast("/")
+            ?.replace('_', ' ')
+            .orEmpty()
+        val fieldName = label.ifBlank { resourceLabel.ifBlank { "Unlabeled control" } }
         if (node.isEditable && !node.isPassword) {
-            val resourceLabel = node.viewIdResourceName
-                ?.substringAfterLast("/")
-                ?.replace('_', ' ')
-                .orEmpty()
-            val fieldName = label.ifBlank { resourceLabel.ifBlank { "Unlabeled field" } }
             val currentValue = node.text?.toString()?.trim().orEmpty()
             // Report completion state without copying personal answers into the AI request.
             items.add("Text field: $fieldName" + if (currentValue.isNotBlank() && currentValue != label) "; has an answer entered (value hidden)" else "; appears empty or value unavailable")
-        } else if (node.isCheckable) {
-            items.add((if (node.isChecked) "Checked option: " else "Unchecked option: ") + label.ifBlank { "Unlabeled option" })
+        } else if (node.isCheckable || className.contains("checkbox") || className.contains("radiobutton") || className.contains("switch")) {
+            val state = if (node.isChecked) "selected" else "not selected"
+            val kind = when {
+                className.contains("radio") -> "Radio option"
+                className.contains("switch") -> "Switch"
+                else -> "Checkbox"
+            }
+            items.add("$kind: $fieldName; $state")
+        } else if (className.contains("spinner") || className.contains("dropdown") || className.contains("autocomplet")) {
+            items.add("Dropdown or selection field: $fieldName" + if (label.isNotBlank()) "; current selection may be shown above" else "")
         } else if (node.isClickable && label.isNotBlank()) {
-            items.add("Button or option: $label")
+            val kind = when {
+                className.contains("button") -> "Button"
+                className.contains("tab") -> "Tab"
+                className.contains("menu") -> "Menu item"
+                else -> "Selectable control"
+            }
+            items.add("$kind: $label" + if (node.isSelected) "; currently selected" else "")
         }
         for (index in 0 until node.childCount) {
             if (items.size >= maxItems) break
@@ -102,6 +117,20 @@ class IraiAssistAccessibilityService : AccessibilityService() {
             if (current.isEnabled && current.isClickable &&
                 current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             ) return true
+            current = current.parent
+        }
+        return false
+    }
+
+    fun setCheckableState(target: String, checked: Boolean): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val node = findBestMatchingNode(root, target, editableOnly = false) ?: return false
+        var current: AccessibilityNodeInfo? = node
+        while (current != null) {
+            if (current.isEnabled && current.isCheckable) {
+                if (current.isChecked == checked) return true
+                return current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
             current = current.parent
         }
         return false
@@ -206,6 +235,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         fun describeCurrentForm(): String = activeService?.describeVisibleForm().orEmpty()
         fun tapText(target: String): Boolean = activeService?.tapVisibleText(target) ?: false
         fun typeIntoField(target: String, value: String): Boolean = activeService?.enterText(target, value) ?: false
+        fun setOptionChecked(target: String, checked: Boolean): Boolean = activeService?.setCheckableState(target, checked) ?: false
         fun scrollForward(): Boolean = activeService?.scrollScreen(true) ?: false
         fun scrollBackward(): Boolean = activeService?.scrollScreen(false) ?: false
         fun goBack(): Boolean = activeService?.goBack() ?: false
