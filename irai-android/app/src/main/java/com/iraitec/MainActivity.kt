@@ -859,14 +859,16 @@ class MainActivity : Activity() {
             var descriptor: ParcelFileDescriptor? = null
             var renderer: PdfRenderer? = null
             try {
-                descriptor = contentResolver.openFileDescriptor(uri, "r")
+                val openedDescriptor = contentResolver.openFileDescriptor(uri, "r")
                     ?: throw IllegalStateException("Unable to open PDF")
-                renderer = PdfRenderer(descriptor)
-                val totalPages = renderer.pageCount
+                descriptor = openedDescriptor
+                val openedRenderer = PdfRenderer(openedDescriptor)
+                renderer = openedRenderer
+                val totalPages = openedRenderer.pageCount
                 val pageLimit = minOf(totalPages, 15)
                 if (pageLimit == 0) throw IllegalStateException("PDF has no pages")
-                val pdf = renderer
-                val pfd = descriptor
+                val pdf = openedRenderer
+                val pfd = openedDescriptor
                 val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
                 val extracted = StringBuilder()
                 var pageIndex = 0
