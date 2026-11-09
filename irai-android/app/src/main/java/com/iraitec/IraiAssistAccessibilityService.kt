@@ -40,7 +40,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
     }
 
     private fun appendVisibleText(node: AccessibilityNodeInfo, output: StringBuilder, maxChars: Int) {
-        if (output.length >= maxChars) return
+        if (output.length >= maxChars || !node.isVisibleToUser) return
         val isSensitivePassword = node.isPassword
         val text = if (isSensitivePassword) "" else node.text?.toString()?.trim().orEmpty()
         val description = if (isSensitivePassword) "" else node.contentDescription?.toString()?.trim().orEmpty()
@@ -86,6 +86,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
     fun goBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
 
     private fun findNode(root: AccessibilityNodeInfo, target: String): AccessibilityNodeInfo? {
+        if (!root.isVisibleToUser) return null
         val wanted = target.trim().lowercase(Locale.US)
         if (wanted.isBlank()) return null
         val text = root.text?.toString().orEmpty().lowercase(Locale.US)
@@ -99,6 +100,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
     }
 
     private fun findEditableNode(root: AccessibilityNodeInfo, target: String): AccessibilityNodeInfo? {
+        if (!root.isVisibleToUser) return null
         val wanted = target.trim().lowercase(Locale.US)
         val hint = if (Build.VERSION.SDK_INT >= 26) root.hintText?.toString() else null
         val label = listOfNotNull(root.text?.toString(), root.contentDescription?.toString(), hint)
