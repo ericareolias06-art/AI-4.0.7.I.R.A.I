@@ -980,11 +980,15 @@ class MainActivity : Activity() {
     }
 
     private fun confirmAssistedAction(title: String, description: String, action: () -> Unit) {
+        val confirmLabel = if (
+            title.startsWith("Final confirmation", ignoreCase = true) ||
+            title.startsWith("Confirm consent choice", ignoreCase = true)
+        ) "I Confirm" else "Allow"
         AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(description)
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Allow") { _, _ -> action() }
+            .setPositiveButton(confirmLabel) { _, _ -> action() }
             .show()
     }
 
