@@ -41,8 +41,9 @@ class IraiAssistAccessibilityService : AccessibilityService() {
 
     private fun appendVisibleText(node: AccessibilityNodeInfo, output: StringBuilder, maxChars: Int) {
         if (output.length >= maxChars) return
-        val text = node.text?.toString()?.trim().orEmpty()
-        val description = node.contentDescription?.toString()?.trim().orEmpty()
+        val isSensitivePassword = node.isPassword
+        val text = if (isSensitivePassword) "" else node.text?.toString()?.trim().orEmpty()
+        val description = if (isSensitivePassword) "" else node.contentDescription?.toString()?.trim().orEmpty()
         val value = if (text.isNotBlank()) text else description
         if (value.isNotBlank() && !output.contains(value)) {
             if (output.isNotEmpty()) output.append('\n')
@@ -102,7 +103,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         val hint = if (Build.VERSION.SDK_INT >= 26) root.hintText?.toString() else null
         val label = listOfNotNull(root.text?.toString(), root.contentDescription?.toString(), hint)
             .joinToString(" ").lowercase(Locale.US)
-        if (root.isEditable && (wanted.isBlank() || label.contains(wanted))) return root
+        if (root.isEditable && !root.isPassword && (wanted.isBlank() || label.contains(wanted))) return root
         for (index in 0 until root.childCount) {
             val child = root.getChild(index) ?: continue
             findEditableNode(child, target)?.let { return it }
