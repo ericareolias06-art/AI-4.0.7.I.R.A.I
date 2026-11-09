@@ -27,6 +27,7 @@ import android.view.View
 import android.view.WindowManager
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.ColorDrawable
 import android.widget.*
 import org.json.JSONObject
 import java.net.CookieHandler
