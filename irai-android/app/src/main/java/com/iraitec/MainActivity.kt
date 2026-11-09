@@ -212,9 +212,7 @@ class MainActivity : Activity() {
                     })
                     val languageResult = speechTts?.setLanguage(Locale.US)
                     originalTtsVoice = speechTts?.voice
-
-                    speechTts?.setSpeechRate(0.92f)
-                    speechTts?.setPitch(1.18f)
+                    applyAssistantVoice()
                     if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
                         languageResult == TextToSpeech.LANG_NOT_SUPPORTED
                     ) {
@@ -1352,6 +1350,27 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun applyAssistantVoice() {
+        val tts = speechTts ?: return
+        val englishVoices = tts.voices.orEmpty().filter {
+            it.locale.language.equals("en", ignoreCase = true)
+        }
+        val feminineVoice = englishVoices.firstOrNull { voice ->
+            val name = voice.name.lowercase(Locale.US)
+            listOf("female", "samantha", "jenny", "aria", "ava", "zira", "susan")
+                .any { hint -> name.contains(hint) }
+        }
+        if (feminineVoice != null) {
+            tts.voice = feminineVoice
+        } else {
+            // A brighter pitch is the fallback when the device does not
+            // expose a clearly identified feminine English voice.
+            originalTtsVoice?.let { tts.voice = it }
+        }
+        tts.setSpeechRate(0.98f)
+        tts.setPitch(1.32f)
+    }
+
     private fun applyTutorialVoice() {
         val tts = speechTts ?: return
         val englishVoices = tts.voices.orEmpty().filter {
@@ -1645,9 +1664,7 @@ class MainActivity : Activity() {
     private fun finishFirstTimeTutorial() {
         tutorialInProgress = false
         speechTts?.stop()
-        speechTts?.voice = originalTtsVoice
-        speechTts?.setSpeechRate(0.92f)
-        speechTts?.setPitch(1.18f)
+        applyAssistantVoice()
 
         thread {
             try {
