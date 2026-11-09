@@ -1909,6 +1909,28 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Floating Irai is enabled.", Toast.LENGTH_SHORT).show()
             }
         })
+        content.addView(menuButton(
+            if (IraiAssistAccessibilityService.isEnabled(this)) "Guided Assistance: Enabled" else "Enable Guided Assistance",
+            "Let Irai read visible screen text, tap controls, enter text, and navigate apps when you ask."
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("Enable Irai Guided Assistance?")
+                .setMessage(
+                    "Android requires you to turn this accessibility service on yourself. " +
+                    "When enabled, Irai can inspect visible screen text and perform actions you request, " +
+                    "such as tapping buttons, entering text, and scrolling. Irai will not act on its own. " +
+                    "You can turn this permission off in Android Settings at any time."
+                )
+                .setNegativeButton("Not now", null)
+                .setPositiveButton("Open Settings") { _, _ ->
+                    try {
+                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    } catch (_: Exception) {
+                        Toast.makeText(this, "Open Android Accessibility settings to enable Irai Guided Assistance.", Toast.LENGTH_LONG).show()
+                    }
+                }
+                .show()
+        })
         content.addView(menuButton("Account Information", "Email address, phone number, and account deletion") {
             showAccountInfo()
         })
