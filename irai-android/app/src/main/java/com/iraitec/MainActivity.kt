@@ -1163,6 +1163,10 @@ class MainActivity : Activity() {
 
             (text in listOf(
                 "read this screen", "read the screen", "what is on my screen",
+                "what document is this", "what is this document", "what is this page",
+                "what am i looking at", "identify this document", "explain this document",
+                "read this document", "scan this page", "scan this document",
+                "look at this page", "look at this document", "explain this page",
                 "help me with this screen", "help me with this page", "help me with this app",
                 "walk me through this", "help me fill this out", "help me order this",
                 "help me shop", "shop with me", "start guided assistance", "start shopping assistance",
