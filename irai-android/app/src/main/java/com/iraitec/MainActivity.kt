@@ -1265,7 +1265,7 @@ class MainActivity : Activity() {
                 currentNoteBody = if (currentNoteBody.isBlank()) spoken else currentNoteBody.trimEnd() + "\n" + spoken
                 noteHasChanges = true
                 updateStickyNote()
-                // Save each dictated segment immediately so a missed save command
+                // Save each transcribed segment immediately so a missed save command
                 // or unexpected app interruption does not lose the latest text.
                 saveCurrentNote()
                 speakResponse("Added to $currentNoteTitle. Saved.")
@@ -1445,7 +1445,7 @@ class MainActivity : Activity() {
             "First, my name is pronounced eye-ray. Say it slowly, like this: eye ... ray. Please don't rush the two parts together.",
             "To wake me, say Irai slowly and clearly. Give the words a small pause: eye ... ray. Speaking slowly helps my wake-word listener recognize you.",
             "When I respond, speak your request naturally. You can ask me questions, say things like open YouTube, or ask me to open Notes.",
-            "In Notes, you can dictate ideas, save them, reopen them, and ask me to read them aloud. You can also manage your account and settings from the gear icon."
+            "In Notes, you can transcribe ideas, save them, reopen them, and ask me to read them aloud. You can also manage your account and settings from the gear icon."
         )
         tutorialIndex = 0
         tutorialInProgress = true
