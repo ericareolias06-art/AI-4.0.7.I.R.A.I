@@ -138,6 +138,7 @@ def initialize_database():
             "stripe_subscription_status": "TEXT",
             "stripe_period_end": "TEXT",
             "stripe_price_id": "TEXT",
+            "phone_number": "TEXT",
         }
         for column, column_type in migrations.items():
             if column not in columns:
@@ -380,7 +381,7 @@ def current_account():
     with get_db() as conn:
         account = conn.execute(
             """
-            SELECT id, email, premium_until,
+            SELECT id, email, phone_number, premium_until,
                    stripe_subscription_status, stripe_period_end
             FROM accounts
             WHERE id = ?
@@ -394,11 +395,77 @@ def current_account():
 
     return jsonify(
         email=account["email"],
+        phone_number=account["phone_number"],
         premium=has_active_premium(account),
         premium_until=account["premium_until"],
         subscription_status=account["stripe_subscription_status"],
         subscription_period_end=account["stripe_period_end"],
     ), 200
+
+
+@app.post("/api/update-phone")
+def update_phone():
+    account_id = session.get("account_id")
+    if not account_id:
+        return jsonify(message="Please sign in first."), 401
+
+    data = request.get_json(silent=True) or {}
+    phone = str(data.get("phone_number") or "").strip()
+
+    if phone:
+        digits = "".join(character for character in phone if character.isdigit())
+        if not (7 <= len(digits) <= 15) or not all(
+            character.isdigit() or character in "+().- " for character in phone
+        ):
+            return jsonify(message="Enter a valid phone number, including country code if needed."), 400
+
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE accounts SET phone_number = ? WHERE id = ?",
+                (phone or None, account_id),
+            )
+    except (sqlite3.Error, psycopg2.Error):
+        app.logger.exception("Could not update account phone number")
+        return jsonify(message="We couldn't save your phone number right now."), 500
+
+    return jsonify(message="Phone number saved.", phone_number=phone), 200
+
+
+@app.post("/api/create-portal-session")
+def create_portal_session():
+    account_id = session.get("account_id")
+    if not account_id:
+        return jsonify(message="Please sign in first."), 401
+
+    if not stripe.api_key:
+        return jsonify(message="Secure billing management is not configured yet."), 503
+
+    with get_db() as conn:
+        account = conn.execute(
+            "SELECT stripe_customer_id FROM accounts WHERE id = ?",
+            (account_id,),
+        ).fetchone()
+
+    if account is None:
+        session.clear()
+        return jsonify(message="Account not found. Please sign in again."), 401
+
+    customer_id = account["stripe_customer_id"]
+    if not customer_id:
+        return jsonify(
+            message="There isn't a saved payment profile yet. Start a Premium subscription first."
+        ), 409
+
+    try:
+        portal = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url="https://iraitec.dev",
+        )
+        return jsonify(url=portal.url), 200
+    except stripe.error.StripeError:
+        app.logger.exception("Could not create Stripe billing portal session")
+        return jsonify(message="We couldn't open secure billing management. Please try again."), 502
 
 
 @app.post("/api/create-checkout-session")
