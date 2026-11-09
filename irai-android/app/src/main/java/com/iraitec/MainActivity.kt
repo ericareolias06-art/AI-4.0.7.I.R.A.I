@@ -88,6 +88,7 @@ class MainActivity : Activity() {
     private var tutorialSteps = listOf<String>()
     private var tutorialIndex = 0
     private var tutorialInProgress = false
+    private var pendingTutorialStart = false
 
     private val restartListeningRunnable = Runnable {
         if (loggedIn && !awaitingCommand && !listeningForCommand) {
@@ -219,6 +220,11 @@ class MainActivity : Activity() {
                         latestDiagnostic =
                             "Text-to-speech language unavailable."
                         refreshDiagnostic()
+                    }
+                    if (pendingTutorialStart && ttsReady) {
+                        pendingTutorialStart = false
+                        applyTutorialVoice()
+                        showTutorialStep()
                     }
                 }
             }
@@ -1333,8 +1339,16 @@ class MainActivity : Activity() {
         )
         tutorialIndex = 0
         tutorialInProgress = true
-        applyTutorialVoice()
-        showTutorialStep()
+        if (ttsReady) {
+            applyTutorialVoice()
+            showTutorialStep()
+        } else {
+            pendingTutorialStart = true
+            root.removeAllViews()
+            root.gravity = Gravity.CENTER
+            root.addView(label("Preparing Irai's spoken introduction...", 18, white))
+            setContentView(root)
+        }
     }
 
     private fun applyTutorialVoice() {
