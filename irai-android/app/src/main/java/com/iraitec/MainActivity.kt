@@ -808,7 +808,7 @@ class MainActivity : Activity() {
             speakResponse("I can't find a camera app on this device.")
             return
         }
-        speakResponse("Opening the camera. Hold the page steady and take a clear picture.")
+        speakResponse("Opening the camera. The text I read will be sent to Irai AI so I can explain it. Avoid scanning private information you don't want processed. Hold the page steady and take a clear picture.")
         try {
             val values = android.content.ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME, "IraiScan_${System.currentTimeMillis()}.jpg")
@@ -892,6 +892,10 @@ class MainActivity : Activity() {
         val text = routedCommand.lowercase(Locale.US)
 
         when {
+            (text in listOf("scan a page", "scan this page", "scan paperwork", "scan a document", "read this document", "help me with paperwork", "scan my form", "scan this form", "scan this application", "scan a letter") || text.startsWith("scan ")) -> {
+                launchPageScan()
+                return
+            }
             text in listOf("go away", "hide", "hide yourself", "disappear", "dismiss yourself") -> {
                 avatarHiddenUntilWake = true
                 IraiAvatarOverlay.hide()
