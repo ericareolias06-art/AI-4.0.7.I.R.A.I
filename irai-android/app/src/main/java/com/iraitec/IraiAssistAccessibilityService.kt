@@ -75,7 +75,11 @@ class IraiAssistAccessibilityService : AccessibilityService() {
             hint.trim()
         ).firstOrNull { it.isNotBlank() }.orEmpty()
         if (node.isEditable && !node.isPassword) {
-            val fieldName = label.ifBlank { "Unlabeled field" }
+            val resourceLabel = node.viewIdResourceName
+                ?.substringAfterLast("/")
+                ?.replace('_', ' ')
+                .orEmpty()
+            val fieldName = label.ifBlank { resourceLabel.ifBlank { "Unlabeled field" } }
             val currentValue = node.text?.toString()?.trim().orEmpty()
             // Report completion state without copying personal answers into the AI request.
             items.add("Text field: $fieldName" + if (currentValue.isNotBlank() && currentValue != label) "; has an answer entered (value hidden)" else "; appears empty or value unavailable")
@@ -161,7 +165,8 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         val parts = listOf(
             node.text?.toString().orEmpty(),
             node.contentDescription?.toString().orEmpty(),
-            hint
+            hint,
+            node.viewIdResourceName?.substringAfterLast("/")?.replace('_', ' ').orEmpty()
         ).map { it.trim().lowercase(Locale.US) }.filter { it.isNotBlank() }
         val eligible = if (editableOnly) node.isEditable else (node.isClickable || node.isCheckable)
         if (eligible && parts.isNotEmpty()) {
