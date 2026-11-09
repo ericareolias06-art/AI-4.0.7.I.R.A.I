@@ -5,6 +5,11 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
+import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.os.Build
 import android.provider.Settings
 import android.view.Gravity
@@ -23,6 +28,9 @@ object IraiAvatarOverlay {
     private var minimizedWindow: TextView? = null
     private var statusLabel: TextView? = null
     private var appContext: Context? = null
+    private var avatarImage: ImageView? = null
+    private var idleAnimation: AnimatorSet? = null
+    private var speakingAnimation: AnimatorSet? = null
 
     private fun dp(value: Int): Int {
         val context = appContext ?: return value
@@ -86,8 +94,9 @@ object IraiAvatarOverlay {
         val avatar = ImageView(appContext).apply {
             setImageResource(R.drawable.irai_avatar)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            contentDescription = "Irai floating companion"
+            contentDescription = "Irai animated floating companion"
         }
+        avatarImage = avatar
         panel.addView(avatar, LinearLayout.LayoutParams(dp(132), dp(198)))
 
         val controls = LinearLayout(appContext).apply {
@@ -118,6 +127,7 @@ object IraiAvatarOverlay {
         avatarWindow = panel
         try {
             windowManager?.addView(panel, params(dp(146), dp(252)))
+            startIdleAnimation()
         } catch (_: Exception) {
             avatarWindow = null
         }
@@ -129,7 +139,71 @@ object IraiAvatarOverlay {
     }
 
     fun setStatus(value: String) {
-        statusLabel?.post { statusLabel?.text = value }
+        statusLabel?.post {
+            statusLabel?.text = value
+            if (value.startsWith("Speaking", ignoreCase = true)) {
+                startSpeakingAnimation()
+            } else {
+                stopSpeakingAnimation()
+                startIdleAnimation()
+            }
+        }
+    }
+
+    // Gentle breathing and floating while Irai is waiting or listening.
+    private fun startIdleAnimation() {
+        val avatar = avatarImage ?: return
+        if (speakingAnimation?.isRunning == true || idleAnimation?.isRunning == true) return
+        val floatMotion = ObjectAnimator.ofFloat(avatar, View.TRANSLATION_Y, dp(2).toFloat(), dp(-5).toFloat()).apply {
+            duration = 1900
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+        val breathe = ObjectAnimator.ofFloat(avatar, View.SCALE_Y, 1f, 1.018f).apply {
+            duration = 1900
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+        idleAnimation = AnimatorSet().apply {
+            playTogether(floatMotion, breathe)
+            start()
+        }
+    }
+
+    // Rhythmic upper-body motion while TTS speaks. Facial mouth frames can
+    // be layered in later without replacing the original avatar artwork.
+    private fun startSpeakingAnimation() {
+        stopIdleAnimation()
+        val avatar = avatarImage ?: return
+        if (speakingAnimation?.isRunning == true) return
+        val pulse = ObjectAnimator.ofFloat(avatar, View.SCALE_X, 1f, 1.025f, 1f).apply {
+            duration = 430
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+        val bob = ObjectAnimator.ofFloat(avatar, View.TRANSLATION_Y, 0f, dp(-3).toFloat(), 0f).apply {
+            duration = 430
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+        speakingAnimation = AnimatorSet().apply {
+            playTogether(pulse, bob)
+            start()
+        }
+    }
+
+    private fun stopSpeakingAnimation() {
+        speakingAnimation?.cancel()
+        speakingAnimation = null
+        avatarImage?.scaleX = 1f
+        avatarImage?.translationY = 0f
+    }
+
+    private fun stopIdleAnimation() {
+        idleAnimation?.cancel()
+        idleAnimation = null
     }
 
     fun minimize() {
@@ -164,6 +238,9 @@ object IraiAvatarOverlay {
     }
 
     private fun removeAvatar() {
+        stopIdleAnimation()
+        stopSpeakingAnimation()
+        avatarImage = null
         try { avatarWindow?.let { windowManager?.removeView(it) } } catch (_: Exception) {}
         avatarWindow = null
         statusLabel = null
