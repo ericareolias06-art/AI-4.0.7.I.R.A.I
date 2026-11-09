@@ -1199,10 +1199,10 @@ class MainActivity : Activity() {
         runOnUiThread {
             if (requestSucceeded) {
                 aiConversationHistory.add(JSONObject().put("role", "user").put("content", message))
-                aiConversationHistory.add(JSONObject().put("role", "assistant").put("content", reply))
+                aiConversationHistory.add(JSONObject().put("role", "assistant").put("content", reply.take(3500)))
                 while (aiConversationHistory.size > 10) aiConversationHistory.removeAt(0)
                 var totalChars = aiConversationHistory.sumOf { it.optString("content").length }
-                while (aiConversationHistory.isNotEmpty() && totalChars > 10_000) {
+                while (aiConversationHistory.isNotEmpty() && totalChars > 7_500) {
                     totalChars -= aiConversationHistory.removeAt(0).optString("content").length
                 }
             }
@@ -2581,6 +2581,7 @@ class MainActivity : Activity() {
         loggedIn = false
         awaitingCommand = false
         listeningForCommand = false
+        aiConversationHistory.clear()
 
         handler.removeCallbacks(restartListeningRunnable)
         handler.removeCallbacks(avatarInactivityRunnable)
