@@ -2295,7 +2295,6 @@ class MainActivity : Activity() {
                 })
                 content.addView(menuButton("Help with This Screen", "Let Irai explain the app or webpage you are viewing") {
                     if (!IraiAssistAccessibilityService.isEnabled(this)) {
-                        showSettings()
                         requestGuidedAssistanceEnablement()
                     } else {
                         val visibleText = IraiAssistAccessibilityService.readCurrentScreen()
