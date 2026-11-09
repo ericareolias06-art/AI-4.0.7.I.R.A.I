@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="irai_assist_accessibility_description">When enabled by you, Irai can read visible on-screen text and perform actions you request, such as tapping controls, entering text, and scrolling. Screen content is used to provide the assistance you ask for.</string>
+</resources>
