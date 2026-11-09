@@ -55,6 +55,40 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Summarizes visible, non-password form controls so Irai can explain
+     * online applications without reading hidden or password content.
+     */
+    fun describeVisibleForm(maxItems: Int = 80): String {
+        val root = rootInActiveWindow ?: return ""
+        val items = mutableListOf<String>()
+        appendFormControls(root, items, maxItems)
+        return items.distinct().joinToString("\\n")
+    }
+
+    private fun appendFormControls(node: AccessibilityNodeInfo, items: MutableList<String>, maxItems: Int) {
+        if (items.size >= maxItems || !node.isVisibleToUser) return
+        val hint = if (Build.VERSION.SDK_INT >= 26) node.hintText?.toString().orEmpty() else ""
+        val label = listOf(
+            node.text?.toString()?.trim().orEmpty(),
+            node.contentDescription?.toString()?.trim().orEmpty(),
+            hint.trim()
+        ).firstOrNull { it.isNotBlank() }.orEmpty()
+        if (node.isEditable && !node.isPassword) {
+            val fieldName = label.ifBlank { "Unlabeled field" }
+            val currentValue = node.text?.toString()?.trim().orEmpty()
+            items.add("Text field: $fieldName" + if (currentValue.isNotBlank() && currentValue != label) "; currently contains: ${currentValue.take(100)}" else "; currently empty or value unavailable")
+        } else if (node.isCheckable) {
+            items.add((if (node.isChecked) "Checked option: " else "Unchecked option: ") + label.ifBlank { "Unlabeled option" })
+        } else if (node.isClickable && label.isNotBlank()) {
+            items.add("Button or option: $label")
+        }
+        for (index in 0 until node.childCount) {
+            if (items.size >= maxItems) break
+            node.getChild(index)?.let { appendFormControls(it, items, maxItems) }
+        }
+    }
+
     fun tapVisibleText(target: String): Boolean {
         val root = rootInActiveWindow ?: return false
         val node = findNode(root, target) ?: return false
@@ -135,6 +169,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         }
 
         fun readCurrentScreen(): String = activeService?.readVisibleText().orEmpty()
+        fun describeCurrentForm(): String = activeService?.describeVisibleForm().orEmpty()
         fun tapText(target: String): Boolean = activeService?.tapVisibleText(target) ?: false
         fun typeIntoField(target: String, value: String): Boolean = activeService?.enterText(target, value) ?: false
         fun scrollForward(): Boolean = activeService?.scrollScreen(true) ?: false
