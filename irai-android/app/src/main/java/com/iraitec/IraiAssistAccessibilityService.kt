@@ -146,10 +146,35 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         return false
     }
 
+    private val protectedFieldPattern = Regex(
+        "\\b(password|passcode|passphrase|security pin|\\bpin\\b|cvv|cvc|card number|credit card|debit card|bank account|routing number|social security|\\bssn\\b|one.?time code|verification code|authentication code|\\botp\\b)\\b",
+        RegexOption.IGNORE_CASE
+    )
+
+    private fun isProtectedField(node: AccessibilityNodeInfo): Boolean {
+        var current: AccessibilityNodeInfo? = node
+        var depth = 0
+        while (current != null && depth < 4) {
+            val parts = listOf(
+                current.text?.toString().orEmpty(),
+                current.contentDescription?.toString().orEmpty(),
+                if (Build.VERSION.SDK_INT >= 26) current.hintText?.toString().orEmpty() else "",
+                current.viewIdResourceName?.substringAfterLast("/")?.replace('_', ' ').orEmpty()
+            )
+            if (parts.any { protectedFieldPattern.containsMatchIn(it) }) return true
+            current = current.parent
+            depth++
+        }
+        return false
+    }
+
     fun enterText(targetField: String, value: String): Boolean {
+        // Keep authentication secrets and payment/banking credentials out of
+        // automated text entry, even when an app fails to mark a field as a password.
+        if (protectedFieldPattern.containsMatchIn(targetField)) return false
         val root = rootInActiveWindow ?: return false
         val node = findBestMatchingNode(root, targetField, editableOnly = true) ?: return false
-        if (!node.isEnabled) return false
+        if (!node.isEnabled || node.isPassword || isProtectedField(node)) return false
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
