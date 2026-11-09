@@ -7,6 +7,7 @@ import android.text.TextUtils
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.os.Bundle
+import android.os.Build
 import java.util.Locale
 
 /**
@@ -98,7 +99,8 @@ class IraiAssistAccessibilityService : AccessibilityService() {
 
     private fun findEditableNode(root: AccessibilityNodeInfo, target: String): AccessibilityNodeInfo? {
         val wanted = target.trim().lowercase(Locale.US)
-        val label = listOfNotNull(root.text?.toString(), root.contentDescription?.toString(), root.hintText?.toString())
+        val hint = if (Build.VERSION.SDK_INT >= 26) root.hintText?.toString() else null
+        val label = listOfNotNull(root.text?.toString(), root.contentDescription?.toString(), hint)
             .joinToString(" ").lowercase(Locale.US)
         if (root.isEditable && (wanted.isBlank() || label.contains(wanted))) return root
         for (index in 0 until root.childCount) {
