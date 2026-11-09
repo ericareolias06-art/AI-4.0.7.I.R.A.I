@@ -988,6 +988,27 @@ class MainActivity : Activity() {
             .show()
     }
 
+    private fun requestGuidedAssistanceEnablement() {
+        val consentPrefs = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
+        val hasConsent = consentPrefs.getBoolean("screen_access_disclosure_accepted", false)
+        val disclosure = "Guided Assistance can inspect text and controls visible in the app or webpage you are using when you ask Irai for help. The screen text and form labels may be sent to the Irai AI service to prepare an explanation. Irai does not intentionally read password-field contents, and assisted entry refuses password, payment-card, banking, and verification-code fields.\n\nWhen you ask, Irai can tap a control or enter ordinary form text only after you approve that specific action. Do not use it on screens containing information you do not want processed. You can turn this permission off in Android Accessibility Settings at any time."
+        AlertDialog.Builder(this)
+            .setTitle("About Guided Assistance")
+            .setMessage(disclosure)
+            .setNegativeButton("Not now", null)
+            .setPositiveButton(if (hasConsent) "Open Android Settings" else "Agree and continue") { _, _ ->
+                if (!hasConsent) {
+                    consentPrefs.edit().putBoolean("screen_access_disclosure_accepted", true).apply()
+                }
+                try {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Open Android Accessibility settings to enable Irai Guided Assistance.", Toast.LENGTH_LONG).show()
+                }
+            }
+            .show()
+    }
+
     private fun handleVoiceCommand(command: String) {
         // Speech recognition may include the wake word in the recognized phrase.
         // Remove it before routing so Notes commands never fall through to Ollama.
@@ -1055,7 +1076,7 @@ class MainActivity : Activity() {
                 text.startsWith("tick ") || text.startsWith("uncheck option ") ||
                 text.startsWith("uncheck the box for ") || text.startsWith("untick ")) -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
-                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    requestGuidedAssistanceEnablement()
                     return
                 }
                 val wantsChecked = !(text.startsWith("uncheck ") || text.startsWith("untick "))
@@ -1083,7 +1104,7 @@ class MainActivity : Activity() {
             ((text.startsWith("select ") || text.startsWith("choose ")) &&
                 (text.contains(" from ") || text.contains(" in "))) -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
-                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    requestGuidedAssistanceEnablement()
                     return
                 }
                 val separator = if (text.contains(" from ")) " from " else " in "
@@ -1108,7 +1129,7 @@ class MainActivity : Activity() {
 
             text in listOf("review this form", "check this form", "check my form", "what fields are left", "what is missing", "what's missing", "what is still missing", "review my application", "check my application", "review this application", "check my paperwork") -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
-                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    requestGuidedAssistanceEnablement()
                     return
                 }
                 val formControls = IraiAssistAccessibilityService.describeCurrentForm()
@@ -1125,7 +1146,7 @@ class MainActivity : Activity() {
 
             (text in listOf("read this screen", "read the screen", "what is on my screen", "help me with this screen", "help me with this page", "help me with this app", "walk me through this", "help me fill this out", "help me order this", "help me shop", "shop with me", "start guided assistance", "start shopping assistance") || text.startsWith("walk me through ")) -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
-                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    requestGuidedAssistanceEnablement()
                     return
                 }
                 val visibleText = IraiAssistAccessibilityService.readCurrentScreen()
@@ -1166,7 +1187,7 @@ class MainActivity : Activity() {
 
             text in listOf("next page", "go to next page", "next section", "continue to next section", "next step") -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
-                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    requestGuidedAssistanceEnablement()
                     return
                 }
                 confirmAssistedAction(
@@ -1183,7 +1204,7 @@ class MainActivity : Activity() {
 
             text == "what do i do next" || text == "what should i do next" || text == "what is the next step" -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
-                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    requestGuidedAssistanceEnablement()
                 } else {
                     val page = IraiAssistAccessibilityService.readCurrentScreen().take(3000)
                     val controls = IraiAssistAccessibilityService.describeCurrentForm()
@@ -1197,7 +1218,7 @@ class MainActivity : Activity() {
 
             text == "scroll down" || text == "scroll up" || text == "scroll to the bottom" || text == "scroll to the top" -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
-                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    requestGuidedAssistanceEnablement()
                     return
                 }
                 val worked = if (text == "scroll down" || text == "scroll to the bottom") IraiAssistAccessibilityService.scrollForward()
@@ -1208,7 +1229,7 @@ class MainActivity : Activity() {
 
             text == "go back" || text == "press back" -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
-                    speakResponse("Please enable Guided Assistance in Settings first.")
+                    requestGuidedAssistanceEnablement()
                     return
                 }
                 val worked = IraiAssistAccessibilityService.goBack()
@@ -2275,7 +2296,7 @@ class MainActivity : Activity() {
                 content.addView(menuButton("Help with This Screen", "Let Irai explain the app or webpage you are viewing") {
                     if (!IraiAssistAccessibilityService.isEnabled(this)) {
                         showSettings()
-                        speakResponse("Please enable Guided Assistance in Settings first.")
+                        requestGuidedAssistanceEnablement()
                     } else {
                         val visibleText = IraiAssistAccessibilityService.readCurrentScreen()
                         if (visibleText.isBlank()) speakResponse("I can't read any text on this screen.")
@@ -2336,24 +2357,7 @@ class MainActivity : Activity() {
             if (IraiAssistAccessibilityService.isEnabled(this)) "Guided Assistance: Enabled" else "Enable Guided Assistance",
             "Let Irai read visible screen text, tap controls, enter text, and navigate apps when you ask."
         ) {
-            AlertDialog.Builder(this)
-                .setTitle("Enable Irai Guided Assistance?")
-                .setMessage(
-                    "Android requires you to turn this accessibility service on yourself. " +
-                    "When enabled, Irai can inspect visible screen text only when you ask for help. " +
-                    "That text is sent to the Irai AI service to generate guidance. Irai can also tap controls, " +
-                    "enter text, and scroll after you approve each action. Do not use this with sensitive screens " +
-                    "unless you are comfortable sharing their visible text for AI processing. You can turn this permission off in Android Settings at any time."
-                )
-                .setNegativeButton("Not now", null)
-                .setPositiveButton("Open Settings") { _, _ ->
-                    try {
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    } catch (_: Exception) {
-                        Toast.makeText(this, "Open Android Accessibility settings to enable Irai Guided Assistance.", Toast.LENGTH_LONG).show()
-                    }
-                }
-                .show()
+            requestGuidedAssistanceEnablement()
         })
         content.addView(menuButton("Account Information", "Email address, phone number, and account deletion") {
             showAccountInfo()
