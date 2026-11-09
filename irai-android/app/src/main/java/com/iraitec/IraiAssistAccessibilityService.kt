@@ -80,7 +80,17 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         val root = rootInActiveWindow ?: return false
         val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
             else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-        return root.performAction(action)
+        return scrollScrollableNode(root, action)
+    }
+
+    private fun scrollScrollableNode(node: AccessibilityNodeInfo, action: Int): Boolean {
+        if (!node.isVisibleToUser) return false
+        if (node.isScrollable && node.performAction(action)) return true
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            if (scrollScrollableNode(child, action)) return true
+        }
+        return node.performAction(action)
     }
 
     fun goBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
