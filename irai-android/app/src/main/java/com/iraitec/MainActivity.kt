@@ -849,7 +849,7 @@ class MainActivity : Activity() {
     /** Hide common high-risk values before OCR text is sent to the AI service. */
     private fun redactSensitiveOcrValues(raw: String): String {
         val sensitiveLabel = Regex(
-            "(?i)(social security|\\bssn\\b|password|passcode|security pin|\\bpin\\b|cvv|cvc|bank account|routing number|account number|verification code|one.?time code|date of birth|birth date|phone number|email address|home address|street address|case number)"
+            "(?i)(social security|\\bssn\\b|password|passcode|security pin|\\bpin\\b|cvv|cvc|bank account|routing number|account number|verification code|one.?time code|date of birth|birth date|phone number|email address|home address|street address|mailing address|case number|client id|recipient id|first name|last name|full name|household member|employer|monthly income|gross income|net income|earned income|unearned income|wages|pay rate|benefit amount|account balance)"
         )
         val safe = StringBuilder()
         var redactNextLine = false
