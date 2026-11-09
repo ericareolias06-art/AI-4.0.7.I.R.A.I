@@ -77,7 +77,8 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         if (node.isEditable && !node.isPassword) {
             val fieldName = label.ifBlank { "Unlabeled field" }
             val currentValue = node.text?.toString()?.trim().orEmpty()
-            items.add("Text field: $fieldName" + if (currentValue.isNotBlank() && currentValue != label) "; currently contains: ${currentValue.take(100)}" else "; currently empty or value unavailable")
+            // Report completion state without copying personal answers into the AI request.
+            items.add("Text field: $fieldName" + if (currentValue.isNotBlank() && currentValue != label) "; has an answer entered (value hidden)" else "; appears empty or value unavailable")
         } else if (node.isCheckable) {
             items.add((if (node.isChecked) "Checked option: " else "Unchecked option: ") + label.ifBlank { "Unlabeled option" })
         } else if (node.isClickable && label.isNotBlank()) {
@@ -91,10 +92,12 @@ class IraiAssistAccessibilityService : AccessibilityService() {
 
     fun tapVisibleText(target: String): Boolean {
         val root = rootInActiveWindow ?: return false
-        val node = findNode(root, target) ?: return false
+        val node = findBestMatchingNode(root, target, editableOnly = false) ?: return false
         var current: AccessibilityNodeInfo? = node
         while (current != null) {
-            if (current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+            if (current.isEnabled && current.isClickable &&
+                current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            ) return true
             current = current.parent
         }
         return false
@@ -102,7 +105,8 @@ class IraiAssistAccessibilityService : AccessibilityService() {
 
     fun enterText(targetField: String, value: String): Boolean {
         val root = rootInActiveWindow ?: return false
-        val node = findEditableNode(root, targetField) ?: return false
+        val node = findBestMatchingNode(root, targetField, editableOnly = true) ?: return false
+        if (!node.isEnabled) return false
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
@@ -129,32 +133,55 @@ class IraiAssistAccessibilityService : AccessibilityService() {
 
     fun goBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
 
-    private fun findNode(root: AccessibilityNodeInfo, target: String): AccessibilityNodeInfo? {
-        if (!root.isVisibleToUser) return null
+    /**
+     * Prefer exact, enabled, actionable matches over broad substring matches.
+     * This prevents a short target such as "Continue" from selecting an
+     * unrelated container whose description merely contains that word.
+     */
+    private fun findBestMatchingNode(
+        root: AccessibilityNodeInfo,
+        target: String,
+        editableOnly: Boolean
+    ): AccessibilityNodeInfo? {
         val wanted = target.trim().lowercase(Locale.US)
         if (wanted.isBlank()) return null
-        val text = root.text?.toString().orEmpty().lowercase(Locale.US)
-        val description = root.contentDescription?.toString().orEmpty().lowercase(Locale.US)
-        if (text == wanted || description == wanted || text.contains(wanted) || description.contains(wanted)) return root
-        for (index in 0 until root.childCount) {
-            val child = root.getChild(index) ?: continue
-            findNode(child, target)?.let { return it }
-        }
-        return null
+        val candidates = mutableListOf<Pair<Int, AccessibilityNodeInfo>>()
+        collectMatchingNodes(root, wanted, editableOnly, candidates)
+        return candidates.maxByOrNull { it.first }?.second
     }
 
-    private fun findEditableNode(root: AccessibilityNodeInfo, target: String): AccessibilityNodeInfo? {
-        if (!root.isVisibleToUser) return null
-        val wanted = target.trim().lowercase(Locale.US)
-        val hint = if (Build.VERSION.SDK_INT >= 26) root.hintText?.toString() else null
-        val label = listOfNotNull(root.text?.toString(), root.contentDescription?.toString(), hint)
-            .joinToString(" ").lowercase(Locale.US)
-        if (root.isEditable && !root.isPassword && (wanted.isBlank() || label.contains(wanted))) return root
-        for (index in 0 until root.childCount) {
-            val child = root.getChild(index) ?: continue
-            findEditableNode(child, target)?.let { return it }
+    private fun collectMatchingNodes(
+        node: AccessibilityNodeInfo,
+        wanted: String,
+        editableOnly: Boolean,
+        candidates: MutableList<Pair<Int, AccessibilityNodeInfo>>
+    ) {
+        if (!node.isVisibleToUser || node.isPassword) return
+        val hint = if (Build.VERSION.SDK_INT >= 26) node.hintText?.toString().orEmpty() else ""
+        val parts = listOf(
+            node.text?.toString().orEmpty(),
+            node.contentDescription?.toString().orEmpty(),
+            hint
+        ).map { it.trim().lowercase(Locale.US) }.filter { it.isNotBlank() }
+        val eligible = if (editableOnly) node.isEditable else (node.isClickable || node.isCheckable)
+        if (eligible && parts.isNotEmpty()) {
+            val exact = parts.any { it == wanted }
+            val partial = parts.any { it.contains(wanted) }
+            if (exact || partial) {
+                val longestLabel = parts.maxOfOrNull { it.length } ?: 0
+                val score = (if (exact) 1000 else 100) +
+                    (if (node.isEnabled) 50 else 0) +
+                    (if (node.isClickable) 25 else 0) +
+                    (if (node.isEditable) 25 else 0) -
+                    longestLabel.coerceAtMost(80)
+                candidates.add(score to node)
+            }
         }
-        return null
+        for (index in 0 until node.childCount) {
+            node.getChild(index)?.let {
+                collectMatchingNodes(it, wanted, editableOnly, candidates)
+            }
+        }
     }
 
     companion object {
