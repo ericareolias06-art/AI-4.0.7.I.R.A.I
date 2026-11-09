@@ -1579,7 +1579,7 @@ class MainActivity : Activity() {
                     14, muted
                 ))
                 if (periodEnd.isNotBlank()) {
-                    content.addView(label("Current billing period ends: \${periodEnd.take(10)}", 13, muted))
+                    content.addView(label("Current billing period ends: ${periodEnd.take(10)}", 13, muted))
                 }
                 content.addView(menuButton("Manage Payment Methods", "Update cards, billing details, or cancel a paid subscription") {
                     openBillingPortal()
