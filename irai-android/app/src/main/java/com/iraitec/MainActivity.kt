@@ -1165,7 +1165,10 @@ class MainActivity : Activity() {
                 "help me choose a size", "help me choose a color", "help me find the size chart",
                 "review my cart", "check my cart", "compare these shoes", "compare these products",
                 "check shipping options", "help me check out", "what size should i buy",
-                "what is the return policy", "help me return this"
+                "what is the return policy", "help me return this", "read the product reviews",
+                "compare the reviews", "help me find shoes", "help me find a pair of shoes",
+                "find similar products", "compare prices", "check the size chart", "read the size chart",
+                "help me pick a shoe", "help me pick a product", "is this the right size"
             ) || text.startsWith("walk me through ") ||
                 text.startsWith("help me fill out ") || text.startsWith("help me choose ") ||
                 text.startsWith("help me order ") || text.startsWith("review my cart") ||
