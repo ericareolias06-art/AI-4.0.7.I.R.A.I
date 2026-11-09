@@ -2096,9 +2096,10 @@ class MainActivity : Activity() {
                 .setTitle("Enable Irai Guided Assistance?")
                 .setMessage(
                     "Android requires you to turn this accessibility service on yourself. " +
-                    "When enabled, Irai can inspect visible screen text and perform actions you request, " +
-                    "such as tapping buttons, entering text, and scrolling. Irai will not act on its own. " +
-                    "You can turn this permission off in Android Settings at any time."
+                    "When enabled, Irai can inspect visible screen text only when you ask for help. " +
+                    "That text is sent to the Irai AI service to generate guidance. Irai can also tap controls, " +
+                    "enter text, and scroll after you approve each action. Do not use this with sensitive screens " +
+                    "unless you are comfortable sharing their visible text for AI processing. You can turn this permission off in Android Settings at any time."
                 )
                 .setNegativeButton("Not now", null)
                 .setPositiveButton("Open Settings") { _, _ ->
