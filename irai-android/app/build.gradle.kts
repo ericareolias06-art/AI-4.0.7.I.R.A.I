@@ -2,6 +2,17 @@ plugins {
     id("com.android.application")
 }
 
+val uploadStoreFile = providers.gradleProperty("IRAI_UPLOAD_STORE_FILE").orNull
+val uploadStorePassword = providers.gradleProperty("IRAI_UPLOAD_STORE_PASSWORD").orNull
+val uploadKeyAlias = providers.gradleProperty("IRAI_UPLOAD_KEY_ALIAS").orNull
+val uploadKeyPassword = providers.gradleProperty("IRAI_UPLOAD_KEY_PASSWORD").orNull
+val hasReleaseSigning = listOf(
+    uploadStoreFile,
+    uploadStorePassword,
+    uploadKeyAlias,
+    uploadKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.iraitec"
     compileSdk = 36
@@ -20,17 +31,21 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = file(providers.gradleProperty("IRAI_UPLOAD_STORE_FILE").get())
-            storePassword = providers.gradleProperty("IRAI_UPLOAD_STORE_PASSWORD").get()
-            keyAlias = providers.gradleProperty("IRAI_UPLOAD_KEY_ALIAS").get()
-            keyPassword = providers.gradleProperty("IRAI_UPLOAD_KEY_PASSWORD").get()
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(uploadStoreFile!!)
+                storePassword = uploadStorePassword!!
+                keyAlias = uploadKeyAlias!!
+                keyPassword = uploadKeyPassword!!
+            }
         }
     }
 
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }
