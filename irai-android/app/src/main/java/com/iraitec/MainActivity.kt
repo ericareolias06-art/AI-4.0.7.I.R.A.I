@@ -1153,7 +1153,10 @@ class MainActivity : Activity() {
                 "review my cart", "check my cart", "compare these shoes", "compare these products",
                 "check shipping options", "help me check out", "what size should i buy",
                 "what is the return policy", "help me return this"
-            ) || text.startsWith("walk me through ")) -> {
+            ) || text.startsWith("walk me through ") ||
+                text.startsWith("help me fill out ") || text.startsWith("help me choose ") ||
+                text.startsWith("help me order ") || text.startsWith("review my cart") ||
+                text.startsWith("compare ")) -> {
                 if (!IraiAssistAccessibilityService.isEnabled(this)) {
                     requestGuidedAssistanceEnablement()
                     return
