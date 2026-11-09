@@ -1371,32 +1371,219 @@ class MainActivity : Activity() {
     }
 
     private fun showTutorialStep() {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+
         root.removeAllViews()
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.CENTER
-        root.setPadding(24, 28, 24, 24)
+        root.setPadding(dp(22), dp(24), dp(22), dp(24))
         root.background = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.rgb(34, 23, 65), Color.rgb(112, 55, 100), Color.rgb(18, 18, 32))
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(
+                Color.rgb(25, 20, 48),
+                Color.rgb(56, 34, 83),
+                Color.rgb(20, 20, 38)
+            )
         )
 
-        root.addView(label("WELCOME TO IRAI TEC", 19, white).apply {
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dp(10), 0, dp(10))
+        }
+
+        page.addView(TextView(this).apply {
+            text = "✦"
+            textSize = 38f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(211, 190, 255))
+        }, LinearLayout.LayoutParams(-1, dp(54)))
+
+        page.addView(TextView(this).apply {
+            text = "WELCOME TO IRAI TEC"
+            textSize = 13f
+            letterSpacing = 0.18f
+            gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, 20)
-        })
-        root.addView(label("Getting to know Irai", 25, white))
-        root.addView(label("Step ${tutorialIndex + 1} of ${tutorialSteps.size}", 14, accent).apply {
-            setPadding(0, 8, 0, 18)
-        })
-        root.addView(label(tutorialSteps[tutorialIndex], 18, white).apply {
-            setPadding(8, 8, 8, 24)
+            setTextColor(Color.rgb(207, 190, 255))
         })
 
-        val next = Button(this).apply {
-            text = if (tutorialIndex == tutorialSteps.lastIndex) "Finish tutorial" else "Next"
+        page.addView(TextView(this).apply {
+            text = "Let's get to know each other"
+            textSize = 25f
+            gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(white)
-            setBackgroundColor(accent)
+            setPadding(0, dp(9), 0, dp(7))
+        })
+
+        page.addView(TextView(this).apply {
+            text = "A quick introduction, spoken by Irai"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(muted)
+        })
+
+        val progressTrack = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(24), 0, dp(22))
+        }
+        tutorialSteps.indices.forEach { index ->
+            val segment = View(this).apply {
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(5).toFloat()
+                    setColor(
+                        if (index <= tutorialIndex) accent
+                        else Color.argb(65, 210, 200, 235)
+                    )
+                }
+            }
+            progressTrack.addView(segment, LinearLayout.LayoutParams(0, dp(5), 1f).apply {
+                if (index > 0) leftMargin = dp(6)
+            })
+        }
+        page.addView(progressTrack, LinearLayout.LayoutParams(-1, dp(12)))
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(23), dp(25), dp(23), dp(25))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(38, 34, 61))
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), Color.argb(90, 190, 165, 255))
+            }
+            elevation = dp(5).toFloat()
+        }
+
+        card.addView(TextView(this).apply {
+            text = when (tutorialIndex) {
+                0 -> "HELLO THERE"
+                1, 2 -> "THE MOST IMPORTANT PART"
+                3 -> "TALK TO IRAI"
+                else -> "YOUR EVERYDAY ASSISTANT"
+            }
+            textSize = 11f
+            letterSpacing = 0.14f
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(195, 174, 255))
+        })
+
+        if (tutorialIndex == 1 || tutorialIndex == 2) {
+            card.addView(TextView(this).apply {
+                text = "EYE  ·  RAY"
+                textSize = 31f
+                gravity = Gravity.CENTER
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setTextColor(white)
+                setPadding(0, dp(16), 0, dp(13))
+            })
+        } else {
+            card.addView(TextView(this).apply {
+                text = when (tutorialIndex) {
+                    0 -> "♡"
+                    3 -> "“ ”"
+                    else -> "✧"
+                }
+                textSize = 34f
+                gravity = Gravity.CENTER
+                setTextColor(Color.rgb(210, 190, 255))
+                setPadding(0, dp(12), 0, dp(10))
+            })
+        }
+
+        card.addView(TextView(this).apply {
+            text = tutorialSteps[tutorialIndex]
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(238, 236, 248))
+            setLineSpacing(dp(5).toFloat(), 1.04f)
+        })
+
+        page.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(2)
+            bottomMargin = dp(18)
+        })
+
+        page.addView(TextView(this).apply {
+            text = "STEP ${tutorialIndex + 1} OF ${tutorialSteps.size}"
+            textSize = 12f
+            letterSpacing = 0.12f
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(muted)
+        })
+
+        val replayButton = Button(this).apply {
+            text = "↻  Hear this step again"
+            textSize = 14f
+            isAllCaps = false
+            setTextColor(Color.rgb(224, 214, 255))
+            background = GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), Color.argb(150, 170, 145, 240))
+            }
             setOnClickListener {
+                speechTts?.speak(
+                    tutorialSteps[tutorialIndex],
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "irai_tutorial_step_replay"
+                )
+            }
+        }
+        page.addView(replayButton, LinearLayout.LayoutParams(-1, dp(50)).apply {
+            topMargin = dp(14)
+        })
+
+        val navigation = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(12), 0, 0)
+        }
+
+        val previousButton = Button(this).apply {
+            text = "Back"
+            isAllCaps = false
+            setTextColor(white)
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(57, 51, 78))
+                cornerRadius = dp(14).toFloat()
+            }
+            visibility = if (tutorialIndex == 0) View.INVISIBLE else View.VISIBLE
+            setOnClickListener {
+                if (tutorialIndex > 0) {
+                    tutorialIndex--
+                    showTutorialStep()
+                }
+            }
+        }
+        navigation.addView(previousButton, LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+            rightMargin = dp(8)
+        })
+
+        val nextButton = Button(this).apply {
+            text = if (tutorialIndex == tutorialSteps.lastIndex) "Let's begin" else "Continue  →"
+            isAllCaps = false
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(white)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(132, 103, 238), Color.rgb(174, 112, 211))
+            ).apply {
+                cornerRadius = dp(14).toFloat()
+            }
+            setOnClickListener {
+                speechTts?.stop()
                 if (tutorialIndex < tutorialSteps.lastIndex) {
                     tutorialIndex++
                     showTutorialStep()
@@ -1405,22 +1592,38 @@ class MainActivity : Activity() {
                 }
             }
         }
-        root.addView(next, params())
-        root.addView(label("Irai will read each step aloud.", 13, muted).apply {
-            setPadding(0, 16, 0, 0)
+        navigation.addView(nextButton, LinearLayout.LayoutParams(0, dp(54), 1.5f).apply {
+            leftMargin = dp(8)
         })
+        page.addView(navigation, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(8)
+        })
+
+        page.addView(TextView(this).apply {
+            text = "You can take your time. Irai will guide you."
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(165, 160, 188))
+            setPadding(0, dp(17), 0, 0)
+        })
+
+        scroll.addView(page)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, -1))
         setContentView(root)
 
-        val spoken = tutorialSteps[tutorialIndex]
         if (ttsReady) {
             speechTts?.speak(
-                spoken,
+                tutorialSteps[tutorialIndex],
                 TextToSpeech.QUEUE_FLUSH,
                 null,
                 "irai_tutorial_step"
             )
         } else {
-            Toast.makeText(this, "Text-to-speech isn't ready. Please check your phone's speech settings.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this,
+                "Text-to-speech isn't ready. Please check your phone's speech settings.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
