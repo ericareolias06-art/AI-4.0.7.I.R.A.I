@@ -1328,7 +1328,8 @@ class MainActivity : Activity() {
                 root.removeAllViews()
                 root.orientation = LinearLayout.VERTICAL
                 root.gravity = Gravity.TOP
-                root.setPadding(20, 14, 20, 18)
+                // Give the home header a little more breathing room from the top edge.
+                root.setPadding(20, 28, 20, 18)
                 root.background = GradientDrawable(
                     GradientDrawable.Orientation.TOP_BOTTOM,
                     intArrayOf(Color.rgb(25, 22, 49), Color.rgb(43, 31, 72), Color.rgb(18, 18, 32))
@@ -1371,20 +1372,6 @@ class MainActivity : Activity() {
 
                 content.addView(menuButton("Open Notes", "Create, transcribe, and listen to your saved notes") {
                     startNotesMode()
-                })
-                content.addView(menuButton("Test Irai's Voice", "Hear a quick voice response") {
-                    speakResponse("Hello! I'm Irai. My voice response is working.")
-                })
-                content.addView(menuButton("Restart Listening", "Reconnect Irai's wake-word listener") {
-                    if (loggedIn) startIraiListeningService()
-                })
-
-                content.addView(TextView(this).apply {
-                    text = "Signed in as $email"
-                    textSize = 12f
-                    gravity = Gravity.CENTER
-                    setTextColor(Color.rgb(145, 143, 170))
-                    setPadding(0, 24, 0, 8)
                 })
 
                 scroll.addView(content)
