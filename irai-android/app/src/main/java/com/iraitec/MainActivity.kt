@@ -1421,7 +1421,7 @@ class MainActivity : Activity() {
         }
 
         if (
-            text in listOf("send the message i typed", "send this typed message", "send this message", "send the message", "press send", "tap send", "please send this message", "send this message for me") ||,            (text.contains("do it for me") && (text.contains("message") || text.contains("text")))
+            text in listOf("send the message i typed", "send this typed message", "send this message", "send the message", "press send", "tap send", "please send this message", "send this message for me") ||,            text.contains("do it for me")
         ) {
             sendCurrentlyTypedMessage()
             return
@@ -1879,6 +1879,10 @@ class MainActivity : Activity() {
         if (!isGuidedAssistanceReady()) {
             speakResponse("To help send a message, Guided Assistance must be enabled first.")
             requestGuidedAssistanceEnablement()
+            return
+        }
+        if (!IraiAssistAccessibilityService.hasClearlyLabeledSendButton()) {
+            speakResponse("I cannot find a clear Send button on this screen, so I will not try to send anything.")
             return
         }
         val draft = IraiAssistAccessibilityService.readTypedMessageDraft()
