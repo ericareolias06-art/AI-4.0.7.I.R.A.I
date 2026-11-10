@@ -717,10 +717,12 @@ def redeem_promo():
 
     return jsonify(
         message=(
-            "Promo code accepted! Premium access granted "
+            "Promo code accepted! Basic membership granted "
             "for one month."
         ),
         premium=True,
+        membership="basic",
+        monthly_message_limit=300,
         premium_until=expires.isoformat(),
     ), 200
 
@@ -1041,7 +1043,10 @@ def ai_chat():
     try:
         with get_db() as conn:
             account = conn.execute(
-                "SELECT id FROM accounts WHERE id = ?",
+                """SELECT id, premium_until, google_subscription_product,
+                          google_subscription_state, google_subscription_expiry,
+                          stripe_subscription_status, stripe_period_end
+                   FROM accounts WHERE id = ?""",
                 (account_id,),
             ).fetchone()
     except (sqlite3.Error, psycopg2.Error):
@@ -1055,9 +1060,22 @@ def ai_chat():
     if not has_active_premium(account):
         return jsonify(message="Subscription required.", subscription_required=True), 402
 
+    # Promo access is Basic/Starter (300 messages per calendar month).
+    # A separately active paid Google Play plan can grant a higher allowance.
     plan = account["google_subscription_product"]
-    limit = {"irai_starter": 300, "irai_plus": 1200,
-             "irai_premium": 3000, "irai_ultimate": 6000}.get(plan, 300)
+    google_expiry = parse_expiry(account["google_subscription_expiry"])
+    google_active = (
+        google_expiry is not None
+        and google_expiry > datetime.now(timezone.utc)
+        and account["google_subscription_state"] in (
+            "SUBSCRIPTION_STATE_ACTIVE",
+            "SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
+            "SUBSCRIPTION_STATE_CANCELED",
+        )
+    )
+    paid_limits = {"irai_starter": 300, "irai_plus": 1200,
+                   "irai_premium": 3000, "irai_ultimate": 6000}
+    limit = paid_limits.get(plan, 300) if google_active else 300
     month = datetime.now(timezone.utc).strftime("%Y-%m")
     try:
         with get_db() as conn:
