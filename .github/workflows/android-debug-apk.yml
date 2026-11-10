@@ -1,4 +1,4 @@
-name: Build Irai Tec Android APK
+name: Build Irai Tec Android APK and AAB
 
 on:
   push:
@@ -34,6 +34,18 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon clean assembleDebug
+
+      - name: Build release Android App Bundle
+        working-directory: irai-android
+        run: ./gradlew --no-daemon bundleRelease
+
+      - name: Upload release AAB (unsigned without upload key)
+        uses: actions/upload-artifact@v4
+        with:
+          name: IraiTec-v5-release-aab-unsigned
+          path: irai-android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
