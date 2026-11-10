@@ -119,6 +119,60 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Return labels for visible, ordinary editable fields. Never returns values
+     * typed into fields, and excludes password and other protected controls.
+     */
+    fun listFillableFieldLabels(maxItems: Int = 60): List<String> {
+        val root = rootInActiveWindow ?: return emptyList()
+        val labels = mutableListOf<String>()
+        collectFillableFieldLabels(root, labels, maxItems)
+        return labels.distinct()
+    }
+
+    private fun collectFillableFieldLabels(
+        node: AccessibilityNodeInfo,
+        labels: MutableList<String>,
+        maxItems: Int
+    ) {
+        if (labels.size >= maxItems || !node.isVisibleToUser) return
+        if (node.isEditable && !node.isPassword && !isProtectedField(node)) {
+            val hint = if (Build.VERSION.SDK_INT >= 26) node.hintText?.toString().orEmpty() else ""
+            val description = node.contentDescription?.toString().orEmpty()
+            val resource = node.viewIdResourceName
+                ?.substringAfterLast("/")
+                ?.replace('_', ' ')
+                ?.replace(Regex("([a-z])([A-Z])"), "$1 $2")
+                .orEmpty()
+            val label = sequenceOf(description, hint, resource)
+                .map { it.trim() }
+                .firstOrNull { it.isNotBlank() }
+            if (!label.isNullOrBlank() && !label.equals("edit text", true)) {
+                labels.add(label.take(100))
+            }
+        }
+        for (index in 0 until node.childCount) {
+            if (labels.size >= maxItems) break
+            node.getChild(index)?.let { collectFillableFieldLabels(it, labels, maxItems) }
+        }
+    }
+
+    /** Explicitly invoked only for a credential selected from the local vault. */
+    fun enterStoredPassword(targetField: String, password: String): Boolean {
+        if (password.isEmpty() || protectedFieldPattern.containsMatchIn(targetField)) return false
+        val root = rootInActiveWindow ?: return false
+        val node = findBestMatchingNode(root, targetField, editableOnly = true) ?: return false
+        if (!node.isEnabled || !node.isPassword && !isProtectedField(node)) {
+            // A stored password may only go into an actual password field.
+            return false
+        }
+        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        val args = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, password)
+        }
+        return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+    }
+
     fun tapVisibleText(target: String): Boolean {
         val root = rootInActiveWindow ?: return false
         val node = findBestMatchingNode(root, target, editableOnly = false) ?: return false
@@ -268,6 +322,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
 
         fun readCurrentScreen(): String = activeService?.readVisibleText().orEmpty()
         fun describeCurrentForm(): String = activeService?.describeVisibleForm().orEmpty()
+        fun fillableFieldLabels(): List<String> = activeService?.listFillableFieldLabels().orEmpty()
         fun tapText(target: String): Boolean = activeService?.tapVisibleText(target) ?: false
         fun typeIntoField(target: String, value: String): Boolean = activeService?.enterText(target, value) ?: false
         fun setOptionChecked(target: String, checked: Boolean): Boolean = activeService?.setCheckableState(target, checked) ?: false
