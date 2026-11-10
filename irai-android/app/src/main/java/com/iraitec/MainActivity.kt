@@ -101,6 +101,7 @@ class MainActivity : Activity() {
     private val pendingFormFields = mutableListOf<PendingFormField>()
     private var pendingFormIndex = 0
     private var awaitingFormAnswerFor: PendingFormField? = null
+    private var formFillInProgress = false
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var speechTts: TextToSpeech? = null
@@ -123,9 +124,9 @@ class MainActivity : Activity() {
         if (loggedIn && !awaitingCommand && !listeningForCommand) {
             if (notesMode || awaitingFormAnswerFor != null) {
                 startVoiceCommand()
-            } else {
-                // The service is stopped while Notes is open. Start it again
-                // instead of broadcasting to a receiver that no longer exists.
+            } else if (!formFillInProgress) {
+                // The service is stopped while Notes or a form-fill session is
+                // active. Resume wake-word listening only when the task ends.
                 startIraiListeningService()
             }
         }
@@ -1111,6 +1112,7 @@ class MainActivity : Activity() {
         awaitingFormAnswerFor?.let { pending ->
             awaitingFormAnswerFor = null
             if (text in listOf("cancel", "stop filling", "cancel filling")) {
+                formFillInProgress = false
                 speakResponse("Okay, I stopped filling the form.")
                 pendingFormFields.clear()
                 pendingFormIndex = 0
@@ -1148,7 +1150,7 @@ class MainActivity : Activity() {
         }
 
         when {
-            text in listOf("fill this form", "fill out this form", "fill the form", "fill out the form", "complete this form", "complete the form", "fill this out", "start filling this form", "fill in this form", "fill out this application", "complete this application", "fill in this application", "fill out my application") -> {
+            (text in listOf("fill this form", "fill out this form", "fill the form", "fill out the form", "complete this form", "complete the form", "fill this out", "help me fill this out", "start filling this form", "fill in this form", "fill out this application", "complete this application", "fill in this application", "fill out my application") || (text.contains("fill") && (text.contains("form") || text.contains("application"))) || (text.contains("complete") && (text.contains("form") || text.contains("application")))) -> {
                 beginAutomaticFormFill()
                 return
             }
@@ -2604,6 +2606,7 @@ class MainActivity : Activity() {
             .setMessage(description)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Start filling") { _, _ ->
+                formFillInProgress = true
                 speakResponse("Okay. I'll fill the information stored on this device and ask you about anything I don't know.")
                 handler.postDelayed({ processNextFormField() }, 1200)
             }
@@ -2615,6 +2618,7 @@ class MainActivity : Activity() {
             pendingFormFields.clear()
             pendingFormIndex = 0
             awaitingFormAnswerFor = null
+            formFillInProgress = false
             speakResponse("I've finished the fields I could identify. Please review every answer. I have not submitted the form.")
             return
         }
@@ -2775,7 +2779,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(4, 20, 4, 10)
         }
-        content.addView(label("Manage your Irai Tec experience.", 14, muted).apply {
+        content.addView(label("Manage your Irai Tec experience.", 14, Color.rgb(112, 70, 65)).apply {
             gravity = Gravity.START
             setPadding(4, 0, 4, 18)
         })
