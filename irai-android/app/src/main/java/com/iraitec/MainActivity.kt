@@ -597,6 +597,48 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun openOverlayPermissionSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            showAvatarOverlay()
+            return
+        }
+        if (Settings.canDrawOverlays(this)) {
+            showAvatarOverlay()
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Allow Floating I.R.A.I")
+            .setMessage(
+                "To keep the I.R.A.I avatar visible while you use other apps, Android needs your permission. " +
+                    "On the next screen, find I.R.A.I Tec and turn on \"Allow display over other apps\" " +
+                    "or \"Appear on top\". The wording can vary by phone. Then press Back to return here. " +
+                    "This permission is optional and can be turned off any time in Android Settings."
+            )
+            .setNegativeButton("Not now", null)
+            .setPositiveButton("Open permission settings") { _, _ ->
+                try {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")
+                        )
+                    )
+                } catch (_: Exception) {
+                    try {
+                        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                    } catch (_: Exception) {
+                        Toast.makeText(
+                            this,
+                            "Open Settings > Apps > Special app access > Display over other apps, then choose I.R.A.I Tec.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+            .show()
+    }
+
     private fun requestAvatarOverlayPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
             !Settings.canDrawOverlays(this) && !avatarPermissionPrompted
@@ -3393,21 +3435,14 @@ class MainActivity : Activity() {
             setPadding(4, 0, 4, 18)
         })
         content.addView(menuButton(
-            if (IraiAvatarOverlay.hasPermission(this)) "Floating I.R.A.I: Enabled" else "Enable Floating I.R.A.I",
-            "Allow I.R.A.I's avatar to appear over other apps. This is optional."
+            if (IraiAvatarOverlay.hasPermission(this)) "Floating I.R.A.I: Enabled" else "Set Up Floating I.R.A.I",
+            "Follow the guided steps to let the avatar appear over other apps."
         ) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                try {
-                    startActivity(Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:$packageName")
-                    ))
-                } catch (_: Exception) {
-                    Toast.makeText(this, "Open Android Settings and allow Display over other apps for Irai Tec.", Toast.LENGTH_LONG).show()
-                }
-            } else {
+            if (IraiAvatarOverlay.hasPermission(this)) {
                 showAvatarOverlay()
-                Toast.makeText(this, "Floating Irai is enabled.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Floating I.R.A.I is enabled.", Toast.LENGTH_SHORT).show()
+            } else {
+                openOverlayPermissionSettings()
             }
         })
         content.addView(menuButton("Choose Home Background Photo", "Select a photo from your phone for the I.R.A.I home screen") { chooseHomeBackground() })
