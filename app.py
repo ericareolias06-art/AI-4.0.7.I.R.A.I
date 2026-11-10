@@ -657,16 +657,10 @@ def redeem_promo():
             else:
                 conn.execute("BEGIN IMMEDIATE")
 
-            redeemed_count = conn.execute(
-                "SELECT COUNT(*) AS total FROM promo_redemptions WHERE promo_hash = ?",
-                (promo_hash,),
-            ).fetchone()["total"]
-            if redeemed_count >= 30:
-                return jsonify(message="This promo code has reached its 30-redemption limit"), 409
-
             account = conn.execute(
                 """
-                SELECT id, premium_until,
+                SELECT id, premium_until, google_subscription_state,
+                       google_subscription_expiry, google_subscription_product,
                        stripe_subscription_status, stripe_period_end
                 FROM accounts
                 WHERE id = ?
@@ -678,9 +672,21 @@ def redeem_promo():
                 return jsonify(message="Account not found"), 404
 
             if has_active_premium(account):
-                return jsonify(
-                    message="Your account already has Premium access"
-                ), 409
+                return jsonify(message="Your account already has active membership"), 409
+
+            prior = conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE account_id = ? AND promo_hash = ?",
+                (session["account_id"], promo_hash),
+            ).fetchone()
+            if prior:
+                return jsonify(message="You have already redeemed this promo code"), 409
+
+            redeemed_count = conn.execute(
+                "SELECT COUNT(*) AS total FROM promo_redemptions WHERE promo_hash = ?",
+                (promo_hash,),
+            ).fetchone()["total"]
+            if redeemed_count >= 30:
+                return jsonify(message="This promo code has reached its 30-redemption limit"), 409
 
             conn.execute(
                 """
