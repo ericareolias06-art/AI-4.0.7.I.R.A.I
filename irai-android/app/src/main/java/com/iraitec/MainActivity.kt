@@ -824,7 +824,7 @@ class MainActivity : Activity() {
 
     /** Read the current app/page through Android Accessibility only; never capture the display. */
     private fun inspectCurrentScreenWithAccessibility(prompt: String = "Identify this page and guide me through it") {
-        if (!IraiAssistAccessibilityService.isEnabled(this)) {
+        if (!isGuidedAssistanceReady()) {
             requestGuidedAssistanceEnablement()
             return
         }
@@ -1092,10 +1092,17 @@ class MainActivity : Activity() {
             .show()
     }
 
+    /** Accessibility must never be used until the user has accepted Irai's separate disclosure. */
+    private fun isGuidedAssistanceReady(): Boolean {
+        val accepted = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
+            .getBoolean("screen_access_disclosure_accepted", false)
+        return accepted && IraiAssistAccessibilityService.isEnabled(this)
+    }
+
     private fun requestGuidedAssistanceEnablement() {
         val consentPrefs = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
         val hasConsent = consentPrefs.getBoolean("screen_access_disclosure_accepted", false)
-        val disclosure = "Guided Assistance can inspect text and controls visible in the app or webpage you are using when you ask Irai for help. The screen text and form labels may be sent to the Irai AI service to prepare an explanation. Irai does not intentionally read values typed into editable fields or password fields during screen inspection. Ordinary assisted entry refuses password, payment-card, banking, and verification-code fields.\n\nWhen you ask, Irai can tap a control or enter ordinary form text only after you approve that specific action. Separately, if you explicitly request a saved website password from Personal Vault, Irai can enter it only into a detected password field after you approve and Android verifies your device screen lock. That password is not sent to the AI service or spoken aloud. Do not use Guided Assistance on screens containing information you do not want processed. You can turn this permission off in Android Accessibility Settings at any time."
+        val disclosure = "Irai Guided Assistance uses Android Accessibility to read text, labels, and control states that the current app or webpage makes available. It does this only when you ask Irai to help with that screen; it does not capture screenshots or continuously collect screen content in the background.\n\nRelevant visible page text and a summary of form controls may be sent over the internet to the Irai AI service so it can answer your request and guide you. Form summaries hide the answers typed into editable fields. Screen-reading requests exclude editable-field text and password values. Some apps may expose additional visible text through accessibility labels. Do not request help on a screen containing information you do not want processed.\n\nIf you ask Irai to fill a form, it reads supported field labels and enters ordinary text only after you approve the filling step. It does not submit forms or make purchases, payments, or legal declarations for you. Passwords saved in Personal Vault are handled separately: only after your explicit request, your approval, and Android screen-lock verification are they entered directly from this device; they are not sent to the AI service or spoken aloud.\n\nGuided Assistance is optional. If you decline, it remains unavailable and the rest of Irai Tec continues to work. You can disable the service at any time in Android Accessibility Settings."
         AlertDialog.Builder(this)
             .setTitle("About Guided Assistance")
             .setMessage(disclosure)
@@ -1239,7 +1246,7 @@ class MainActivity : Activity() {
             (text.startsWith("check option ") || text.startsWith("check the box for ") ||
                 text.startsWith("tick ") || text.startsWith("uncheck option ") ||
                 text.startsWith("uncheck the box for ") || text.startsWith("untick ")) -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                     return
                 }
@@ -1280,7 +1287,7 @@ class MainActivity : Activity() {
 
             ((text.startsWith("select ") || text.startsWith("choose ")) &&
                 (text.contains(" from ") || text.contains(" in "))) -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                     return
                 }
@@ -1305,7 +1312,7 @@ class MainActivity : Activity() {
             }
 
             text in listOf("review this form", "check this form", "check my form", "what fields are left", "what is missing", "what's missing", "what is still missing", "review my application", "check my application", "review this application", "check my paperwork") -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                     return
                 }
@@ -1341,7 +1348,7 @@ class MainActivity : Activity() {
                 text.startsWith("help me fill out ") || text.startsWith("help me choose ") ||
                 text.startsWith("help me order ") || text.startsWith("review my cart") ||
                 text.startsWith("compare ")) -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                     return
                 }
@@ -1370,7 +1377,7 @@ class MainActivity : Activity() {
             }
 
             (text.startsWith("tap ") || text.startsWith("click ") || text.startsWith("press ") || text.startsWith("select ") || text.startsWith("choose ")) -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                     return
                 }
@@ -1399,7 +1406,7 @@ class MainActivity : Activity() {
             }
 
             text in listOf("next page", "go to next page", "next section", "continue to next section", "next step") -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                     return
                 }
@@ -1416,7 +1423,7 @@ class MainActivity : Activity() {
             }
 
             text == "what do i do next" || text == "what should i do next" || text == "what is the next step" -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                 } else {
                     val page = IraiAssistAccessibilityService.readCurrentScreen().take(3000)
@@ -1430,7 +1437,7 @@ class MainActivity : Activity() {
             }
 
             text == "scroll down" || text == "scroll up" || text == "scroll to the bottom" || text == "scroll to the top" -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                     return
                 }
@@ -1441,7 +1448,7 @@ class MainActivity : Activity() {
             }
 
             text == "go back" || text == "press back" -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                     return
                 }
@@ -1451,7 +1458,7 @@ class MainActivity : Activity() {
             }
 
             ((text.startsWith("fill ") || text.startsWith("set ")) && text.contains(" with ")) -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                     return
                 }
@@ -1473,7 +1480,7 @@ class MainActivity : Activity() {
             }
 
             (text.startsWith("type ") || text.startsWith("enter ") || text.startsWith("put ")) && text.contains(" into ") -> {
-                if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                if (!isGuidedAssistanceReady()) {
                     requestGuidedAssistanceEnablement()
                     return
                 }
@@ -2554,14 +2561,14 @@ class MainActivity : Activity() {
                             "Open the app or webpage you need help with, then ask Irai to help you shop, compare products, choose a size, review your cart, understand a form, or complete a section.\\n\\nWith Guided Assistance enabled, Irai can read visible page details and, after your approval, tap controls or enter ordinary text. She will ask before consequential actions. Ordinary assisted entry excludes passwords, payment details, and verification codes. Saved website passwords are handled separately through Personal Vault only after Android screen-lock verification."
                         )
                         .setNegativeButton("Not now", null)
-                        .setPositiveButton(if (IraiAssistAccessibilityService.isEnabled(this)) "Got it" else "Enable Guided Assistance") { _, _ ->
-                            if (!IraiAssistAccessibilityService.isEnabled(this)) requestGuidedAssistanceEnablement()
+                        .setPositiveButton(if (isGuidedAssistanceReady()) "Got it" else "Enable Guided Assistance") { _, _ ->
+                            if (!isGuidedAssistanceReady()) requestGuidedAssistanceEnablement()
                             else speakResponse("I'm ready. Open the page you want help with and tell me what you'd like to do.")
                         }
                         .show()
                 })
                 content.addView(menuButton("Help with This Screen", "Let Irai explain the app or webpage you are viewing") {
-                    if (!IraiAssistAccessibilityService.isEnabled(this)) {
+                    if (!isGuidedAssistanceReady()) {
                         requestGuidedAssistanceEnablement()
                     } else {
                         val visibleText = IraiAssistAccessibilityService.readCurrentScreen()
@@ -3003,7 +3010,7 @@ class MainActivity : Activity() {
     }
 
     private fun beginAutomaticFormFill() {
-        if (!IraiAssistAccessibilityService.isEnabled(this)) {
+        if (!isGuidedAssistanceReady()) {
             requestGuidedAssistanceEnablement()
             return
         }
@@ -3077,7 +3084,7 @@ class MainActivity : Activity() {
     }
 
     private fun fillSavedPassword(serviceName: String) {
-        if (!IraiAssistAccessibilityService.isEnabled(this)) {
+        if (!isGuidedAssistanceReady()) {
             requestGuidedAssistanceEnablement()
             return
         }
@@ -3251,7 +3258,7 @@ class MainActivity : Activity() {
             showPersonalVault()
         })
         content.addView(menuButton(
-            if (IraiAssistAccessibilityService.isEnabled(this)) "Guided Assistance: Enabled" else "Enable Guided Assistance",
+            if (isGuidedAssistanceReady()) "Guided Assistance: Enabled" else "Enable Guided Assistance",
             "Let Irai read visible screen text, tap controls, enter text, and navigate apps when you ask."
         ) {
             requestGuidedAssistanceEnablement()
