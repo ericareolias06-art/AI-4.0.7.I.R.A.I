@@ -1089,7 +1089,6 @@ class MainActivity : Activity() {
         val rawSpokenAnswer = command.trim()
             .replace(Regex("(?i)^(?:hey\\s+)?(?:irai|i\\s*ray)[,\\s:.-]+"), "")
             .trim()
-            .removeSurrounding("\\\"")
 
         // A spoken reply to a missing form field is treated as that field's
         // answer, never routed to the AI chat endpoint.
