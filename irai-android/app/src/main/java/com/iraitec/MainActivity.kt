@@ -1311,7 +1311,7 @@ class MainActivity : Activity() {
             } else {
                 val idea = rawSpokenAnswer
                 sendMessageToIrai("Write a clear, natural text message based on the user intent. Keep it concise for SMS, preserve all facts, do not invent details, and return only the message body: " + idea) { draft ->
-                    if (draft.isBlank() || draft.contains("could not", true) || draft.contains("couldn\\'t", true)) speakResponse("I could not create the draft. Please try again.")
+                    if (draft.isBlank() || draft.contains("could not", true) || draft.contains("couldn", true)) speakResponse("I could not create the draft. Please try again.")
                     else showSmsDraftConfirmation(draft.trim().trim('"'))
                 }
             }
