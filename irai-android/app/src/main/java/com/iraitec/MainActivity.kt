@@ -1086,6 +1086,10 @@ class MainActivity : Activity() {
             .replace(Regex("\\s+"), " ")
             .trim()
         val text = routedCommand.lowercase(Locale.US)
+        val rawSpokenAnswer = command.trim()
+            .replace(Regex("(?i)^(?:hey\\s+)?(?:irai|i\\s*ray)[,\\s:.-]+"), "")
+            .trim()
+            .removeSurrounding("\\\"")
 
         // A spoken reply to a missing form field is treated as that field's
         // answer, never routed to the AI chat endpoint.
@@ -1102,24 +1106,29 @@ class MainActivity : Activity() {
                 awaitingFormAnswerFor = pending
                 askForNextFormAnswer()
             } else {
-                confirmAssistedAction(
-                    "Use this answer for ${pending.label}?",
-                    "I will enter the answer you just gave into ${pending.label}. Please check that it is correct."
-                ) {
-                    val entered = IraiAssistAccessibilityService.typeIntoField(pending.label, answer)
-                    if (entered && pending.profileKey != null) {
-                        personalVault.saveProfile(mapOf(pending.profileKey to answer))
+                AlertDialog.Builder(this)
+                    .setTitle("Use this answer for ${pending.label}?")
+                    .setMessage("I will enter the answer you just gave into ${pending.label}. Please check that it is correct.")
+                    .setNegativeButton("Skip field") { _, _ ->
+                        pendingFormIndex++
+                        processNextFormField()
                     }
-                    if (!entered) speakResponse("I couldn't enter that answer. The field may have changed or may not allow automated entry.")
-                    pendingFormIndex++
-                    processNextFormField()
-                }
+                    .setPositiveButton("Enter answer") { _, _ ->
+                        val entered = IraiAssistAccessibilityService.typeIntoField(pending.label, answer)
+                        if (entered && pending.profileKey != null) {
+                            personalVault.saveProfile(mapOf(pending.profileKey to answer))
+                        }
+                        if (!entered) speakResponse("I couldn't enter that answer. The field may have changed or may not allow automated entry.")
+                        pendingFormIndex++
+                        processNextFormField()
+                    }
+                    .show()
             }
             return
         }
 
         when {
-            text in listOf("fill this form", "fill out this form", "fill the form", "fill out the form", "complete this form", "complete the form", "fill this out", "start filling this form", "fill in this form") -> {
+            text in listOf("fill this form", "fill out this form", "fill the form", "fill out the form", "complete this form", "complete the form", "fill this out", "start filling this form", "fill in this form", "fill out this application", "complete this application", "fill in this application", "fill out my application") -> {
                 beginAutomaticFormFill()
                 return
             }
