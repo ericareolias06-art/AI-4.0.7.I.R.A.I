@@ -1429,14 +1429,14 @@ class MainActivity : Activity() {
                 awaitingSmsMessage = true
                 speakResponse("Tell me what you would like the message to say, or say cancel.")
             } else {
-                // Dictation is a local task: don't spend an AI request or
+                // Exact-word messaging is a local task: don't spend an AI request or
                 // change the user's words unless they explicitly request rewriting.
                 val idea = rawSpokenAnswer.trim()
                 val rewriteRequest = Regex("(?i)^(?:rewrite|rephrase|polish|make (?:this|it) (?:more )?(?:professional|formal|friendly|polite))\\b").containsMatchIn(idea)
                 if (rewriteRequest) {
                     sendMessageToIrai("Rewrite this SMS without inventing facts. Return only the message body: " + idea) { draft ->
                         if (draft.isBlank() || draft.contains("could not", true) || draft.contains("couldn", true))
-                            speakResponse("I couldn't rewrite the message. Please dictate it directly or try again.")
+                            speakResponse("I couldn't rewrite the message. Please tell me exactly what you'd like to say, or try again.")
                         else prepareSmsVoiceConfirmation(draft.trim().trim('"'))
                     }
                 } else {
