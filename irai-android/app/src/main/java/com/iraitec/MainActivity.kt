@@ -1124,6 +1124,71 @@ class MainActivity : Activity() {
         return acceptedVersion >= 2 && IraiAssistAccessibilityService.isEnabled(this)
     }
 
+    private fun offerPersonalVaultOnboarding() {
+        val prefs = getSharedPreferences("irai_vault_onboarding", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("completed", false) || !loggedIn) return
+        awaitingVaultOnboardingChoice = true
+        speakResponse("Before we begin, would you like me to walk you through setting up your Personal Vault? I can ask for a few optional personal details, one at a time. Nothing is saved unless you approve it. Your information stays encrypted on this phone. Say yes to begin, or skip to do this later.")
+    }
+
+    private fun startPersonalVaultOnboarding() {
+        awaitingVaultOnboardingChoice = false
+        awaitingVaultOnboardingAnswer = false
+        vaultOnboardingIndex = 0
+        speakResponse("Great. I will ask for one detail at a time. You can say skip for any question, or cancel setup whenever you like.")
+        handler.postDelayed({ askNextPersonalVaultField() }, 2200L)
+    }
+
+    private fun askNextPersonalVaultField() {
+        if (vaultOnboardingIndex >= vaultOnboardingFields.size) {
+            finishPersonalVaultOnboarding()
+            return
+        }
+        val (key, label) = vaultOnboardingFields[vaultOnboardingIndex]
+        if (personalVault().getProfileValue(key).isNotBlank()) {
+            vaultOnboardingIndex++
+            askNextPersonalVaultField()
+            return
+        }
+        awaitingVaultOnboardingAnswer = true
+        speakResponse("What is your $label? You can say skip to leave it blank.")
+    }
+
+    private fun finishPersonalVaultOnboarding() {
+        awaitingVaultOnboardingChoice = false
+        awaitingVaultOnboardingAnswer = false
+        vaultOnboardingAnswer = ""
+        getSharedPreferences("irai_vault_onboarding", Context.MODE_PRIVATE).edit().putBoolean("completed", true).apply()
+        speakResponse("Your Personal Vault setup is complete. You can review or update your details anytime in Settings.")
+    }
+
+    private fun chooseHomeBackground() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        startActivityForResult(intent, homeBackgroundRequestCode)
+    }
+
+    private fun clearHomeBackground() {
+        getSharedPreferences("irai_appearance", Context.MODE_PRIVATE).edit().remove("home_background_uri").apply()
+        showHome(currentEmail)
+    }
+
+    private fun homeBackground(fallback: android.graphics.drawable.Drawable): android.graphics.drawable.Drawable {
+        val raw = getSharedPreferences("irai_appearance", Context.MODE_PRIVATE).getString("home_background_uri", null) ?: return fallback
+        return try {
+            val uri = Uri.parse(raw)
+            val options = BitmapFactory.Options().apply { inSampleSize = 2 }
+            val bitmap = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return fallback
+            BitmapDrawable(resources, bitmap).apply {
+                gravity = Gravity.FILL
+                colorFilter = PorterDuffColorFilter(Color.argb(92, 28, 20, 28), PorterDuff.Mode.SRC_ATOP)
+            }
+        } catch (_: Exception) { fallback }
+    }
+
     private fun requestGuidedAssistanceEnablement() {
         val consentPrefs = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
         // Version the disclosure so existing installs must affirmatively accept
@@ -1163,6 +1228,62 @@ class MainActivity : Activity() {
         val rawSpokenAnswer = command.trim()
             .replace(Regex("(?i)^(?:hey\\s+)?(?:irai|i\\s*ray)[,\\s:.-]+"), "")
             .trim()
+
+        if (awaitingVaultOnboardingChoice) {
+            awaitingVaultOnboardingChoice = false
+            when (text) {
+                "yes", "yes please", "start", "start setup", "set it up", "okay", "ok" -> startPersonalVaultOnboarding()
+                "no", "no thanks", "skip", "skip it", "not now" -> {
+                    getSharedPreferences("irai_vault_onboarding", Context.MODE_PRIVATE).edit().putBoolean("completed", true).apply()
+                    speakResponse("No problem. You can open your Personal Vault in Settings whenever you are ready.")
+                }
+                else -> {
+                    awaitingVaultOnboardingChoice = true
+                    speakResponse("Would you like me to help set up your Personal Vault? Please say yes or skip.")
+                }
+            }
+            return
+        }
+        if (awaitingVaultOnboardingAnswer) {
+            awaitingVaultOnboardingAnswer = false
+            if (text in listOf("cancel", "stop", "cancel setup", "quit")) {
+                finishPersonalVaultOnboarding()
+                return
+            }
+            if (text in listOf("skip", "skip this", "skip this field")) {
+                vaultOnboardingIndex++
+                askNextPersonalVaultField()
+                return
+            }
+            val answer = rawSpokenAnswer.trim()
+            if (answer.isBlank()) {
+                askNextPersonalVaultField()
+            } else {
+                vaultOnboardingAnswer = answer
+                AlertDialog.Builder(this)
+                    .setTitle("Save this " + vaultOnboardingFields[vaultOnboardingIndex].second + "?")
+                    .setMessage("I heard:\n\n" + answer + "\n\nThis will be encrypted and stored only on this phone. Save it?")
+                    .setNegativeButton("Skip field") { _, _ ->
+                        vaultOnboardingAnswer = ""
+                        vaultOnboardingIndex++
+                        askNextPersonalVaultField()
+                    }
+                    .setPositiveButton("Save securely") { _, _ ->
+                        val key = vaultOnboardingFields[vaultOnboardingIndex].first
+                        val saved = personalVault().saveProfile(mapOf(key to vaultOnboardingAnswer))
+                        vaultOnboardingAnswer = ""
+                        if (!saved) {
+                            speakResponse("I couldn't save that detail. Your existing vault data was left unchanged.")
+                            finishPersonalVaultOnboarding()
+                        } else {
+                            vaultOnboardingIndex++
+                            askNextPersonalVaultField()
+                        }
+                    }
+                    .show()
+            }
+            return
+        }
 
         // A spoken reply to a missing form field is treated as that field's
         // answer, never routed to the AI chat endpoint.
@@ -2061,7 +2182,7 @@ class MainActivity : Activity() {
         latestDiagnostic = "I.R.A.I: $text"
         IraiAvatarOverlay.setStatus("Speaking...")
         refreshDiagnostic()
-        val spokenText = text.replace(Regex("(?i)\\bI\\.?R\\.?A\\.?I\\b"), "eye ray")
+        val spokenText = text.replace(Regex("(?i)\\bI\\.?R\\.?A\\.?I\\b|\\bIrai\\b"), "eye ray")
 
         if (ttsReady) {
             speechTts?.speak(
