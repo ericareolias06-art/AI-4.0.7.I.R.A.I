@@ -2870,7 +2870,11 @@ class MainActivity : Activity() {
             val params = android.widget.GridLayout.LayoutParams().apply {
                 width = 0
                 height = dp(62)
-                columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                columnSpec = if (key == "=") {
+                    android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 4, 1f)
+                } else {
+                    android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1, 1f)
+                }
                 rowSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED)
                 setMargins(dp(4), dp(4), dp(4), dp(4))
             }
