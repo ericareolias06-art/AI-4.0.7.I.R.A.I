@@ -232,6 +232,66 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
     }
 
+    /**
+     * Reads a pre-typed message only after an explicit user request.
+     * Returns a value only when exactly one visible, non-password editable
+     * control contains text, avoiding accidental reads of multiple fields.
+     */
+    fun readSingleTypedMessageDraft(): String {
+        val root = rootInActiveWindow ?: return ""
+        val drafts = mutableListOf<String>()
+        fun walk(node: AccessibilityNodeInfo) {
+            if (!node.isVisibleToUser) return
+            if (node.isEditable && !node.isPassword) {
+                val value = node.text?.toString()?.trim().orEmpty()
+                if (value.isNotBlank()) drafts.add(value)
+            }
+            for (index in 0 until node.childCount) {
+                node.getChild(index)?.let { walk(it) }
+            }
+        }
+        walk(root)
+        return if (drafts.size == 1) drafts.first() else ""
+    }
+
+    /**
+     * Click only a clearly labeled Send control on the currently visible screen.
+     * Ambiguous labels such as "Send money" are deliberately not accepted.
+     */
+    fun clickClearlyLabeledSendButton(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val acceptedLabels = setOf("send", "send message", "send sms")
+        fun find(node: AccessibilityNodeInfo): Boolean {
+            if (!node.isVisibleToUser) return false
+            val className = node.className?.toString()?.substringAfterLast('.')?.lowercase(Locale.US).orEmpty()
+            val labels = listOf(
+                node.text?.toString(),
+                node.contentDescription?.toString(),
+                node.viewIdResourceName?.substringAfterLast("/")?.replace('_', ' ')
+            ).map { it?.trim()?.lowercase(Locale.US).orEmpty() }
+            val exactSend = labels.any { it in acceptedLabels }
+            val buttonLike = className.contains("button") || node.isClickable
+            if (exactSend && buttonLike && node.isEnabled) {
+                if (node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                var parent = node.parent
+                var depth = 0
+                while (parent != null && depth < 3) {
+                    if (parent.isVisibleToUser && parent.isEnabled && parent.isClickable &&
+                        parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    ) return true
+                    parent = parent.parent
+                    depth++
+                }
+            }
+            for (index in 0 until node.childCount) {
+                val child = node.getChild(index) ?: continue
+                if (find(child)) return true
+            }
+            return false
+        }
+        return find(root)
+    }
+
     fun tapVisibleText(target: String): Boolean {
         val root = rootInActiveWindow ?: return false
         val node = findBestMatchingNode(root, target, editableOnly = false) ?: return false
@@ -387,6 +447,8 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         fun passwordFieldLabels(): List<String> = activeService?.listPasswordFieldLabels().orEmpty()
         fun enterStoredPassword(target: String, password: String): Boolean = activeService?.enterStoredPassword(target, password) ?: false
         fun tapText(target: String): Boolean = activeService?.tapVisibleText(target) ?: false
+        fun readTypedMessageDraft(): String = activeService?.readSingleTypedMessageDraft().orEmpty()
+        fun pressSendButton(): Boolean = activeService?.clickClearlyLabeledSendButton() ?: false
         fun typeIntoField(target: String, value: String): Boolean = activeService?.enterText(target, value, true) ?: false
         fun fillEmptyField(target: String, value: String): Boolean = activeService?.enterText(target, value, false) ?: false
         fun setOptionChecked(target: String, checked: Boolean): Boolean = activeService?.setCheckableState(target, checked) ?: false
