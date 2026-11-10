@@ -224,7 +224,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
             return null
         }
         val node = findPasswordNode(root) ?: return false
-        if (!node.isEnabled) return false
+        if (!node.isEnabled || node.text?.toString()?.isNotBlank() == true) return false
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, password)
@@ -281,13 +281,15 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         return false
     }
 
-    fun enterText(targetField: String, value: String): Boolean {
+    fun enterText(targetField: String, value: String, overwriteExisting: Boolean = true): Boolean {
         // Keep authentication secrets and payment/banking credentials out of
         // automated text entry, even when an app fails to mark a field as a password.
         if (protectedFieldPattern.containsMatchIn(targetField)) return false
         val root = rootInActiveWindow ?: return false
         val node = findBestMatchingNode(root, targetField, editableOnly = true) ?: return false
         if (!node.isEnabled || node.isPassword || isProtectedField(node)) return false
+        val existingValue = node.text?.toString()?.trim().orEmpty()
+        if (!overwriteExisting && existingValue.isNotBlank()) return true
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
@@ -384,7 +386,8 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         fun fillableFieldLabels(): List<String> = activeService?.listFillableFieldLabels().orEmpty()
         fun passwordFieldLabels(): List<String> = activeService?.listPasswordFieldLabels().orEmpty()
         fun tapText(target: String): Boolean = activeService?.tapVisibleText(target) ?: false
-        fun typeIntoField(target: String, value: String): Boolean = activeService?.enterText(target, value) ?: false
+        fun typeIntoField(target: String, value: String): Boolean = activeService?.enterText(target, value, true) ?: false
+        fun fillEmptyField(target: String, value: String): Boolean = activeService?.enterText(target, value, false) ?: false
         fun setOptionChecked(target: String, checked: Boolean): Boolean = activeService?.setCheckableState(target, checked) ?: false
         fun scrollForward(): Boolean = activeService?.scrollScreen(true) ?: false
         fun scrollBackward(): Boolean = activeService?.scrollScreen(false) ?: false
