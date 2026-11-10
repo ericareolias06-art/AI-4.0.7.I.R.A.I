@@ -142,7 +142,7 @@ def initialize_database():
             "stripe_period_end": "TEXT",
             "stripe_price_id": "TEXT",
             "phone_number": "TEXT",
-            "email_verified": "BOOLEAN NOT NULL DEFAULT FALSE" if conn.is_postgres else "INTEGER NOT NULL DEFAULT 0",
+            "email_verified": "BOOLEAN NOT NULL DEFAULT TRUE" if conn.is_postgres else "INTEGER NOT NULL DEFAULT 1",
             "google_purchase_token_hash": "TEXT",
             "google_subscription_product": "TEXT",
             "google_subscription_state": "TEXT",
@@ -487,10 +487,10 @@ def register():
         with get_db() as conn:
             conn.execute(
                 """
-                INSERT INTO accounts (email, password_hash, tutorial_completed)
-                VALUES (?, ?, ?)
+                INSERT INTO accounts (email, password_hash, tutorial_completed, email_verified)
+                VALUES (?, ?, ?, ?)
                 """,
-                (email, generate_password_hash(password), False),
+                (email, generate_password_hash(password), False, False),
             )
 
     except (sqlite3.IntegrityError, psycopg2.IntegrityError):
