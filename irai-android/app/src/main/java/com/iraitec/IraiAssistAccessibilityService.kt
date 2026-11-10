@@ -159,12 +159,13 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         if (node.isEditable && !node.isPassword && !isProtectedField(node)) {
             val hint = if (Build.VERSION.SDK_INT >= 26) node.hintText?.toString().orEmpty() else ""
             val description = node.contentDescription?.toString().orEmpty()
+            val linkedLabel = if (Build.VERSION.SDK_INT >= 26) node.labeledBy?.text?.toString().orEmpty() else ""
             val resource = node.viewIdResourceName
                 ?.substringAfterLast("/")
                 ?.replace('_', ' ')
                 ?.replace(Regex("([a-z])([A-Z])"), "$1 $2")
                 .orEmpty()
-            val label = sequenceOf(description, hint, resource)
+            val label = sequenceOf(linkedLabel, description, hint, resource)
                 .map { it.trim() }
                 .firstOrNull { it.isNotBlank() }
             if (!label.isNullOrBlank() && !label.equals("edit text", true)) {
@@ -178,6 +179,27 @@ class IraiAssistAccessibilityService : AccessibilityService() {
     }
 
     /** Explicitly invoked only for a credential selected from the local vault. */
+    private fun isDisallowedCredentialField(node: AccessibilityNodeInfo): Boolean {
+        val forbidden = Regex(
+            "\\b(card|cardholder|bank|routing|social security|tax id|ssn|cvv|cvc|verification|one.?time|recovery|otp|security code)\\b",
+            RegexOption.IGNORE_CASE
+        )
+        var current: AccessibilityNodeInfo? = node
+        var depth = 0
+        while (current != null && depth < 5) {
+            val parts = listOf(
+                current.text?.toString().orEmpty(),
+                current.contentDescription?.toString().orEmpty(),
+                if (Build.VERSION.SDK_INT >= 26) current.hintText?.toString().orEmpty() else "",
+                current.viewIdResourceName?.substringAfterLast("/")?.replace('_', ' ').orEmpty()
+            )
+            if (parts.any { forbidden.containsMatchIn(it) }) return true
+            current = current.parent
+            depth++
+        }
+        return false
+    }
+
     fun enterStoredPassword(targetField: String, password: String): Boolean {
         if (password.isEmpty() || Regex(
                 "\\b(card|cardholder|bank|routing|social security|tax id|ssn|cvv|cvc|verification|one.?time|recovery|otp)\\b",
@@ -186,11 +208,11 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         val root = rootInActiveWindow ?: return false
         fun findPasswordNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
             if (!node.isVisibleToUser) return null
-            if (node.isEditable && node.isPassword) {
+            if (node.isEditable && node.isPassword && !isDisallowedCredentialField(node)) {
                 val hint = if (Build.VERSION.SDK_INT >= 26) node.hintText?.toString().orEmpty() else ""
                 val description = node.contentDescription?.toString().orEmpty()
                 val resource = node.viewIdResourceName?.substringAfterLast("/")?.replace('_', ' ').orEmpty()
-                val labels = listOf(hint, description, resource, "Password")
+                val labels = listOf(hint, description, resource, "Password").filter { it.isNotBlank() }
                 if (labels.any { it.equals(targetField, true) || it.contains(targetField, true) || targetField.contains(it, true) }) {
                     return node
                 }
