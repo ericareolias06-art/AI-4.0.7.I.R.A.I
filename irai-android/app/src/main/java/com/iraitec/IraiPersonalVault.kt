@@ -123,6 +123,17 @@ class IraiPersonalVault(context: Context) {
     }
 
     @Synchronized
+    fun clearAll(): Boolean {
+        return try {
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (keyStore.containsAlias(KEY_ALIAS)) keyStore.deleteEntry(KEY_ALIAS)
+            prefs.edit().clear().commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    @Synchronized
     fun credentialLabels(): List<String> {
         val payload = readPayload()
         if (payload.optBoolean("_vault_error")) return emptyList()
