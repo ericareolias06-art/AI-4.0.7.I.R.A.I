@@ -2059,7 +2059,8 @@ class MainActivity : Activity() {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(8), 0, dp(6))
+            val density = resources.displayMetrics.density
+            setPadding(0, (8 * density).toInt(), 0, (6 * density).toInt())
         }
         header.addView(Button(this).apply {
             text = "‹"
