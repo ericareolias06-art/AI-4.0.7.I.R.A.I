@@ -2055,7 +2055,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun screenHeader(title: String, onBack: () -> Unit, lightBackground: Boolean = false): LinearLayout {
+    private fun screenHeader(title: String, lightBackground: Boolean = false, onBack: () -> Unit): LinearLayout {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -2724,7 +2724,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 12, 20, 24)
         }
-        content.addView(screenHeader("Personal Vault", { showSettings() }, true))
+        content.addView(screenHeader("Personal Vault", true) { showSettings() })
         content.addView(label("Stored only on this phone. Details are encrypted with an AES-256 key protected by Android Keystore. They are not uploaded to Irai's AI server.", 13, muted))
         val fields = linkedMapOf<String, EditText>()
         val profileSpecs = listOf(
@@ -2813,7 +2813,7 @@ class MainActivity : Activity() {
             GradientDrawable.Orientation.TOP_BOTTOM,
             intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
         )
-        root.addView(screenHeader("Settings", { showHome(currentEmail) }, true))
+        root.addView(screenHeader("Settings", true) { showHome(currentEmail) })
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(4, 20, 4, 10)
