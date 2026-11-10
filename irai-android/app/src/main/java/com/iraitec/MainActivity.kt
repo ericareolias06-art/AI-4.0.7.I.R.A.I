@@ -2638,6 +2638,9 @@ class MainActivity : Activity() {
         else showFeaturesTutorial()
     }
 
+    // Convert density-independent pixels to physical pixels for native Android layouts.
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
+
     private fun completeFeaturesTutorial() {
         featureTutorialPrefs().edit().putBoolean(featureTutorialKey(), true).apply()
         speechTts?.stop()
