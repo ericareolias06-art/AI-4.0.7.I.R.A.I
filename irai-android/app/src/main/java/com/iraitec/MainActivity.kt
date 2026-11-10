@@ -111,6 +111,7 @@ class MainActivity : Activity() {
     private var tutorialIndex = 0
     private var tutorialInProgress = false
     private var pendingTutorialStart = false
+    private var pendingFeaturesTutorial = false
     private val pageScanRequestCode = 2301
     private val pdfImportRequestCode = 2302
     private val vaultUnlockRequestCode = 2303
@@ -255,6 +256,11 @@ class MainActivity : Activity() {
                         pendingTutorialStart = false
                         applyTutorialVoice()
                         showTutorialStep()
+                    }
+                    if (pendingFeaturesTutorial && ttsReady) {
+                        pendingFeaturesTutorial = false
+                        applyAssistantVoice()
+                        showFeaturesTutorial()
                     }
                 }
             }
@@ -1504,6 +1510,15 @@ class MainActivity : Activity() {
             text == "read my notes" || text == "list my notes" ->
                 speakSavedNoteList()
 
+            text in listOf("open features", "show features", "features") ->
+                openFeaturesForFirstTimeIfNeeded()
+
+            text in listOf("open calculator", "calculator", "launch calculator") ->
+                showCalculator()
+
+            text in listOf("scan a form", "scan forms", "scan paperwork", "scan a document") ->
+                launchPageScan()
+
             text.startsWith("read note ") ->
                 readSavedNote(routedCommand.substringAfter("read note ").trim())
 
@@ -2630,6 +2645,14 @@ class MainActivity : Activity() {
     }
 
     private fun showFeaturesTutorial() {
+        if (!ttsReady) {
+            pendingFeaturesTutorial = true
+            root.removeAllViews()
+            root.gravity = Gravity.CENTER
+            root.addView(label("Preparing Irai's spoken Features tour...", 17, Color.rgb(105, 53, 64)))
+            setContentView(root)
+            return
+        }
         val steps = listOf(
             "Welcome to your Features garden! This is where you can find Irai's handy tools whenever you need them.",
             "Notes lets you create and name notes, transcribe your voice, save your thoughts on this phone, and listen to them later.",
