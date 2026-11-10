@@ -2763,6 +2763,9 @@ class MainActivity : Activity() {
             hint = "Password"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             setTextColor(Color.BLACK)
+            if (Build.VERSION.SDK_INT >= 26) {
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+            }
         }
         content.addView(credentialLabel)
         content.addView(credentialUser)
