@@ -2577,18 +2577,18 @@ class MainActivity : Activity() {
     }
 
     private fun profileKeyForField(label: String): String? {
-        val value = label.lowercase(Locale.US)
+        val value = label.lowercase(Locale.US).trim().replace(Regex("\\s+"), " ")
         return when {
             Regex("\\b(first name|given name|forename)\\b").containsMatchIn(value) -> "first_name"
             Regex("\\b(last name|surname|family name)\\b").containsMatchIn(value) -> "last_name"
-            Regex("\\b(full name|your name|name)\\b").containsMatchIn(value) -> "full_name"
-            Regex("\\b(birth|birthday|date of birth|dob)\\b").containsMatchIn(value) -> "birthday"
-            Regex("\\b(email|e mail)\\b").containsMatchIn(value) -> "email"
-            Regex("\\b(phone|mobile|telephone)\\b").containsMatchIn(value) -> "phone"
-            Regex("\\b(street address|mailing address|home address|address)\\b").containsMatchIn(value) -> "address"
-            Regex("\\bcity\\b").containsMatchIn(value) -> "city"
-            Regex("\\b(state|province)\\b").containsMatchIn(value) -> "state"
-            Regex("\\b(zip|postal code)\\b").containsMatchIn(value) -> "postal_code"
+            value in setOf("name", "full name", "your name", "applicant name", "legal name") -> "full_name"
+            value in setOf("birth", "birthday", "date of birth", "birth date", "dob", "your birthday") -> "birthday"
+            value in setOf("email", "e mail", "email address", "e mail address", "your email") -> "email"
+            value in setOf("phone", "phone number", "mobile", "mobile number", "mobile phone", "telephone", "telephone number", "your phone") -> "phone"
+            value in setOf("address", "street address", "home address", "mailing address", "residential address") -> "address"
+            value == "city" -> "city"
+            value in setOf("state", "province") -> "state"
+            value in setOf("zip", "zip code", "postal code") -> "postal_code"
             else -> null
         }
     }
