@@ -50,6 +50,7 @@ android {
     }
 }
 dependencies {
+    implementation("com.android.billingclient:billing-ktx:7.1.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation(files("libs/sherpa-onnx-2.0.1.aar"))
