@@ -199,8 +199,8 @@ def has_active_premium(account):
     if promo_expiry and promo_expiry > now:
         return True
 
-    google_expiry = parse_expiry(account["google_subscription_expiry"])
-    google_state = account["google_subscription_state"]
+    google_expiry = parse_expiry(account["google_subscription_expiry"]) if "google_subscription_expiry" in account.keys() else None
+    google_state = account["google_subscription_state"] if "google_subscription_state" in account.keys() else None
     if google_expiry and google_expiry > now and google_state in (
         "SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
         "SUBSCRIPTION_STATE_CANCELED",
