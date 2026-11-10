@@ -1311,7 +1311,7 @@ class MainActivity : Activity() {
             } else {
                 val idea = rawSpokenAnswer
                 sendMessageToIrai("Write a clear, natural text message based on the user intent. Keep it concise for SMS, preserve all facts, do not invent details, and return only the message body: " + idea) { draft ->
-                    if (draft.isBlank() || draft.contains("could not", true)) speakResponse("I could not create the draft. Please try again.")
+                    if (draft.isBlank() || draft.contains("could not", true) || draft.contains("couldn\\'t", true)) speakResponse("I could not create the draft. Please try again.")
                     else showSmsDraftConfirmation(draft.trim().trim('"'))
                 }
             }
@@ -1420,7 +1420,7 @@ class MainActivity : Activity() {
             return
         }
 
-        if (text in listOf("text message", "write a text", "write a text message", "send a text", "send a text message", "help me write a text", "compose a text", "message someone", "text someone")) {
+        if (text in listOf("text message", "write a text", "write a text message", "send a text", "send a text message", "help me write a text", "compose a text", "message someone", "text someone") || text.startsWith("text ") || text.startsWith("send a text to ") || text.startsWith("send a message to ") || text.startsWith("message ")) {
             startTextMessageFlow()
             return
         }
@@ -1877,8 +1877,9 @@ class MainActivity : Activity() {
 
     private fun startTextMessageFlow() {
         try {
-            val intent = Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
-            intent.type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+            val intent = Intent(Intent.ACTION_PICK).apply {
+                setDataAndType(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE)
+            }
             startActivityForResult(intent, smsContactRequestCode)
         } catch (e: Exception) {
             speakResponse("I could not open your contacts. Please make sure a contacts app is available.")
@@ -1911,7 +1912,7 @@ class MainActivity : Activity() {
                     speakResponse("The message was empty, so I cancelled it.")
                 } else {
                     val smsIntent = Intent(Intent.ACTION_SENDTO).apply {
-                        data = Uri.parse("smsto:" + Uri.encode(pendingSmsPhone))
+                        data = Uri.fromParts("smsto", pendingSmsPhone, null)
                         putExtra("sms_body", body)
                     }
                     try {
@@ -2947,6 +2948,7 @@ class MainActivity : Activity() {
             "Welcome to your Features garden! This is where you can find Irai's handy tools whenever you need them.",
             "Notes lets you create and name notes, transcribe your voice, save your thoughts on this phone, and listen to them later.",
             "The Calculator handles everyday arithmetic, including addition, subtraction, multiplication, division, decimals, and parentheses.",
+            "The Text Message Assistant lets you choose a contact, describe what you want to say, and have me draft a natural message. Review the draft, then open your messaging app and tap Send when you are ready.",
             "Scan Forms opens your camera so I can read a paper form and help explain it. You can also import a PDF. Please avoid scanning private information you do not want processed."
         )
         var step = 0
