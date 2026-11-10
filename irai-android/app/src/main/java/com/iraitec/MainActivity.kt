@@ -2579,8 +2579,8 @@ class MainActivity : Activity() {
     private fun profileKeyForField(label: String): String? {
         val value = label.lowercase(Locale.US).trim().replace(Regex("\\s+"), " ")
         return when {
-            Regex("\\b(first name|given name|forename)\\b").containsMatchIn(value) -> "first_name"
-            Regex("\\b(last name|surname|family name)\\b").containsMatchIn(value) -> "last_name"
+            value in setOf("first name", "given name", "forename", "your first name", "applicant first name") -> "first_name"
+            value in setOf("last name", "surname", "family name", "your last name", "applicant last name") -> "last_name"
             value in setOf("name", "full name", "your name", "applicant name", "legal name") -> "full_name"
             value in setOf("birth", "birthday", "date of birth", "birth date", "dob", "your birthday") -> "birthday"
             value in setOf("email", "e mail", "email address", "e mail address", "your email") -> "email"
