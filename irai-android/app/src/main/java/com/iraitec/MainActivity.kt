@@ -25,6 +25,7 @@ import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.provider.Settings
 import android.provider.MediaStore
+import android.provider.ContactsContract
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -120,6 +121,10 @@ class MainActivity : Activity() {
     private val pdfImportRequestCode = 2302
     private val vaultUnlockRequestCode = 2303
     private val homeBackgroundRequestCode = 2304
+    private val smsContactRequestCode = 2305
+    private var awaitingSmsMessage = false
+    private var pendingSmsPhone = ""
+    private var pendingSmsContactName = ""
     private var awaitingVaultOnboardingChoice = false
     private var awaitingVaultOnboardingAnswer = false
     private var vaultOnboardingIndex = 0
@@ -1271,6 +1276,23 @@ class MainActivity : Activity() {
             .replace(Regex("(?i)^(?:hey\\s+)?(?:irai|i\\s*ray)[,\\s:.-]+"), "")
             .trim()
 
+        if (awaitingSmsMessage) {
+            awaitingSmsMessage = false
+            if (text in listOf("cancel", "cancel message", "never mind", "nevermind", "stop")) {
+                clearPendingSms()
+                speakResponse("Okay, I cancelled the text message.")
+            } else if (rawSpokenAnswer.isBlank()) {
+                awaitingSmsMessage = true
+                speakResponse("Tell me what you would like the message to say, or say cancel.")
+            } else {
+                val idea = rawSpokenAnswer
+                sendMessageToIrai("Write a clear, natural text message based on the user intent. Keep it concise for SMS, preserve all facts, do not invent details, and return only the message body: " + idea) { draft ->
+                    if (draft.isBlank() || draft.contains("could not", true)) speakResponse("I could not create the draft. Please try again.")
+                    else showSmsDraftConfirmation(draft.trim().trim('"'))
+                }
+            }
+            return
+        }
         if (awaitingVaultOnboardingChoice) {
             awaitingVaultOnboardingChoice = false
             when (text) {
@@ -1371,6 +1393,11 @@ class MainActivity : Activity() {
                     }
                     .show()
             }
+            return
+        }
+
+        if (text in listOf("text message", "write a text", "write a text message", "send a text", "send a text message", "help me write a text", "compose a text", "message someone", "text someone")) {
+            startTextMessageFlow()
             return
         }
 
@@ -2974,6 +3001,9 @@ class MainActivity : Activity() {
         content.addView(label("✿  Your helpful little toolkit  ✿", 19, Color.rgb(105, 53, 64)))
         content.addView(label("Choose what you'd like to do.", 14, Color.rgb(112, 70, 65)).apply {
             setPadding(0, dp(3), 0, dp(17))
+        })
+        content.addView(menuButton("💬  Text Message Assistant", "Tell I.R.A.I what you want to say and let her draft a text") {
+            startTextMessageFlow()
         })
         content.addView(menuButton("🌷  Notes", "Create, transcribe, save, and listen to notes") {
             startNotesMode()
