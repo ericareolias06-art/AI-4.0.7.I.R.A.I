@@ -115,8 +115,8 @@ object IraiAvatarOverlay {
                 android.view.MotionEvent.ACTION_MOVE -> {
                     if (lp != null) {
                         val screen = appContext?.resources?.displayMetrics
-                        val maxX = ((screen?.widthPixels ?: 0) - dp(182)).coerceAtLeast(0)
-                        val maxY = ((screen?.heightPixels ?: 0) - dp(306)).coerceAtLeast(0)
+                        val maxX = ((screen?.widthPixels ?: 0) - dp(146)).coerceAtLeast(0)
+                        val maxY = ((screen?.heightPixels ?: 0) - dp(252)).coerceAtLeast(0)
                         lp.x = (dragStartX + event.rawX - dragDownX).toInt().coerceIn(0, maxX)
                         lp.y = (dragStartY + event.rawY - dragDownY).toInt().coerceIn(0, maxY)
                         try { windowManager?.updateViewLayout(avatarWindow, lp) } catch (_: Exception) {}
@@ -128,7 +128,7 @@ object IraiAvatarOverlay {
                 else -> false
             }
         }
-        panel.addView(avatar, LinearLayout.LayoutParams(dp(168), dp(252)))
+        panel.addView(avatar, LinearLayout.LayoutParams(dp(132), dp(198)))
 
         val controls = LinearLayout(appContext).apply {
             orientation = LinearLayout.HORIZONTAL
