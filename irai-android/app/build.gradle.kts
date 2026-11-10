@@ -23,7 +23,7 @@ android {
 
 
     defaultConfig {
-        applicationId = "com.iraitec"
+        applicationId = "com.Iraitec"
         minSdk = 24
         targetSdk = 36
         versionCode = 4
