@@ -1010,8 +1010,19 @@ class MainActivity : Activity() {
                 if (password.isBlank()) {
                     speakResponse("I couldn't unlock that saved credential. I did not enter anything.")
                 } else {
+                    val username = personalVault().getCredentialUsername(accountName)
+                    if (username.isNotBlank()) {
+                        val usernameField = IraiAssistAccessibilityService.fillableFieldLabels()
+                            .firstOrNull {
+                                Regex("\\b(username|user name|email|e mail|login)\\b", RegexOption.IGNORE_CASE)
+                                    .containsMatchIn(it)
+                            }
+                        if (usernameField != null) {
+                            IraiAssistAccessibilityService.fillEmptyField(usernameField, username)
+                        }
+                    }
                     val entered = IraiAssistAccessibilityService.enterStoredPassword(field, password)
-                    speakResponse(if (entered) "I've entered the saved password. I will not read it aloud." else "I couldn't safely identify the password field.")
+                    speakResponse(if (entered) "I've entered the saved sign-in details. I will not read the password aloud." else "I couldn't safely identify the password field.")
                 }
             } else {
                 speakResponse("Device verification was cancelled. I did not enter the password.")
