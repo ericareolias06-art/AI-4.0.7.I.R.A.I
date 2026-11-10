@@ -125,7 +125,15 @@ class MainActivity : Activity() {
     private val callContactRequestCode = 2306
     private val emailContactRequestCode = 2307
     private val callContactsPermissionRequestCode = 2308
+    private val communicationContactsPermissionRequestCode = 2309
     private var pendingCallContactName = ""
+    private var pendingCommunicationMode = ""
+    private var pendingCommunicationRecipientQuery = ""
+    private val pendingCommunicationContacts = mutableListOf<Pair<String, String>>()
+    private var awaitingCommunicationRecipientChoice = false
+    private var awaitingCommunicationSendConfirmation = false
+    private var pendingCommunicationSubject = ""
+    private var pendingCommunicationBody = ""
     private var awaitingEmailIntent = false
     private var pendingEmailAddress = ""
     private var pendingEmailName = ""
@@ -150,7 +158,9 @@ class MainActivity : Activity() {
 
     private val restartListeningRunnable = Runnable {
         if (loggedIn && !awaitingCommand && !listeningForCommand) {
-            if (notesMode || awaitingFormAnswerFor != null) {
+            if (notesMode || awaitingFormAnswerFor != null || awaitingEmailIntent ||
+                awaitingSmsMessage || awaitingCommunicationRecipientChoice ||
+                awaitingCommunicationSendConfirmation) {
                 startVoiceCommand()
             } else if (!formFillInProgress) {
                 // The service is stopped while Notes or a form-fill session is
@@ -733,6 +743,14 @@ class MainActivity : Activity() {
                     pendingCallContactName = ""
                     speakResponse("I need permission to look up that contact. You can choose the contact manually instead.")
                     startCallFlow("")
+                }
+            }
+            communicationContactsPermissionRequestCode -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    lookupCommunicationContact(pendingCommunicationRecipientQuery)
+                } else {
+                    clearPendingCommunication()
+                    speakResponse("I need Contacts permission to find that recipient. Nothing was sent.")
                 }
             }
             1001 -> {
@@ -1349,6 +1367,38 @@ class MainActivity : Activity() {
             .replace(Regex("(?i)^(?:hey\\s+)?(?:irai|i\\s*ray)[,\\s:.-]+"), "")
             .trim()
 
+        if (awaitingCommunicationRecipientChoice) {
+            if (text in listOf("cancel", "never mind", "nevermind", "stop")) {
+                clearPendingCommunication()
+                speakResponse("Okay, I cancelled.")
+            } else if (pendingCommunicationContacts.isEmpty()) {
+                lookupCommunicationContact(rawSpokenAnswer)
+            } else {
+                val choice = when (text) {
+                    "1", "one", "first", "the first", "first one" -> 0
+                    "2", "two", "second", "the second", "second one" -> 1
+                    "3", "three", "third", "the third", "third one" -> 2
+                    "4", "four", "fourth", "the fourth", "fourth one" -> 3
+                    else -> -1
+                }
+                if (choice in pendingCommunicationContacts.indices) selectCommunicationContact(choice)
+                else speakResponse("Please say the number of the contact you want, or say cancel.")
+            }
+            return
+        }
+
+        if (awaitingCommunicationSendConfirmation) {
+            when (text) {
+                "yes", "yes send", "send", "send it", "send message", "confirm", "confirm send", "do it", "okay send", "ok send" -> sendPendingCommunication()
+                "no", "no send", "cancel", "never mind", "nevermind", "stop", "don't send", "do not send" -> {
+                    clearPendingCommunication()
+                    speakResponse("Cancelled. Nothing was sent.")
+                }
+                else -> speakResponse("Please say send it to open the reviewed draft, or cancel. Nothing has been sent.")
+            }
+            return
+        }
+
         if (awaitingEmailIntent) {
             awaitingEmailIntent = false
             if (text in listOf("cancel", "never mind", "nevermind", "stop")) {
@@ -1362,7 +1412,7 @@ class MainActivity : Activity() {
                 val idea = rawSpokenAnswer
                 sendMessageToIrai("Draft a polished email based on this intent. Return only the email subject and body in this exact format: SUBJECT: ... then a blank line then BODY: ... Preserve facts and do not invent details. User intent: " + idea) { draft ->
                     if (draft.isBlank() || draft.contains("couldn't connect", true) || draft.contains("could not", true)) speakResponse("I couldn't create the email draft. Please try again.")
-                    else showEmailDraftConfirmation(draft.trim())
+                    else prepareEmailVoiceConfirmation(draft.trim())
                 }
             }
             return
@@ -1380,7 +1430,7 @@ class MainActivity : Activity() {
                 val idea = rawSpokenAnswer
                 sendMessageToIrai("Write a clear, natural text message based on the user intent. Keep it concise for SMS, preserve all facts, do not invent details, and return only the message body: " + idea) { draft ->
                     if (draft.isBlank() || draft.contains("could not", true) || draft.contains("couldn", true)) speakResponse("I could not create the draft. Please try again.")
-                    else showSmsDraftConfirmation(draft.trim().trim('"'))
+                    else prepareSmsVoiceConfirmation(draft.trim().trim('"'))
                 }
             }
             return
@@ -1492,8 +1542,15 @@ class MainActivity : Activity() {
             startCallFlow(text.removePrefix("call ").trim())
             return
         }
-        if (text in listOf("email", "write an email", "compose an email", "send an email", "email someone") || text.startsWith("email ") || text.startsWith("send an email to ")) {
-            startEmailFlow()
+        if (text in listOf("email", "write an email", "compose an email", "send an email", "email someone", "send email") ||
+            text.startsWith("email ") || text.startsWith("send an email to ") || text.startsWith("send email to ")) {
+            val recipient = when {
+                text.startsWith("send an email to ") -> routedCommand.substringAfter("send an email to ").trim()
+                text.startsWith("send email to ") -> routedCommand.substringAfter("send email to ").trim()
+                text.startsWith("email ") -> routedCommand.substringAfter("email ").trim()
+                else -> ""
+            }
+            beginVoiceCommunication("email", recipient)
             return
         }
 
@@ -1503,8 +1560,16 @@ class MainActivity : Activity() {
             sendCurrentlyTypedMessage()
             return
         }
-        if (text in listOf("text message", "write a text", "write a text message", "send a text", "send a text message", "help me write a text", "compose a text", "message someone", "text someone") || text.startsWith("text ") || text.startsWith("send a text to ") || text.startsWith("send a message to ") || text.startsWith("message ")) {
-            startTextMessageFlow()
+        if (text in listOf("text message", "write a text", "write a text message", "send a text", "send a text message", "help me write a text", "compose a text", "message someone", "text someone") ||
+            text.startsWith("text ") || text.startsWith("send a text to ") || text.startsWith("send a message to ") || text.startsWith("message ")) {
+            val recipient = when {
+                text.startsWith("send a text to ") -> routedCommand.substringAfter("send a text to ").trim()
+                text.startsWith("send a message to ") -> routedCommand.substringAfter("send a message to ").trim()
+                text.startsWith("text ") -> routedCommand.substringAfter("text ").trim()
+                text.startsWith("message ") -> routedCommand.substringAfter("message ").trim()
+                else -> ""
+            }
+            beginVoiceCommunication("sms", recipient)
             return
         }
 
@@ -2044,6 +2109,97 @@ class MainActivity : Activity() {
             .show()
     }
 
+    private fun beginVoiceCommunication(mode: String, recipient: String) {
+        pendingCommunicationMode = mode
+        pendingCommunicationContacts.clear()
+        if (recipient.isBlank()) {
+            awaitingCommunicationRecipientChoice = true
+            speakResponse(if (mode == "email") "Who should I email? Say the contact name, or say cancel." else "Who should I text? Say the contact name, or say cancel.")
+            return
+        }
+        lookupCommunicationContact(recipient)
+    }
+
+    private fun lookupCommunicationContact(name: String) {
+        val query = name.trim()
+        if (query.isBlank()) { awaitingCommunicationRecipientChoice = true; speakResponse("Please say the recipient name, or say cancel."); return }
+        pendingCommunicationRecipientQuery = query
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), communicationContactsPermissionRequestCode)
+            return
+        }
+        val matches = mutableListOf<Pair<String, String>>()
+        try {
+            val baseUri = if (pendingCommunicationMode == "email") ContactsContract.CommonDataKinds.Email.CONTENT_FILTER_URI else ContactsContract.CommonDataKinds.Phone.CONTENT_FILTER_URI
+            val uri = baseUri.buildUpon().appendPath(query).build()
+            val projection = if (pendingCommunicationMode == "email") arrayOf(ContactsContract.CommonDataKinds.Email.DISPLAY_NAME, ContactsContract.CommonDataKinds.Email.ADDRESS) else arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER)
+            contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                while (cursor.moveToNext() && matches.size < 8) {
+                    val displayName = cursor.getString(0).orEmpty()
+                    val destination = cursor.getString(1).orEmpty().trim()
+                    if (destination.isNotBlank() && matches.none { it.second.equals(destination, true) }) matches.add((displayName.ifBlank { query }) to destination)
+                }
+            }
+        } catch (error: Exception) { android.util.Log.e("IRAI_COMMUNICATION", "Contact lookup failed", error) }
+        pendingCommunicationContacts.clear()
+        pendingCommunicationContacts.addAll(matches)
+        when (matches.size) {
+            0 -> { awaitingCommunicationRecipientChoice = true; speakResponse("I could not find a matching recipient for $query. Say another name, or say cancel.") }
+            1 -> selectCommunicationContact(0)
+            else -> {
+                awaitingCommunicationRecipientChoice = true
+                val choices = matches.mapIndexed { index, match -> (index + 1).toString() + ", " + match.first }
+                speakResponse("I found ${matches.size} matches: ${choices.joinToString("; ")}. Say the number of the person you mean, or cancel.")
+            }
+        }
+    }
+
+    private fun selectCommunicationContact(index: Int) {
+        val selected = pendingCommunicationContacts.getOrNull(index) ?: return
+        pendingCommunicationContacts.clear()
+        awaitingCommunicationRecipientChoice = false
+        if (pendingCommunicationMode == "email") {
+            pendingEmailName = selected.first; pendingEmailAddress = selected.second; awaitingEmailIntent = true
+            speakResponse("What should I write in the email to ${selected.first}? Tell me the purpose and important details. Say cancel to stop.")
+        } else {
+            pendingSmsContactName = selected.first; pendingSmsPhone = selected.second; awaitingSmsMessage = true
+            speakResponse("What should I write in the text to ${selected.first}? Tell me the message. Say cancel to stop.")
+        }
+    }
+
+    private fun prepareEmailVoiceConfirmation(draft: String) {
+        val subject = Regex("(?im)^SUBJECT:\\s*(.*)$").find(draft)?.groupValues?.get(1)?.trim().orEmpty()
+        val body = Regex("(?ims)^BODY:\\s*(.*)$").find(draft)?.groupValues?.get(1)?.trim().orEmpty().ifBlank { draft }
+        pendingCommunicationSubject = subject; pendingCommunicationBody = body; awaitingCommunicationSendConfirmation = true
+        val spoken = buildString { append("Here is the email draft to ").append(pendingEmailName).append(". "); if (subject.isNotBlank()) append("Subject: ").append(subject).append(". "); append("Message: ").append(body).append(". Say send it to open your email app with this draft, or say cancel. I will not send it automatically.") }
+        speakResponse(spoken)
+    }
+
+    private fun prepareSmsVoiceConfirmation(draft: String) {
+        pendingCommunicationSubject = ""; pendingCommunicationBody = draft; awaitingCommunicationSendConfirmation = true
+        speakResponse("Here is the text to ${pendingSmsContactName}: $draft. Say send it to open your messaging app with this draft, or say cancel. I will not send it automatically.")
+    }
+
+    private fun sendPendingCommunication() {
+        val mode = pendingCommunicationMode
+        val recipient = if (mode == "email") pendingEmailAddress else pendingSmsPhone
+        val name = if (mode == "email") pendingEmailName else pendingSmsContactName
+        val body = pendingCommunicationBody; val subject = pendingCommunicationSubject
+        if (recipient.isBlank() || body.isBlank()) { clearPendingCommunication(); speakResponse("I do not have a complete recipient and message. Nothing was sent."); return }
+        try {
+            val intent = if (mode == "email") Intent(Intent.ACTION_SENDTO).apply { data = Uri.parse("mailto:"); putExtra(Intent.EXTRA_EMAIL, arrayOf(recipient)); putExtra(Intent.EXTRA_SUBJECT, subject); putExtra(Intent.EXTRA_TEXT, body) }
+                else Intent(Intent.ACTION_SENDTO).apply { data = Uri.fromParts("smsto", recipient, null); putExtra("sms_body", body) }
+            clearPendingCommunication()
+            startActivity(intent)
+            speakResponse(if (mode == "email") "I opened your email app with the draft addressed to $name. Please review it and press Send." else "I opened your messaging app with the draft addressed to $name. Please review it and press Send.")
+        } catch (error: Exception) { android.util.Log.e("IRAI_COMMUNICATION", "Could not open compose app", error); clearPendingCommunication(); speakResponse("I could not open the appropriate app. Nothing was sent.") }
+    }
+
+    private fun clearPendingCommunication() {
+        awaitingEmailIntent = false; awaitingSmsMessage = false; awaitingCommunicationRecipientChoice = false; awaitingCommunicationSendConfirmation = false
+        pendingCommunicationMode = ""; pendingCommunicationRecipientQuery = ""; pendingCommunicationContacts.clear()
+        pendingCommunicationSubject = ""; pendingCommunicationBody = ""; pendingEmailAddress = ""; pendingEmailName = ""; clearPendingSms()
+    }
     private fun startEmailFlow() {
         AlertDialog.Builder(this)
             .setTitle("Choose an email recipient")
