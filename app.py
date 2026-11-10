@@ -10,6 +10,9 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import hmac
 import hashlib
+import secrets
+import smtplib
+from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -139,6 +142,7 @@ def initialize_database():
             "stripe_period_end": "TEXT",
             "stripe_price_id": "TEXT",
             "phone_number": "TEXT",
+            "email_verified": "BOOLEAN NOT NULL DEFAULT FALSE" if conn.is_postgres else "INTEGER NOT NULL DEFAULT 0",
             "google_purchase_token_hash": "TEXT",
             "google_subscription_product": "TEXT",
             "google_subscription_state": "TEXT",
@@ -154,6 +158,16 @@ def initialize_database():
             if column not in columns:
                 conn.execute(f"ALTER TABLE accounts ADD COLUMN {column} {column_type}")
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS account_email_tokens (
+                account_id BIGINT NOT NULL,
+                purpose TEXT NOT NULL,
+                token_hash TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (account_id, purpose)
+            )
+        """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS monthly_ai_usage (
                 account_id BIGINT NOT NULL,
@@ -322,6 +336,134 @@ def health():
     return jsonify(status="ok"), 200
 
 
+
+# One-time email links. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD,
+# SMTP_FROM and PUBLIC_API_URL in the server environment (never in the app).
+def _send_account_email(address, subject, body):
+    host = os.environ.get("SMTP_HOST", "").strip()
+    sender = os.environ.get("SMTP_FROM", "").strip()
+    if not host or not sender:
+        app.logger.error("Account email delivery is not configured")
+        return False
+    message = EmailMessage()
+    message["From"] = sender
+    message["To"] = address
+    message["Subject"] = subject
+    message.set_content(body)
+    try:
+        with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", "587")), timeout=15) as smtp:
+            smtp.starttls()
+            user = os.environ.get("SMTP_USER", "")
+            if user:
+                smtp.login(user, os.environ.get("SMTP_PASSWORD", ""))
+            smtp.send_message(message)
+        return True
+    except Exception:
+        app.logger.exception("Account email delivery failed")
+        return False
+
+
+def _issue_account_token(account_id, email, purpose):
+    # Throttle repeated requests and keep only a SHA-256 digest in the database.
+    now = datetime.now(timezone.utc)
+    with get_db() as conn:
+        previous = conn.execute(
+            "SELECT created_at FROM account_email_tokens WHERE account_id=? AND purpose=?",
+            (account_id, purpose),
+        ).fetchone()
+        if previous and (now - datetime.fromisoformat(previous["created_at"])).total_seconds() < 90:
+            return False
+        token = secrets.token_urlsafe(32)
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        conn.execute("DELETE FROM account_email_tokens WHERE account_id=? AND purpose=?", (account_id, purpose))
+        conn.execute(
+            "INSERT INTO account_email_tokens (account_id, purpose, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
+            (account_id, purpose, digest, (now + timedelta(minutes=30)).isoformat(), now.isoformat()),
+        )
+    base = os.environ.get("PUBLIC_API_URL", "").rstrip("/")
+    if not base.startswith("https://"):
+        app.logger.error("PUBLIC_API_URL must be an HTTPS URL")
+        return False
+    url = base + "/api/account/" + purpose + "?token=" + token
+    label = "Verify your Irai email" if purpose == "verify" else "Reset your Irai password"
+    return _send_account_email(email, label, "Use this link within 30 minutes:\n" + url + "\n\nIf you did not request this, ignore this email.")
+
+
+@app.post("/api/account/request-verification")
+def request_email_verification():
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email") or "").strip().lower()
+    with get_db() as conn:
+        account = conn.execute("SELECT id, email_verified FROM accounts WHERE email=?", (email,)).fetchone()
+    if account and not account["email_verified"]:
+        _issue_account_token(account["id"], email, "verify")
+    return jsonify(message="If the account needs verification, an email will be sent."), 200
+
+
+@app.get("/api/account/verify")
+def verify_email_link():
+    token = request.args.get("token", "")
+    if len(token) < 30:
+        return "Invalid verification link.", 400
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        record = conn.execute(
+            "SELECT account_id FROM account_email_tokens WHERE purpose=? AND token_hash=? AND expires_at>?",
+            ("verify", digest, now),
+        ).fetchone()
+        if not record:
+            return "This link is invalid or expired.", 400
+        conn.execute("UPDATE accounts SET email_verified=? WHERE id=?", (True, record["account_id"]))
+        conn.execute("DELETE FROM account_email_tokens WHERE account_id=? AND purpose=?", (record["account_id"], "verify"))
+    return "Email verified. You can return to Irai and sign in.", 200
+
+
+@app.post("/api/account/forgot-password")
+def forgot_password():
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email") or "").strip().lower()
+    with get_db() as conn:
+        account = conn.execute("SELECT id FROM accounts WHERE email=?", (email,)).fetchone()
+    if account:
+        _issue_account_token(account["id"], email, "reset")
+    return jsonify(message="If that email is registered, a recovery link will be sent."), 200
+
+
+@app.route("/api/account/reset", methods=["GET", "POST"])
+def reset_password():
+    token = request.values.get("token", "")
+    if request.is_json:
+        token = (request.get_json(silent=True) or {}).get("token", "")
+    if not isinstance(token, str) or len(token) < 30:
+        return "Invalid recovery link.", 400
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    now = datetime.now(timezone.utc).isoformat()
+    if request.method == "GET":
+        from html import escape
+        return ('<html><meta name="viewport" content="width=device-width, initial-scale=1">'
+                '<h2>Reset Irai password</h2><form method="post">'
+                '<input type="hidden" name="token" value="' + escape(token, quote=True) + '">'
+                '<input type="password" name="password" minlength="12" autocomplete="new-password" required placeholder="New password (12+ characters)">'
+                '<button type="submit">Reset password</button></form></html>')
+    password = request.values.get("password", "")
+    if request.is_json:
+        password = (request.get_json(silent=True) or {}).get("password", "")
+    if not isinstance(password, str) or len(password) < 12:
+        return "Password must have at least 12 characters.", 400
+    with get_db() as conn:
+        record = conn.execute(
+            "SELECT account_id FROM account_email_tokens WHERE purpose=? AND token_hash=? AND expires_at>?",
+            ("reset", digest, now),
+        ).fetchone()
+        if not record:
+            return "This recovery link is invalid or expired.", 400
+        conn.execute("UPDATE accounts SET password_hash=? WHERE id=?",
+                     (generate_password_hash(password), record["account_id"]))
+        conn.execute("DELETE FROM account_email_tokens WHERE account_id=?", (record["account_id"],))
+    return "Password changed. Please sign in with your new password.", 200
+
+
 @app.post("/api/register")
 def register():
     data = request.get_json(silent=True) or {}
@@ -356,9 +498,10 @@ def register():
             message="This email is already registered"
         ), 409
 
-    return jsonify(
-        message="Account created. You can now sign in."
-    ), 201
+    with get_db() as conn:
+        new_account = conn.execute("SELECT id FROM accounts WHERE email=?", (email,)).fetchone()
+    _issue_account_token(new_account["id"], email, "verify")
+    return jsonify(message="Account created. Check your email for a verification link before signing in."), 201
 
 
 @app.post("/api/login")
@@ -388,6 +531,11 @@ def login():
         account["password_hash"], password
     ):
         return jsonify(message="Invalid email or password"), 401
+
+    with get_db() as conn:
+        verification = conn.execute("SELECT email_verified FROM accounts WHERE id=?", (account["id"],)).fetchone()
+    if not verification or not verification["email_verified"]:
+        return jsonify(message="Please verify your email before signing in. You can request a new verification link."), 403
 
     session.clear()
     session.permanent = True
