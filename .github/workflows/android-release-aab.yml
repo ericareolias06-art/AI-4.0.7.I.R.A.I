@@ -41,8 +41,8 @@ jobs:
           if [ -f app/upload-key.jks ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
             ./gradlew --no-daemon bundleRelease -PIRAI_UPLOAD_STORE_FILE=upload-key.jks -PIRAI_UPLOAD_STORE_PASSWORD="$STORE_PASSWORD" -PIRAI_UPLOAD_KEY_ALIAS="$KEY_ALIAS" -PIRAI_UPLOAD_KEY_PASSWORD="$KEY_PASSWORD"
           else
-            echo "Signing secrets missing; generating UNSIGNED bundle (not Play-uploadable)."
-            ./gradlew --no-daemon bundleRelease
+            echo "::error::Release signing secrets are missing. Refusing to publish an unsigned Play AAB."
+            exit 1
           fi
       - uses: actions/upload-artifact@v4
         with:
