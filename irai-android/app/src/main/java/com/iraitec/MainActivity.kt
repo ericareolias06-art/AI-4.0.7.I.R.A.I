@@ -124,6 +124,8 @@ class MainActivity : Activity() {
     private val smsContactRequestCode = 2305
     private val callContactRequestCode = 2306
     private val emailContactRequestCode = 2307
+    private val callContactsPermissionRequestCode = 2308
+    private var pendingCallContactName = ""
     private var awaitingEmailIntent = false
     private var pendingEmailAddress = ""
     private var pendingEmailName = ""
@@ -724,6 +726,15 @@ class MainActivity : Activity() {
 
         when (requestCode) {
             1002 -> requestMicrophonePermissionAfterNotifications()
+            callContactsPermissionRequestCode -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    lookupAndConfirmContactCall(pendingCallContactName)
+                } else {
+                    pendingCallContactName = ""
+                    speakResponse("I need permission to look up that contact. You can choose the contact manually instead.")
+                    startCallFlow("")
+                }
+            }
             1001 -> {
                 if (grantResults.isNotEmpty() &&
                     grantResults[0] == PackageManager.PERMISSION_GRANTED
@@ -1975,12 +1986,50 @@ class MainActivity : Activity() {
             confirmPlaceCall(spokenTarget, spokenTarget)
             return
         }
+        if (spokenTarget.isNotBlank()) {
+            pendingCallContactName = spokenTarget
+            if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), callContactsPermissionRequestCode)
+            } else lookupAndConfirmContactCall(spokenTarget)
+            return
+        }
         try {
             val intent = Intent(Intent.ACTION_PICK).apply {
                 setDataAndType(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE)
             }
             startActivityForResult(intent, callContactRequestCode)
         } catch (_: Exception) { speakResponse("I could not open your contacts. You can say call followed by a phone number.") }
+    }
+
+    private fun lookupAndConfirmContactCall(name: String) {
+        pendingCallContactName = ""
+        val matches = mutableListOf<Pair<String, String>>()
+        try {
+            val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_FILTER_URI.buildUpon().appendPath(name).build()
+            contentResolver.query(uri, arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER), null, null, null)?.use { cursor ->
+                while (cursor.moveToNext() && matches.size < 8) {
+                    val contactName = cursor.getString(0).orEmpty()
+                    val number = cursor.getString(1).orEmpty()
+                    if (number.isNotBlank() && matches.none { it.second == number }) matches.add(contactName to number)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("IRAI_CALL", "Contact lookup failed", e)
+        }
+        when (matches.size) {
+            0 -> {
+                speakResponse("I couldn't find a phone number for " + name + ". Please try another name or choose a contact.")
+                startCallFlow("")
+            }
+            1 -> confirmPlaceCall(matches[0].first, matches[0].second)
+            else -> AlertDialog.Builder(this)
+                .setTitle("Which " + name + "?")
+                .setItems(matches.map { it.first + " — " + it.second }.toTypedArray()) { _, which ->
+                    confirmPlaceCall(matches[which].first, matches[which].second)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
     private fun confirmPlaceCall(name: String, number: String) {
