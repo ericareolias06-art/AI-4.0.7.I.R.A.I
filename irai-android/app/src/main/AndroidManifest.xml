@@ -15,7 +15,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <application
         android:allowBackup="false"
-        android:label="Irai Tec"
+        android:label="I.R.A.I Tec"
         android:icon="@drawable/irai_avatar"
         android:roundIcon="@drawable/irai_avatar"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
@@ -30,7 +30,7 @@
         </activity>
         <service
             android:name=".IraiAssistAccessibilityService"
-            android:label="Irai Guided Assistance"
+            android:label="I.R.A.I Guided Assistance"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
             <intent-filter>
