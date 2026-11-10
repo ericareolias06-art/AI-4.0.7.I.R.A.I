@@ -3069,7 +3069,8 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(17), dp(20), dp(17))
             background = GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(Color.rgb(255, 214, 190), Color.rgb(250, 174, 174), Color.rgb(239, 157, 178))
+                if (isBlueAppearance()) intArrayOf(Color.rgb(31, 83, 130), Color.rgb(39, 115, 157), Color.rgb(43, 139, 166))
+                else intArrayOf(Color.rgb(255, 214, 190), Color.rgb(250, 174, 174), Color.rgb(239, 157, 178))
             ).apply {
                 cornerRadius = dp(24).toFloat()
                 setStroke(dp(2), Color.rgb(255, 239, 220))
@@ -3262,10 +3263,7 @@ class MainActivity : Activity() {
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.TOP
         root.setPadding(dp(20), dp(28), dp(20), dp(18))
-        root.background = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
-        )
+        root.background = appearanceGradient()
         root.addView(screenHeader("Features", true) { showHome(currentEmail) })
         val scroll = ScrollView(this).apply { isFillViewport = true }
         val content = LinearLayout(this).apply {
