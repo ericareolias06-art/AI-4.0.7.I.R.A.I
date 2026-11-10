@@ -114,7 +114,7 @@ class MainActivity : Activity() {
     private val pageScanRequestCode = 2301
     private val pdfImportRequestCode = 2302
     private val vaultUnlockRequestCode = 2303
-    private var pendingVaultPassword: String? = null
+    private var pendingVaultAccount: String? = null
     private var pendingVaultPasswordField: String? = null
     private var pendingScanImageUri: Uri? = null
     private var pendingScanPrompt = "Read this page and guide me through it"
@@ -1000,13 +1000,19 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == vaultUnlockRequestCode) {
-            val password = pendingVaultPassword
+            val accountName = pendingVaultAccount
             val field = pendingVaultPasswordField
-            pendingVaultPassword = null
+            pendingVaultAccount = null
             pendingVaultPasswordField = null
-            if (resultCode == RESULT_OK && !password.isNullOrEmpty() && !field.isNullOrBlank()) {
-                val entered = IraiAssistAccessibilityService.enterStoredPassword(field, password)
-                speakResponse(if (entered) "I've entered the saved password. I will not read it aloud." else "I couldn't safely identify the password field.")
+            if (resultCode == RESULT_OK && !accountName.isNullOrBlank() && !field.isNullOrBlank()) {
+                // Decrypt the password only after Android has verified the device lock.
+                val password = personalVault().getCredentialPassword(accountName)
+                if (password.isBlank()) {
+                    speakResponse("I couldn't unlock that saved credential. I did not enter anything.")
+                } else {
+                    val entered = IraiAssistAccessibilityService.enterStoredPassword(field, password)
+                    speakResponse(if (entered) "I've entered the saved password. I will not read it aloud." else "I couldn't safely identify the password field.")
+                }
             } else {
                 speakResponse("Device verification was cancelled. I did not enter the password.")
             }
@@ -2674,8 +2680,7 @@ class MainActivity : Activity() {
             speakResponse("Tell me which saved account password you want to use.")
             return
         }
-        val password = personalVault().getCredentialPassword(serviceName)
-        if (password.isBlank()) {
+        if (serviceName.trim().lowercase(Locale.US) !in personalVault().credentialLabels()) {
             speakResponse("I couldn't find a saved password for ${serviceName}. You can add it in Settings, Personal Vault.")
             return
         }
@@ -2688,11 +2693,11 @@ class MainActivity : Activity() {
             "Use saved password for ${serviceName}?",
             "I will first ask Android to verify your device screen lock, then enter the saved password directly from this device's encrypted vault. I will not send it to the AI service or speak it aloud."
         ) {
-            requestDeviceUnlockForVaultPassword(fields.first(), password)
+            requestDeviceUnlockForVaultPassword(fields.first(), serviceName)
         }
     }
 
-    private fun requestDeviceUnlockForVaultPassword(field: String, password: String) {
+    private fun requestDeviceUnlockForVaultPassword(field: String, accountName: String) {
         val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
         if (!keyguard.isDeviceSecure) {
             speakResponse("To use saved passwords, first set a screen lock PIN, pattern, or password in your Android settings.")
@@ -2706,7 +2711,7 @@ class MainActivity : Activity() {
             speakResponse("Android couldn't open device verification. Your saved password was not used.")
             return
         }
-        pendingVaultPassword = password
+        pendingVaultAccount = accountName
         pendingVaultPasswordField = field
         try {
             startActivityForResult(intent, vaultUnlockRequestCode)
