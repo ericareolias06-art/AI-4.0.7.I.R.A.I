@@ -975,7 +975,7 @@ class MainActivity : Activity() {
             return
         }
         speakResponse("I'll read the text and controls this app makes available to Accessibility. I will not take a screenshot. Some pages may hide their content.")
-        val accessible = redactSensitiveScreenText(IraiAssistAccessibilityService.readCurrentScreen())
+        val accessible = IraiAssistAccessibilityService.readCurrentScreen()
         val controls = IraiAssistAccessibilityService.describeCurrentForm()
         if (accessible.isBlank() && controls.isBlank()) {
             speakResponse("This app isn't exposing readable page text to Accessibility, so I can't inspect this screen without image capture. You can open the page in a browser or share its text with me.")
@@ -1012,7 +1012,8 @@ class MainActivity : Activity() {
     }
 
     private fun sendCurrentScreenToAi(prompt: String, screenText: String, controls: String) {
-        val text = screenText.take(6500)
+        // Apply the same redaction to every Guided Assistance path before sending screen text to the AI.
+        val text = redactSensitiveScreenText(screenText).take(6500)
         val formControls = controls.take(3500)
         if (text.isBlank() && formControls.isBlank()) {
             speakResponse("I couldn't find readable information on this screen.")
