@@ -139,6 +139,10 @@ def initialize_database():
             "stripe_period_end": "TEXT",
             "stripe_price_id": "TEXT",
             "phone_number": "TEXT",
+            "google_purchase_token_hash": "TEXT",
+            "google_subscription_product": "TEXT",
+            "google_subscription_state": "TEXT",
+            "google_subscription_expiry": "TEXT",
             # Existing accounts are treated as having already passed onboarding.
             # New accounts explicitly set this to FALSE during registration.
             "tutorial_completed": (
@@ -150,6 +154,14 @@ def initialize_database():
             if column not in columns:
                 conn.execute(f"ALTER TABLE accounts ADD COLUMN {column} {column_type}")
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS monthly_ai_usage (
+                account_id BIGINT NOT NULL,
+                month TEXT NOT NULL,
+                messages INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (account_id, month)
+            )
+        """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS promo_redemptions (
                 account_id BIGINT NOT NULL,
@@ -185,6 +197,14 @@ def has_active_premium(account):
     promo_expiry = parse_expiry(account["premium_until"])
 
     if promo_expiry and promo_expiry > now:
+        return True
+
+    google_expiry = parse_expiry(account["google_subscription_expiry"])
+    google_state = account["google_subscription_state"]
+    if google_expiry and google_expiry > now and google_state in (
+        "SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
+        "SUBSCRIPTION_STATE_CANCELED",
+    ):
         return True
 
     status = account["stripe_subscription_status"]
@@ -256,7 +276,7 @@ def sync_subscription(subscription, fallback_account_id=None):
         if account is None and account_id:
             try:
                 account = conn.execute(
-                    "SELECT id FROM accounts WHERE id = ?",
+                    "SELECT * FROM accounts WHERE id = ?",
                     (int(account_id),),
                 ).fetchone()
             except (TypeError, ValueError):
@@ -355,6 +375,7 @@ def login():
         account = conn.execute(
             """
             SELECT id, email, password_hash, premium_until,
+                   google_subscription_state, google_subscription_expiry,
                    stripe_subscription_status, stripe_period_end,
                    tutorial_completed
             FROM accounts
@@ -390,6 +411,8 @@ def current_account():
         account = conn.execute(
             """
             SELECT id, email, phone_number, premium_until,
+                   google_subscription_product, google_subscription_state,
+                   google_subscription_expiry,
                    stripe_subscription_status, stripe_period_end,
                    tutorial_completed
             FROM accounts
@@ -407,6 +430,8 @@ def current_account():
         phone_number=account["phone_number"],
         premium=has_active_premium(account),
         premium_until=account["premium_until"],
+        google_plan=account["google_subscription_product"],
+        google_subscription_expiry=account["google_subscription_expiry"],
         subscription_status=account["stripe_subscription_status"],
         subscription_period_end=account["stripe_period_end"],
         tutorial_required=not bool(account["tutorial_completed"]),
@@ -921,6 +946,31 @@ def ai_chat():
         session.clear()
         return jsonify(message="Account not found. Please log in again."), 401
 
+    if not has_active_premium(account):
+        return jsonify(message="Subscription required.", subscription_required=True), 402
+
+    plan = account["google_subscription_product"]
+    limit = {"irai_starter": 300, "irai_plus": 1200,
+             "irai_premium": 3000, "irai_ultimate": 6000}.get(plan, 300)
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO monthly_ai_usage (account_id, month, messages) "
+                "VALUES (?, ?, 0) ON CONFLICT (account_id, month) DO NOTHING",
+                (account_id, month),
+            )
+            updated = conn.execute(
+                "UPDATE monthly_ai_usage SET messages = messages + 1 "
+                "WHERE account_id = ? AND month = ? AND messages < ?",
+                (account_id, month, limit),
+            )
+            if updated.rowcount != 1:
+                return jsonify(message="Monthly message allowance reached."), 429
+    except (sqlite3.Error, psycopg2.Error):
+        app.logger.exception("Usage counter unavailable")
+        return jsonify(message="Message allowance unavailable."), 503
+
     now = time.monotonic()
 
     with _ai_rate_lock:
@@ -1078,6 +1128,10 @@ def delete_account():
                         )
                     ), 502
 
+            conn.execute(
+                "DELETE FROM monthly_ai_usage WHERE account_id = ?",
+                (account_id,),
+            )
             conn.execute(
                 "DELETE FROM promo_redemptions WHERE account_id = ?",
                 (account_id,),
