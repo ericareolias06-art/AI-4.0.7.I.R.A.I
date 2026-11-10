@@ -123,6 +123,26 @@ class IraiAssistAccessibilityService : AccessibilityService() {
      * Return labels for visible, ordinary editable fields. Never returns values
      * typed into fields, and excludes password and other protected controls.
      */
+    fun listPasswordFieldLabels(maxItems: Int = 10): List<String> {
+        val root = rootInActiveWindow ?: return emptyList()
+        val labels = mutableListOf<String>()
+        fun walk(node: AccessibilityNodeInfo) {
+            if (labels.size >= maxItems || !node.isVisibleToUser) return
+            if (node.isEditable && node.isPassword) {
+                val hint = if (Build.VERSION.SDK_INT >= 26) node.hintText?.toString().orEmpty() else ""
+                val description = node.contentDescription?.toString().orEmpty()
+                labels.add(sequenceOf(description, hint, "Password")
+                    .map { it.trim() }.first { it.isNotBlank() }.take(100))
+            }
+            for (i in 0 until node.childCount) {
+                if (labels.size >= maxItems) break
+                node.getChild(i)?.let { walk(it) }
+            }
+        }
+        walk(root)
+        return labels.distinct()
+    }
+
     fun listFillableFieldLabels(maxItems: Int = 60): List<String> {
         val root = rootInActiveWindow ?: return emptyList()
         val labels = mutableListOf<String>()
@@ -159,7 +179,10 @@ class IraiAssistAccessibilityService : AccessibilityService() {
 
     /** Explicitly invoked only for a credential selected from the local vault. */
     fun enterStoredPassword(targetField: String, password: String): Boolean {
-        if (password.isEmpty() || protectedFieldPattern.containsMatchIn(targetField)) return false
+        if (password.isEmpty() || Regex(
+                "\\b(card|cardholder|bank|routing|social security|tax id|ssn|cvv|cvc|verification|one.?time|recovery|otp)\\b",
+                RegexOption.IGNORE_CASE
+            ).containsMatchIn(targetField)) return false
         val root = rootInActiveWindow ?: return false
         val node = findBestMatchingNode(root, targetField, editableOnly = true) ?: return false
         if (!node.isEnabled || !node.isPassword && !isProtectedField(node)) {
@@ -323,6 +346,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         fun readCurrentScreen(): String = activeService?.readVisibleText().orEmpty()
         fun describeCurrentForm(): String = activeService?.describeVisibleForm().orEmpty()
         fun fillableFieldLabels(): List<String> = activeService?.listFillableFieldLabels().orEmpty()
+        fun passwordFieldLabels(): List<String> = activeService?.listPasswordFieldLabels().orEmpty()
         fun tapText(target: String): Boolean = activeService?.tapVisibleText(target) ?: false
         fun typeIntoField(target: String, value: String): Boolean = activeService?.enterText(target, value) ?: false
         fun setOptionChecked(target: String, checked: Boolean): Boolean = activeService?.setCheckableState(target, checked) ?: false
