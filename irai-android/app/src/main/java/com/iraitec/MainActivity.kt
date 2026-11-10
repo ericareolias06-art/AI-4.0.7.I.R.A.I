@@ -486,12 +486,59 @@ class MainActivity : Activity() {
             }
         })
 
+        content.addView(TextView(this).apply {
+            text = "Forgot password?"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(accent)
+            setPadding(8, 14, 8, 14)
+            setOnClickListener { requestAccountEmailLink("/api/account/forgot-password") }
+        })
+        content.addView(TextView(this).apply {
+            text = "Resend verification email"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(accent)
+            setPadding(8, 12, 8, 12)
+            setOnClickListener { requestAccountEmailLink("/api/account/request-verification") }
+        })
         message = label("", 14, muted)
         content.addView(message)
 
         scroll.addView(content)
         root.addView(scroll)
         setContentView(root)
+    }
+
+    private fun requestAccountEmailLink(endpoint: String) {
+        val email = emailInput.text.toString().trim()
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            message.text = "Enter your email address first."
+            return
+        }
+        message.text = "Requesting an email link..."
+        thread {
+            var feedback = "Couldn't request the email link. Please try again."
+            try {
+                val connection = openApiConnection(endpoint)
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 20000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use {
+                    it.write(JSONObject().put("email", email).toString().toByteArray(Charsets.UTF_8))
+                }
+                val stream = if (connection.responseCode in 200..299)
+                    connection.inputStream else connection.errorStream
+                val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                feedback = JSONObject(response).optString("message", feedback)
+                connection.disconnect()
+            } catch (error: Exception) {
+                android.util.Log.e("IRAI_AUTH", "Account email request failed", error)
+            }
+            runOnUiThread { message.text = feedback }
+        }
     }
 
     private fun submitAuth() {
