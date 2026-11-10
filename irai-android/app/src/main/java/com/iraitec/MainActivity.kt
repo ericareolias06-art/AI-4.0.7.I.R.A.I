@@ -2639,7 +2639,7 @@ class MainActivity : Activity() {
         val field = pendingFormFields[pendingFormIndex]
         val value = field.value
         if (value != null) {
-            val entered = IraiAssistAccessibilityService.typeIntoField(field.label, value)
+            val entered = IraiAssistAccessibilityService.fillEmptyField(field.label, value)
             if (!entered) {
                 pendingFormFields[pendingFormIndex] = field.copy(value = null)
                 askForNextFormAnswer()
