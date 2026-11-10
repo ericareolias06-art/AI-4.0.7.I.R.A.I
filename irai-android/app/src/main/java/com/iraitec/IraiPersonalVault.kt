@@ -119,6 +119,16 @@ class IraiPersonalVault(context: Context, accountScope: String) {
     }
 
     @Synchronized
+    fun getCredentialUsername(label: String): String {
+        val payload = readPayload()
+        if (payload.optBoolean("_vault_error")) return ""
+        return payload.optJSONObject("credentials")
+            ?.optJSONObject(label.trim().lowercase(Locale.US))
+            ?.optString("username", "")
+            .orEmpty()
+    }
+
+    @Synchronized
     fun getCredentialPassword(label: String): String {
         val payload = readPayload()
         if (payload.optBoolean("_vault_error")) return ""
