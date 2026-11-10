@@ -41,13 +41,11 @@ class IraiAssistAccessibilityService : AccessibilityService() {
 
     private fun appendVisibleText(node: AccessibilityNodeInfo, output: StringBuilder, maxChars: Int) {
         if (output.length >= maxChars || !node.isVisibleToUser) return
-        val isSensitiveInput = node.isPassword || node.isEditable
-        val text = if (isSensitiveInput) "" else node.text?.toString()?.trim().orEmpty()
-        val description = if (node.isPassword) "" else node.contentDescription?.toString()?.trim().orEmpty()
-        val hint = if (!node.isPassword && Build.VERSION.SDK_INT >= 26) node.hintText?.toString()?.trim().orEmpty() else ""
-        // Never copy what a user typed into a field into screen-reading AI requests.
-        val value = if (node.isEditable) hint.ifBlank { description }
-            else if (text.isNotBlank()) text else description
+        // Editable controls are never a source of screen-reading text. Even a
+        // content description can contain a dynamically populated field value.
+        val text = if (node.isPassword || node.isEditable) "" else node.text?.toString()?.trim().orEmpty()
+        val description = if (node.isPassword || node.isEditable) "" else node.contentDescription?.toString()?.trim().orEmpty()
+        val value = if (text.isNotBlank()) text else description
         if (value.isNotBlank() && !output.contains(value)) {
             if (output.isNotEmpty()) output.append('\n')
             output.append(value.take(maxChars - output.length))
@@ -72,8 +70,10 @@ class IraiAssistAccessibilityService : AccessibilityService() {
     private fun appendFormControls(node: AccessibilityNodeInfo, items: MutableList<String>, maxItems: Int) {
         if (items.size >= maxItems || !node.isVisibleToUser) return
         val hint = if (Build.VERSION.SDK_INT >= 26) node.hintText?.toString().orEmpty() else ""
+        // For editable controls, never trust contentDescription as a label:
+        // some apps put the current field value there.
         val labelParts = if (node.isEditable) {
-            listOf(node.contentDescription?.toString()?.trim().orEmpty(), hint.trim())
+            listOf(hint.trim())
         } else {
             listOf(node.text?.toString()?.trim().orEmpty(), node.contentDescription?.toString()?.trim().orEmpty(), hint.trim())
         }
