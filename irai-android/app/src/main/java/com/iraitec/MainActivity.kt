@@ -2667,10 +2667,10 @@ class MainActivity : Activity() {
                 root.gravity = Gravity.TOP
                 // Give the home header a little more breathing room from the top edge.
                 root.setPadding(20, 28, 20, 18)
-                root.background = GradientDrawable(
+                root.background = homeBackground(GradientDrawable(
                     GradientDrawable.Orientation.TOP_BOTTOM,
                     intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
-                )
+                ))
 
                 val topBar = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -3408,6 +3408,8 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Floating Irai is enabled.", Toast.LENGTH_SHORT).show()
             }
         })
+        content.addView(menuButton("Choose Home Background Photo", "Select a photo from your phone for the I.R.A.I home screen") { chooseHomeBackground() })
+        content.addView(menuButton("Remove Home Background Photo", "Restore the original sunrise background") { clearHomeBackground() })
         content.addView(menuButton("Personal Vault", "Encrypted personal details and saved account passwords stored only on this phone") {
             showPersonalVault()
         })
