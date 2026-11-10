@@ -462,6 +462,21 @@ class IraiAssistAccessibilityService : AccessibilityService() {
             return splitter.any { it.equals(expected, ignoreCase = true) }
         }
 
+        // The foreground app is a reliable navigation boundary; browser URL origins
+        // are NOT exposed reliably through Android accessibility APIs.
+        fun currentAppPackage(): String =
+            activeService?.rootInActiveWindow?.packageName?.toString().orEmpty()
+        fun isBrowserForeground(): Boolean {
+            val pkg = currentAppPackage().lowercase(Locale.US)
+            return pkg in setOf(
+                "com.android.chrome", "com.chrome.beta", "com.chrome.dev",
+                "org.mozilla.firefox", "org.mozilla.fenix",
+                "com.microsoft.emmx", "com.brave.browser",
+                "com.opera.browser", "com.opera.mini.native",
+                "com.sec.android.app.sbrowser", "com.duckduckgo.mobile.android",
+                "com.vivaldi.browser", "com.kiwibrowser.browser"
+            )
+        }
         fun readCurrentScreen(): String = activeService?.readVisibleText().orEmpty()
         fun describeCurrentForm(): String = activeService?.describeVisibleForm().orEmpty()
         fun fillableFieldLabels(): List<String> = activeService?.listFillableFieldLabels().orEmpty()
