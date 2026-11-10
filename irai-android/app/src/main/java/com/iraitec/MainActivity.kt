@@ -11,6 +11,10 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.pdf.PdfRenderer
 import android.graphics.Typeface
 import android.net.Uri
@@ -115,6 +119,17 @@ class MainActivity : Activity() {
     private val pageScanRequestCode = 2301
     private val pdfImportRequestCode = 2302
     private val vaultUnlockRequestCode = 2303
+    private val homeBackgroundRequestCode = 2304
+    private var awaitingVaultOnboardingChoice = false
+    private var awaitingVaultOnboardingAnswer = false
+    private var vaultOnboardingIndex = 0
+    private var vaultOnboardingAnswer = ""
+    private val vaultOnboardingFields = listOf(
+        "first_name" to "first name", "last_name" to "last name",
+        "email" to "email address", "phone" to "phone number",
+        "address" to "street address", "city" to "city",
+        "state" to "state", "postal_code" to "ZIP or postal code"
+    )
     private var pendingVaultAccount: String? = null
     private var pendingVaultPasswordField: String? = null
     private var pendingScanImageUri: Uri? = null
@@ -1032,6 +1047,16 @@ class MainActivity : Activity() {
                 }
             } else {
                 speakResponse("Device verification was cancelled. I did not enter the password.")
+            }
+            return
+        }
+        if (requestCode == homeBackgroundRequestCode) {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                val selected = data.data!!
+                try { contentResolver.takePersistableUriPermission(selected, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+                getSharedPreferences("irai_appearance", Context.MODE_PRIVATE).edit().putString("home_background_uri", selected.toString()).apply()
+                showHome(currentEmail)
+                Toast.makeText(this, "Home background photo updated.", Toast.LENGTH_SHORT).show()
             }
             return
         }
@@ -2033,13 +2058,14 @@ class MainActivity : Activity() {
     }
 
     private fun speakResponse(text: String) {
-        latestDiagnostic = "Irai: $text"
+        latestDiagnostic = "I.R.A.I: $text"
         IraiAvatarOverlay.setStatus("Speaking...")
         refreshDiagnostic()
+        val spokenText = text.replace(Regex("(?i)\\bI\\.?R\\.?A\\.?I\\b"), "eye ray")
 
         if (ttsReady) {
             speechTts?.speak(
-                text,
+                spokenText,
                 TextToSpeech.QUEUE_FLUSH,
                 null,
                 "irai_response"
@@ -2183,8 +2209,12 @@ class MainActivity : Activity() {
         }
         // Lower pitch provides a masculine-sounding fallback on devices that
         // don't expose a clearly named male English voice.
-        tts.setSpeechRate(0.88f)
-        tts.setPitch(0.82f)
+        val fallbackMaleVoice = englishVoices.filterNot { voice ->
+            listOf("female", "samantha", "jenny", "aria", "ava", "zira", "susan").any { voice.name.contains(it, true) }
+        }.maxByOrNull { it.quality }
+        (maleVoice ?: fallbackMaleVoice ?: originalTtsVoice)?.let { tts.voice = it }
+        tts.setSpeechRate(0.94f)
+        tts.setPitch(0.74f)
     }
 
     private fun showTutorialStep() {
@@ -2480,6 +2510,7 @@ class MainActivity : Activity() {
             runOnUiThread {
                 showHome(currentEmail)
                 requestMicrophonePermission()
+                handler.postDelayed({ offerPersonalVaultOnboarding() }, 4500L)
             }
         }
     }
