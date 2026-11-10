@@ -2531,15 +2531,7 @@ class MainActivity : Activity() {
                     setPadding(0, 8, 0, 20)
                 })
 
-                content.addView(menuButton("Open Notes", "Create, transcribe, and listen to your saved notes") {
-                    startNotesMode()
-                })
-                content.addView(menuButton("Scan a Page", "Photograph paperwork and let Irai read and explain it") {
-                    launchPageScan()
-                })
-                content.addView(menuButton("Import a PDF", "Read a PDF and get step-by-step help with its contents") {
-                    launchPdfImport()
-                })
+                content.addView(featuresEntryButton())
                 content.addView(menuButton("Shopping & Paperwork Help", "Get voice-guided help with online shopping, applications, forms, and websites") {
                     AlertDialog.Builder(this)
                         .setTitle("Irai Shopping & Paperwork Assistant")
@@ -2574,6 +2566,378 @@ class MainActivity : Activity() {
                 setContentView(root)
             }
         }
+    }
+
+    private fun featuresEntryButton(): LinearLayout {
+        val density = resources.displayMetrics.density
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(20), dp(17), dp(20), dp(17))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(255, 214, 190), Color.rgb(250, 174, 174), Color.rgb(239, 157, 178))
+            ).apply {
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(2), Color.rgb(255, 239, 220))
+            }
+            elevation = 7 * density
+            isClickable = true
+            isFocusable = true
+            contentDescription = "Features: Notes, Calculator, and Scan Forms"
+            addView(TextView(this@MainActivity).apply {
+                text = "✿   FEATURES   ✿"
+                textSize = 21f
+                typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                letterSpacing = 0.08f
+                gravity = Gravity.CENTER
+                setTextColor(Color.rgb(105, 53, 64))
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "🌷   🌼   🌸"
+                textSize = 25f
+                gravity = Gravity.CENTER
+                setPadding(0, dp(5), 0, dp(4))
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "Your little garden of helpful tools"
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTextColor(Color.rgb(112, 61, 68))
+            })
+            setOnClickListener { openFeaturesForFirstTimeIfNeeded() }
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                setMargins(0, dp(8), 0, dp(15))
+            }
+        }
+    }
+
+    private fun featureTutorialPrefs() =
+        getSharedPreferences("irai_feature_tutorial", Context.MODE_PRIVATE)
+
+    private fun featureTutorialKey() =
+        "completed_" + currentEmail.trim().lowercase(Locale.US)
+
+    private fun openFeaturesForFirstTimeIfNeeded() {
+        if (featureTutorialPrefs().getBoolean(featureTutorialKey(), false)) showFeatures()
+        else showFeaturesTutorial()
+    }
+
+    private fun completeFeaturesTutorial() {
+        featureTutorialPrefs().edit().putBoolean(featureTutorialKey(), true).apply()
+        speechTts?.stop()
+        showFeatures()
+    }
+
+    private fun showFeaturesTutorial() {
+        val steps = listOf(
+            "Welcome to your Features garden! This is where you can find Irai's handy tools whenever you need them.",
+            "Notes lets you create and name notes, transcribe your voice, save your thoughts on this phone, and listen to them later.",
+            "The Calculator handles everyday arithmetic, including addition, subtraction, multiplication, division, decimals, and parentheses.",
+            "Scan Forms opens your camera so I can read a paper form and help explain it. You can also import a PDF. Please avoid scanning private information you do not want processed."
+        )
+        var step = 0
+        root.removeAllViews()
+        root.orientation = LinearLayout.VERTICAL
+        root.gravity = Gravity.CENTER
+        root.setPadding(dp(24), dp(24), dp(24), dp(24))
+        root.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.rgb(255, 235, 216), Color.rgb(250, 190, 181), Color.rgb(239, 157, 174))
+        )
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(22), dp(24), dp(22), dp(20))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(255, 249, 242))
+                cornerRadius = dp(26).toFloat()
+                setStroke(dp(1), Color.rgb(238, 159, 153))
+            }
+            elevation = dp(5).toFloat()
+        }
+        page.addView(TextView(this).apply {
+            text = "🌸  A LITTLE TOUR  🌷"
+            textSize = 18f
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(116, 57, 67))
+        })
+        val stepLabel = TextView(this).apply {
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(153, 91, 87))
+            setPadding(0, dp(18), 0, dp(8))
+        }
+        page.addView(stepLabel)
+        val stepText = TextView(this).apply {
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(91, 57, 54))
+            setLineSpacing(dp(5).toFloat(), 1.04f)
+            setPadding(0, dp(5), 0, dp(20))
+        }
+        page.addView(stepText)
+        val next = Button(this).apply {
+            isAllCaps = false
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(222, 119, 119), Color.rgb(222, 145, 105))
+            ).apply { cornerRadius = dp(16).toFloat() }
+        }
+        page.addView(next, LinearLayout.LayoutParams(-1, dp(54)))
+        val skip = Button(this).apply {
+            text = "Skip tutorial"
+            isAllCaps = false
+            textSize = 14f
+            setTextColor(Color.rgb(125, 72, 76))
+            background = ColorDrawable(Color.TRANSPARENT)
+            setOnClickListener { completeFeaturesTutorial() }
+        }
+        page.addView(skip, LinearLayout.LayoutParams(-1, dp(48)))
+        root.addView(page, LinearLayout.LayoutParams(-1, -2))
+        setContentView(root)
+
+        fun renderStep() {
+            stepLabel.text = "INTRODUCTION  \${step + 1} OF \${steps.size}"
+            stepText.text = steps[step]
+            next.text = if (step == steps.lastIndex) "Open Features  ✿" else "Next  →"
+            speechTts?.speak(steps[step], TextToSpeech.QUEUE_FLUSH, null, "irai_features_tutorial_\${step}")
+        }
+        next.setOnClickListener {
+            speechTts?.stop()
+            if (step < steps.lastIndex) {
+                step++
+                renderStep()
+            } else completeFeaturesTutorial()
+        }
+        renderStep()
+    }
+
+    private fun showFeatures() {
+        speechTts?.stop()
+        applySunriseSystemBars()
+        root.removeAllViews()
+        root.orientation = LinearLayout.VERTICAL
+        root.gravity = Gravity.TOP
+        root.setPadding(dp(20), dp(28), dp(20), dp(18))
+        root.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
+        )
+        root.addView(screenHeader("Features", true) { showHome(currentEmail) })
+        val scroll = ScrollView(this).apply { isFillViewport = true }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(4), dp(12), dp(4), dp(24))
+        }
+        content.addView(label("✿  Your helpful little toolkit  ✿", 19, Color.rgb(105, 53, 64)))
+        content.addView(label("Choose what you'd like to do.", 14, Color.rgb(112, 70, 65)).apply {
+            setPadding(0, dp(3), 0, dp(17))
+        })
+        content.addView(menuButton("🌷  Notes", "Create, transcribe, save, and listen to notes") {
+            startNotesMode()
+        })
+        content.addView(menuButton("🌼  Calculator", "A simple calculator for everyday sums") {
+            showCalculator()
+        })
+        content.addView(menuButton("🌸  Scan Forms", "Use your camera to scan paper forms and ask Irai for help") {
+            launchPageScan()
+        })
+        content.addView(menuButton("📄  Import a PDF", "Read a PDF and get step-by-step help with its contents") {
+            launchPdfImport()
+        })
+        content.addView(label("Your notes stay on this device. Scanned page text is sent to Irai AI when you ask for help.", 12, Color.rgb(112, 70, 65)).apply {
+            setPadding(dp(8), dp(16), dp(8), dp(8))
+        })
+        scroll.addView(content)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(root)
+    }
+
+    private fun showCalculator() {
+        speechTts?.stop()
+        applySunriseSystemBars()
+        root.removeAllViews()
+        root.orientation = LinearLayout.VERTICAL
+        root.gravity = Gravity.TOP
+        root.setPadding(dp(20), dp(28), dp(20), dp(18))
+        root.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
+        )
+        root.addView(screenHeader("Calculator", true) { showFeatures() })
+        val display = TextView(this).apply {
+            text = "0"
+            textSize = 34f
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            setTextColor(Color.rgb(83, 48, 48))
+            setPadding(dp(16), dp(18), dp(16), dp(18))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(255, 249, 242))
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), Color.rgb(238, 159, 153))
+            }
+        }
+        root.addView(display, LinearLayout.LayoutParams(-1, dp(100)).apply { bottomMargin = dp(8) })
+        val result = TextView(this).apply {
+            text = " "
+            textSize = 18f
+            gravity = Gravity.END
+            setTextColor(Color.rgb(121, 75, 70))
+            setPadding(dp(8), dp(6), dp(8), dp(12))
+        }
+        root.addView(result)
+        var expression = ""
+        val grid = android.widget.GridLayout(this).apply {
+            columnCount = 4
+            rowCount = 6
+            alignmentMode = android.widget.GridLayout.ALIGN_BOUNDS
+            useDefaultMargins = false
+        }
+        val keys = listOf(
+            "AC", "DEL", "(", ")",
+            "7", "8", "9", "÷",
+            "4", "5", "6", "×",
+            "1", "2", "3", "−",
+            "%", "0", ".", "+",
+            "="
+        )
+        fun refresh() { display.text = expression.ifBlank { "0" } }
+        keys.forEach { key ->
+            val keyButton = Button(this).apply {
+                text = key
+                textSize = if (key == "=") 23f else 19f
+                isAllCaps = false
+                setTextColor(if (key in listOf("+", "−", "×", "÷", "=", "%")) Color.WHITE else Color.rgb(91, 57, 54))
+                background = GradientDrawable().apply {
+                    setColor(when (key) {
+                        "=" -> Color.rgb(205, 112, 111)
+                        in listOf("+", "−", "×", "÷", "%") -> Color.rgb(221, 139, 121)
+                        "AC", "DEL" -> Color.rgb(246, 205, 184)
+                        else -> Color.rgb(255, 249, 242)
+                    })
+                    cornerRadius = dp(15).toFloat()
+                    setStroke(dp(1), Color.rgb(241, 172, 151))
+                }
+                setOnClickListener {
+                    when (key) {
+                        "AC" -> { expression = ""; result.text = " " }
+                        "DEL" -> { if (expression.isNotEmpty()) expression = expression.dropLast(1); result.text = " " }
+                        "=" -> {
+                            val answer = evaluateCalculatorExpression(expression)
+                            result.text = if (answer == null) "Check the expression" else "= " + formatCalculatorResult(answer)
+                        }
+                        else -> {
+                            expression += when (key) {
+                                "×" -> "*"
+                                "÷" -> "/"
+                                "−" -> "-"
+                                else -> key
+                            }
+                            result.text = " "
+                        }
+                    }
+                    refresh()
+                }
+            }
+            val params = android.widget.GridLayout.LayoutParams().apply {
+                width = 0
+                height = dp(62)
+                columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                rowSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED)
+                setMargins(dp(4), dp(4), dp(4), dp(4))
+            }
+            grid.addView(keyButton, params)
+        }
+        root.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(TextView(this).apply {
+            text = "Tip: use parentheses for grouped calculations."
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(112, 70, 65))
+            setPadding(0, dp(10), 0, 0)
+        })
+    }
+
+    private fun formatCalculatorResult(value: Double): String {
+        if (!value.isFinite()) return "Error"
+        val rounded = if (kotlin.math.abs(value) < 1e12) kotlin.math.round(value * 1e8) / 1e8 else value
+        return if (rounded == rounded.toLong().toDouble()) rounded.toLong().toString() else rounded.toString()
+    }
+
+    private fun evaluateCalculatorExpression(source: String): Double? {
+        if (source.isBlank() || source.length > 120) return null
+        return try {
+            class Parser(private val input: String) {
+                private var position = 0
+                private fun skipSpaces() { while (position < input.length && input[position].isWhitespace()) position++ }
+                private fun consume(ch: Char): Boolean {
+                    skipSpaces()
+                    if (position < input.length && input[position] == ch) { position++; return true }
+                    return false
+                }
+                fun parse(): Double {
+                    val value = expression()
+                    skipSpaces()
+                    if (position != input.length) throw IllegalArgumentException()
+                    return value
+                }
+                private fun expression(): Double {
+                    var value = term()
+                    while (true) {
+                        value = when {
+                            consume('+') -> value + term()
+                            consume('-') -> value - term()
+                            else -> return value
+                        }
+                    }
+                }
+                private fun term(): Double {
+                    var value = factor()
+                    while (true) {
+                        value = when {
+                            consume('*') -> value * factor()
+                            consume('/') -> {
+                                val divisor = factor()
+                                if (divisor == 0.0) throw ArithmeticException()
+                                value / divisor
+                            }
+                            else -> return value
+                        }
+                    }
+                }
+                private fun factor(): Double {
+                    skipSpaces()
+                    if (consume('+')) return factor()
+                    if (consume('-')) return -factor()
+                    var value = if (consume('(')) {
+                        val nested = expression()
+                        if (!consume(')')) throw IllegalArgumentException()
+                        nested
+                    } else number()
+                    while (consume('%')) value /= 100.0
+                    return value
+                }
+                private fun number(): Double {
+                    skipSpaces()
+                    val start = position
+                    var dotSeen = false
+                    while (position < input.length) {
+                        val ch = input[position]
+                        if (ch.isDigit()) position++
+                        else if (ch == '.' && !dotSeen) { dotSeen = true; position++ }
+                        else break
+                    }
+                    if (start == position) throw IllegalArgumentException()
+                    return input.substring(start, position).toDouble()
+                }
+            }
+            Parser(source).parse().takeIf { it.isFinite() }
+        } catch (_: Exception) { null }
     }
 
     private fun profileKeyForField(label: String): String? {
