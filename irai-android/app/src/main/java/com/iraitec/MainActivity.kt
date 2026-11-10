@@ -1097,7 +1097,7 @@ class MainActivity : Activity() {
                 pendingFormIndex = 0
                 return
             }
-            val answer = routedCommand.trim().removeSurrounding("\\\"")
+            val answer = routedCommand.trim().removeSurrounding("\"")
             if (answer.isBlank()) {
                 awaitingFormAnswerFor = pending
                 askForNextFormAnswer()
