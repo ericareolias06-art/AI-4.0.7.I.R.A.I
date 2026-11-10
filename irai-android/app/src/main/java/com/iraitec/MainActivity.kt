@@ -2268,9 +2268,9 @@ class MainActivity : Activity() {
 
     private fun startFirstTimeTutorial() {
         tutorialSteps = listOf(
-            "Welcome to Irai Tec. I'm Irai, your personal assistant. I'll show you how to call me and get started.",
+            "Welcome to I.R.A.I Tec. I'm I.R.A.I, your personal assistant. I'll show you how to call me and get started.",
             "First, my name is pronounced eye-ray. Say it slowly, like this: eye ... ray. Please don't rush the two parts together.",
-            "To wake me, say Irai slowly and clearly. Give the words a small pause: eye ... ray. Speaking slowly helps my wake-word listener recognize you.",
+            "To wake me, say I.R.A.I slowly and clearly. Give the words a small pause: eye ... ray. Speaking slowly helps my wake-word listener recognize you.",
             "When I respond, speak your request naturally. You can ask me questions, say things like open YouTube, or ask me to open Notes.",
             "In Notes, you can transcribe ideas, save them, reopen them, and ask me to read them aloud. You can also manage your account and settings from the gear icon. Settings includes a Personal Vault for private details stored only on this phone.",
             "I can scan a page with your camera or import a PDF. I can read up to fifteen PDF pages at a time, explain what the document means, and walk you through it one step at a time. The extracted text is sent to Irai AI for help, so avoid scanning or importing information you do not want processed.",
@@ -2677,7 +2677,7 @@ class MainActivity : Activity() {
                     gravity = Gravity.CENTER_VERTICAL
                 }
                 topBar.addView(TextView(this).apply {
-                    text = "IRAI TEC"
+                    text = "I.R.A.I TEC"
                     textSize = 20f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.rgb(79, 48, 45))
@@ -2701,7 +2701,7 @@ class MainActivity : Activity() {
                 }
 
                 content.addView(label("✦", 66, Color.rgb(190, 91, 79)))
-                content.addView(label("Hello, I'm Irai.", 27, Color.rgb(79, 48, 45)))
+                content.addView(label("Hello, I'm I.R.A.I.", 27, Color.rgb(79, 48, 45)))
                 content.addView(label("A little light in your day.", 15, Color.rgb(112, 70, 65)))
                 content.addView(label(if (premium) "Premium is active" else "Your personal assistant", 13, Color.rgb(155, 74, 62)).apply {
                     setPadding(0, 8, 0, 20)
@@ -3386,13 +3386,13 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(4, 20, 4, 10)
         }
-        content.addView(label("Manage your Irai Tec experience.", 14, Color.rgb(112, 70, 65)).apply {
+        content.addView(label("Manage your I.R.A.I Tec experience.", 14, Color.rgb(112, 70, 65)).apply {
             gravity = Gravity.START
             setPadding(4, 0, 4, 18)
         })
         content.addView(menuButton(
-            if (IraiAvatarOverlay.hasPermission(this)) "Floating Irai: Enabled" else "Enable Floating Irai",
-            "Allow Irai's avatar to appear over other apps. This is optional."
+            if (IraiAvatarOverlay.hasPermission(this)) "Floating I.R.A.I: Enabled" else "Enable Floating I.R.A.I",
+            "Allow I.R.A.I's avatar to appear over other apps. This is optional."
         ) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                 try {
