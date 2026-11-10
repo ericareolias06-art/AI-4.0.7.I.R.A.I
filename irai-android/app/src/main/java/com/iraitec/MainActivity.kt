@@ -2707,7 +2707,13 @@ class MainActivity : Activity() {
         }
         pendingVaultPassword = password
         pendingVaultPasswordField = field
-        startActivityForResult(intent, vaultUnlockRequestCode)
+        try {
+            startActivityForResult(intent, vaultUnlockRequestCode)
+        } catch (_: Exception) {
+            pendingVaultPassword = null
+            pendingVaultPasswordField = null
+            speakResponse("Android couldn't open device verification. Your saved password was not used.")
+        }
     }
 
     private fun showPersonalVault() {
@@ -3385,6 +3391,11 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
         }
         speechRecognizer = null
+        pendingVaultPassword = null
+        pendingVaultPasswordField = null
+        pendingFormFields.clear()
+        awaitingFormAnswerFor = null
+        formFillInProgress = false
 
         speechTts?.stop()
         speechTts?.shutdown()
