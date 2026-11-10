@@ -1095,13 +1095,18 @@ class MainActivity : Activity() {
         // answer, never routed to the AI chat endpoint.
         awaitingFormAnswerFor?.let { pending ->
             awaitingFormAnswerFor = null
-            if (text in listOf("cancel", "stop filling", "cancel filling", "skip this field")) {
+            if (text in listOf("cancel", "stop filling", "cancel filling")) {
                 speakResponse("Okay, I stopped filling the form.")
                 pendingFormFields.clear()
                 pendingFormIndex = 0
                 return
             }
-            val answer = routedCommand.trim().removeSurrounding("\"")
+            if (text == "skip this field") {
+                pendingFormIndex++
+                processNextFormField()
+                return
+            }
+            val answer = rawSpokenAnswer
             if (answer.isBlank()) {
                 awaitingFormAnswerFor = pending
                 askForNextFormAnswer()
