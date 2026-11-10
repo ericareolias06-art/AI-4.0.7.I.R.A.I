@@ -184,11 +184,25 @@ class IraiAssistAccessibilityService : AccessibilityService() {
                 RegexOption.IGNORE_CASE
             ).containsMatchIn(targetField)) return false
         val root = rootInActiveWindow ?: return false
-        val node = findBestMatchingNode(root, targetField, editableOnly = true) ?: return false
-        if (!node.isEnabled || !node.isPassword && !isProtectedField(node)) {
-            // A stored password may only go into an actual password field.
-            return false
+        fun findPasswordNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+            if (!node.isVisibleToUser) return null
+            if (node.isEditable && node.isPassword) {
+                val hint = if (Build.VERSION.SDK_INT >= 26) node.hintText?.toString().orEmpty() else ""
+                val description = node.contentDescription?.toString().orEmpty()
+                val resource = node.viewIdResourceName?.substringAfterLast("/")?.replace('_', ' ').orEmpty()
+                val labels = listOf(hint, description, resource, "Password")
+                if (labels.any { it.equals(targetField, true) || it.contains(targetField, true) || targetField.contains(it, true) }) {
+                    return node
+                }
+            }
+            for (index in 0 until node.childCount) {
+                val found = node.getChild(index)?.let { findPasswordNode(it) }
+                if (found != null) return found
+            }
+            return null
         }
+        val node = findPasswordNode(root) ?: return false
+        if (!node.isEnabled) return false
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, password)
