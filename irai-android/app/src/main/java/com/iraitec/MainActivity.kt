@@ -2932,10 +2932,10 @@ class MainActivity : Activity() {
         setContentView(root)
 
         fun renderStep() {
-            stepLabel.text = "INTRODUCTION  \${step + 1} OF \${steps.size}"
+            stepLabel.text = "INTRODUCTION"
             stepText.text = steps[step]
             next.text = if (step == steps.lastIndex) "Open Features  ✿" else "Next  →"
-            speechTts?.speak(steps[step], TextToSpeech.QUEUE_FLUSH, null, "irai_features_tutorial_\${step}")
+            speechTts?.speak(steps[step], TextToSpeech.QUEUE_FLUSH, null, "irai_features_tutorial_${step}")
         }
         next.setOnClickListener {
             speechTts?.stop()
