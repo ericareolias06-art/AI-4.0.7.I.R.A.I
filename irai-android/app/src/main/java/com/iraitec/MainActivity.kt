@@ -4175,6 +4175,10 @@ class MainActivity : Activity() {
             setOnClickListener { showBilling() }
         })
         root.addView(Button(this).apply {
+            text = "Redeem Premium Code"
+            setOnClickListener { showPromoInput() }
+        })
+        root.addView(Button(this).apply {
             text = "Check Subscription Again"
             setOnClickListener { checkSubscriptionAccess() }
         })
@@ -4335,6 +4339,10 @@ class MainActivity : Activity() {
         root.addView(Button(this).apply {
             text = "Restore Google Play Purchase"
             setOnClickListener { client.restorePurchases() }
+        })
+        root.addView(Button(this).apply {
+            text = "Redeem Premium Code"
+            setOnClickListener { showPromoInput() }
         })
         root.addView(Button(this).apply {
             text = "Check Subscription Again"
@@ -4538,7 +4546,7 @@ class MainActivity : Activity() {
                     this, responseMessage, Toast.LENGTH_LONG
                 ).show()
 
-                if (success) showHome(currentEmail)
+                if (success) checkSubscriptionAccess()
             }
         }
     }
