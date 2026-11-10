@@ -1396,7 +1396,7 @@ class MainActivity : Activity() {
                     clearPendingCommunication()
                     speakResponse("Cancelled. Nothing was sent.")
                 }
-                else -> speakResponse("Please say send it to open the reviewed draft, or cancel. Nothing has been sent.")
+                else -> speakResponse("Please say send it to confirm automatic text sending, or cancel. Nothing has been sent.")
             }
             return
         }
@@ -2189,22 +2189,64 @@ class MainActivity : Activity() {
 
     private fun prepareSmsVoiceConfirmation(draft: String) {
         pendingCommunicationSubject = ""; pendingCommunicationBody = draft; awaitingCommunicationSendConfirmation = true
-        speakResponse("Here is the text to ${pendingSmsContactName}: $draft. Say send it to open your messaging app with this draft, or say cancel. I will not send it automatically.")
+        speakResponse("Here is the text to ${pendingSmsContactName}: $draft. Say send it to confirm that I should open Messages and press Send for you, or say cancel.")
     }
 
     private fun sendPendingCommunication() {
         val mode = pendingCommunicationMode
         val recipient = if (mode == "email") pendingEmailAddress else pendingSmsPhone
         val name = if (mode == "email") pendingEmailName else pendingSmsContactName
-        val body = pendingCommunicationBody; val subject = pendingCommunicationSubject
-        if (recipient.isBlank() || body.isBlank()) { clearPendingCommunication(); speakResponse("I do not have a complete recipient and message. Nothing was sent."); return }
+        val body = pendingCommunicationBody
+        val subject = pendingCommunicationSubject
+        if (recipient.isBlank() || body.isBlank()) {
+            clearPendingCommunication()
+            speakResponse("The recipient or message is missing. Nothing was sent.")
+            return
+        }
+        if (mode == "sms" && !isGuidedAssistanceReady()) {
+            clearPendingCommunication()
+            speakResponse("Automatic sending needs Guided Assistance enabled. Nothing was sent.")
+            requestGuidedAssistanceEnablement()
+            return
+        }
         try {
-            val intent = if (mode == "email") Intent(Intent.ACTION_SENDTO).apply { data = Uri.parse("mailto:"); putExtra(Intent.EXTRA_EMAIL, arrayOf(recipient)); putExtra(Intent.EXTRA_SUBJECT, subject); putExtra(Intent.EXTRA_TEXT, body) }
-                else Intent(Intent.ACTION_SENDTO).apply { data = Uri.fromParts("smsto", recipient, null); putExtra("sms_body", body) }
+            val intent = if (mode == "email") {
+                Intent(Intent.ACTION_SENDTO).apply {
+                    data = Uri.parse("mailto:")
+                    putExtra(Intent.EXTRA_EMAIL, arrayOf(recipient))
+                    putExtra(Intent.EXTRA_SUBJECT, subject)
+                    putExtra(Intent.EXTRA_TEXT, body)
+                }
+            } else {
+                Intent(Intent.ACTION_SENDTO).apply {
+                    data = Uri.fromParts("smsto", recipient, null)
+                    putExtra("sms_body", body)
+                }
+            }
             clearPendingCommunication()
             startActivity(intent)
-            speakResponse(if (mode == "email") "I opened your email app with the draft addressed to $name. Please review it and press Send." else "I opened your messaging app with the draft addressed to $name. Please review it and press Send.")
-        } catch (error: Exception) { android.util.Log.e("IRAI_COMMUNICATION", "Could not open compose app", error); clearPendingCommunication(); speakResponse("I could not open the appropriate app. Nothing was sent.") }
+            if (mode == "sms") {
+                // The spoken confirmation authorizes one attempt only. Never
+                // click Send unless the exact reviewed draft is visible.
+                handler.postDelayed({
+                    val visibleDraft = IraiAssistAccessibilityService.readTypedMessageDraft()
+                    if (visibleDraft != body) {
+                        speakResponse("I couldn't verify the exact message in your messaging app, so I did not press Send. Please review it manually.")
+                    } else {
+                        val pressed = IraiAssistAccessibilityService.pressSendButton()
+                        speakResponse(if (pressed)
+                            "I pressed Send for $name. Please check Messages to confirm delivery."
+                        else "I couldn't find a safe Send button. Nothing was sent automatically.")
+                    }
+                }, 1800)
+            } else {
+                speakResponse("I opened your email draft for $name. Please review it and press Send.")
+            }
+        } catch (error: Exception) {
+            android.util.Log.e("IRAI_COMMUNICATION", "Could not open compose app", error)
+            clearPendingCommunication()
+            speakResponse("I couldn't open the messaging app. Nothing was sent.")
+        }
     }
 
     private fun clearPendingCommunication() {
