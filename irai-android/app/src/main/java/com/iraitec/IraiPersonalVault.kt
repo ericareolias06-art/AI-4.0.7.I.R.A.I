@@ -6,6 +6,8 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import org.json.JSONObject
 import java.security.KeyStore
+import java.security.MessageDigest
+import java.util.Locale
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -19,9 +21,13 @@ import javax.crypto.spec.GCMParameterSpec
  * This is local encrypted storage, not a replacement for a dedicated password
  * manager. Do not store banking, payment-card, government-ID, or recovery data.
  */
-class IraiPersonalVault(context: Context) {
+class IraiPersonalVault(context: Context, accountScope: String) {
+    private val scopeHash = MessageDigest.getInstance("SHA-256")
+        .digest(accountScope.trim().lowercase(Locale.US).toByteArray(Charsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    private val scopedKeyAlias = "$KEY_ALIAS_PREFIX.$scopeHash"
     private val prefs = context.applicationContext.getSharedPreferences(
-        "irai_personal_vault_ciphertext",
+        "irai_personal_vault_$scopeHash",
         Context.MODE_PRIVATE
     )
 
@@ -59,11 +65,11 @@ class IraiPersonalVault(context: Context) {
 
     private fun getOrCreateKey(): SecretKey {
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        (keyStore.getKey(scopedKeyAlias, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         generator.init(
             KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
+                scopedKeyAlias,
                 KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
             )
                 .setKeySize(256)
@@ -126,7 +132,7 @@ class IraiPersonalVault(context: Context) {
     fun clearAll(): Boolean {
         return try {
             val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-            if (keyStore.containsAlias(KEY_ALIAS)) keyStore.deleteEntry(KEY_ALIAS)
+            if (keyStore.containsAlias(scopedKeyAlias)) keyStore.deleteEntry(scopedKeyAlias)
             prefs.edit().clear().commit()
         } catch (_: Exception) {
             false
@@ -142,7 +148,7 @@ class IraiPersonalVault(context: Context) {
     }
 
     companion object {
-        private const val KEY_ALIAS = "com.iraitec.personal.vault.aes256"
+        private const val KEY_ALIAS_PREFIX = "com.iraitec.personal.vault.aes256"
         val PROFILE_KEYS = setOf("full_name", "first_name", "last_name", "birthday", "email", "phone", "address", "city", "state", "postal_code")
     }
 }
