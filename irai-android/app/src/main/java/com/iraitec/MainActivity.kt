@@ -2573,9 +2573,9 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding((18 * density).toInt(), (15 * density).toInt(), (18 * density).toInt(), (15 * density).toInt())
             background = GradientDrawable().apply {
-                setColor(Color.rgb(255, 247, 237))
+                setColor(if (isBlueAppearance()) Color.rgb(232, 242, 250) else Color.rgb(255, 247, 237))
                 cornerRadius = 18 * density
-                setStroke((1 * density).toInt(), Color.rgb(239, 157, 137))
+                setStroke((1 * density).toInt(), if (isBlueAppearance()) Color.rgb(83, 143, 190) else Color.rgb(239, 157, 137))
             }
             isClickable = true
             isFocusable = true
@@ -2583,13 +2583,13 @@ class MainActivity : Activity() {
             addView(TextView(this@MainActivity).apply {
                 text = title
                 textSize = 17f
-                setTextColor(Color.rgb(88, 52, 47))
+                setTextColor(if (isBlueAppearance()) Color.rgb(20, 52, 83) else Color.rgb(88, 52, 47))
                 typeface = Typeface.DEFAULT_BOLD
             })
             addView(TextView(this@MainActivity).apply {
                 text = subtitle
                 textSize = 13f
-                setTextColor(Color.rgb(133, 86, 76))
+                setTextColor(if (isBlueAppearance()) Color.rgb(56, 91, 122) else Color.rgb(133, 86, 76))
                 setPadding(0, (4 * density).toInt(), 0, 0)
             })
             setOnClickListener { onClick() }
