@@ -4150,21 +4150,23 @@ class MainActivity : Activity() {
     // Renewal gate: keep the session cookie so the user can restore access.
     private fun showRenewSubscription() {
         loggedIn = false
-        IraiAvatarOverlay.hide()
         root.removeAllViews()
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.CENTER
         root.setPadding(32, 40, 32, 40)
         root.setBackgroundColor(bg)
 
-        root.addView(label("Subscription required", 26, white).apply {
+        root.addView(TextView(this).apply {
+            text = "Subscription required"
+            textSize = 26f
+            setTextColor(white)
             gravity = Gravity.CENTER
         })
-        root.addView(label(
-            "Your Irai subscription is inactive. Renew to continue using Irai. " +
-                "Your account, memories, and conversations are preserved.",
-            16, muted
-        ).apply {
+        root.addView(TextView(this).apply {
+            text = "Your Irai subscription is inactive. Renew to continue using Irai. " +
+                "Your account, memories, and conversations are preserved."
+            textSize = 16f
+            setTextColor(muted)
             gravity = Gravity.CENTER
             setPadding(0, 24, 0, 24)
         })
@@ -4178,7 +4180,11 @@ class MainActivity : Activity() {
         })
         root.addView(Button(this).apply {
             text = "Sign Out"
-            setOnClickListener { showAuth() }
+            setOnClickListener {
+                sessionPrefs.edit().remove("cookie").apply()
+                currentEmail = ""
+                showAuth()
+            }
         })
     }
 
