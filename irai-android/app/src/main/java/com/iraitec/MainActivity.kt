@@ -3149,18 +3149,15 @@ class MainActivity : Activity() {
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.CENTER
         root.setPadding(dp(24), dp(24), dp(24), dp(24))
-        root.background = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.rgb(255, 235, 216), Color.rgb(250, 190, 181), Color.rgb(239, 157, 174))
-        )
+        root.background = appearanceGradient()
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(22), dp(24), dp(22), dp(20))
             background = GradientDrawable().apply {
-                setColor(Color.rgb(255, 249, 242))
+                setColor(if (isBlueAppearance()) Color.rgb(232, 242, 250) else Color.rgb(255, 249, 242))
                 cornerRadius = dp(26).toFloat()
-                setStroke(dp(1), Color.rgb(238, 159, 153))
+                setStroke(dp(1), if (isBlueAppearance()) Color.rgb(83, 143, 190) else Color.rgb(238, 159, 153))
             }
             elevation = dp(5).toFloat()
         }
