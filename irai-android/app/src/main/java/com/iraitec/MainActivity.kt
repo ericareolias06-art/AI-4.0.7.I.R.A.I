@@ -2078,11 +2078,11 @@ class MainActivity : Activity() {
             "First, my name is pronounced eye-ray. Say it slowly, like this: eye ... ray. Please don't rush the two parts together.",
             "To wake me, say Irai slowly and clearly. Give the words a small pause: eye ... ray. Speaking slowly helps my wake-word listener recognize you.",
             "When I respond, speak your request naturally. You can ask me questions, say things like open YouTube, or ask me to open Notes.",
-            "In Notes, you can transcribe ideas, save them, reopen them, and ask me to read them aloud. You can also manage your account and settings from the gear icon.",
+            "In Notes, you can transcribe ideas, save them, reopen them, and ask me to read them aloud. You can also manage your account and settings from the gear icon. Settings includes a Personal Vault for private details stored only on this phone.",
             "I can scan a page with your camera or import a PDF. I can read up to fifteen PDF pages at a time, explain what the document means, and walk you through it one step at a time. The extracted text is sent to Irai AI for help, so avoid scanning or importing information you do not want processed.",
-            "I can also help with online paperwork in your browser or other apps. I can explain application questions, inspect visible form fields, checkboxes, radio choices, and dropdowns, point out what appears incomplete, help enter your answers, and move between sections. You can say check option followed by its name, or select an option from a dropdown by saying select the option from the dropdown name. Say review this form or what is missing for a checkup. Turn on Guided Assistance in Settings first. Android requires you to enable this permission yourself.",
+            "I can also help with online paperwork in your browser or other apps. Turn on Guided Assistance in Settings first. Then say fill this form or fill out this application. I will use saved details from your on-device Personal Vault, ask you for anything I do not know, and move through the labeled fields. You can also say check option followed by its name, select an option from a dropdown, or say review this form. I never submit the form for you.",
             "I can also be your shopping companion. Open a product page and ask me to compare shoes, explain customer reviews, find the size chart, compare listed prices, check colors, shipping, or return details. I can help you think through fit, but I cannot guarantee a size or know details that are not visible on the page.",
-            "When you want hands-on help, say tap followed by a button name, choose an option from a dropdown, or fill a field with the text you provide. I will show you the exact action and ask you before I do it. I will not automatically enter passwords, payment-card or banking details, PINs, or verification codes.",
+            "For saved website passwords, add the account name and password in Settings, Personal Vault. On its sign-in page, say fill my saved password for followed by the account name. I will ask permission and Android will verify your phone's screen lock before I enter it. I never send that password to the AI service or speak it aloud. Do not store bank, payment-card, government-ID, or recovery secrets.",
             "Before any important final step, review the page yourself. I will not decide what legal answers to give, sign or agree for you, submit an application, place an order, send a message, or make a payment on my own. Some apps hide their screen details from Android, so I may ask you to open the page in another view or tell me what you see.",
             "Before I tap a control or enter information, I'll show you what I'm about to do and ask you to allow it. You stay in control of important steps like submitting forms, placing orders, sending messages, and making payments."
         )
@@ -2437,8 +2437,16 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun applySunriseSystemBars() {
+        window.statusBarColor = Color.rgb(255, 231, 207)
+        window.navigationBarColor = Color.rgb(238, 151, 139)
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
+            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR else 0)
+    }
+
     private fun showHome(email: String) {
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        applySunriseSystemBars()
         thread {
             var premium = false
             try {
@@ -2699,6 +2707,7 @@ class MainActivity : Activity() {
 
     private fun showPersonalVault() {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        applySunriseSystemBars()
         val scroll = ScrollView(this)
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2781,6 +2790,7 @@ class MainActivity : Activity() {
 
     private fun showSettings() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        applySunriseSystemBars()
         root.removeAllViews()
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.TOP
