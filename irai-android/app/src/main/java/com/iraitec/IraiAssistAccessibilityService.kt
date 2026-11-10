@@ -254,6 +254,27 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         return if (drafts.size == 1) drafts.first() else ""
     }
 
+    fun hasClearlyLabeledSendButton(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val acceptedLabels = setOf("send", "send message", "send sms")
+        fun find(node: AccessibilityNodeInfo): Boolean {
+            if (!node.isVisibleToUser) return false
+            val className = node.className?.toString()?.substringAfterLast('.')?.lowercase(Locale.US).orEmpty()
+            val labels = listOf(
+                node.text?.toString(),
+                node.contentDescription?.toString(),
+                node.viewIdResourceName?.substringAfterLast("/")?.replace('_', ' ')
+            ).map { it?.trim()?.lowercase(Locale.US).orEmpty() }
+            if (node.isEnabled && (className.contains("button") || node.isClickable) && labels.any { it in acceptedLabels }) return true
+            for (index in 0 until node.childCount) {
+                val child = node.getChild(index) ?: continue
+                if (find(child)) return true
+            }
+            return false
+        }
+        return find(root)
+    }
+
     /**
      * Click only a clearly labeled Send control on the currently visible screen.
      * Ambiguous labels such as "Send money" are deliberately not accepted.
