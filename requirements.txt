@@ -6,3 +6,5 @@ psycopg2-binary
 psycopg
 
 openai
+google-auth
+requests
