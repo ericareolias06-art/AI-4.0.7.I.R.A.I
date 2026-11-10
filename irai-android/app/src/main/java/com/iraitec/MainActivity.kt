@@ -2680,10 +2680,6 @@ class MainActivity : Activity() {
             speakResponse("Tell me which saved account password you want to use.")
             return
         }
-        if (serviceName.trim().lowercase(Locale.US) !in personalVault().credentialLabels()) {
-            speakResponse("I couldn't find a saved password for ${serviceName}. You can add it in Settings, Personal Vault.")
-            return
-        }
         val fields = IraiAssistAccessibilityService.passwordFieldLabels()
         if (fields.isEmpty()) {
             speakResponse("I can't find a password field on this screen.")
