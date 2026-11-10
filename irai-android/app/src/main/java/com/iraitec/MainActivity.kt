@@ -1072,7 +1072,7 @@ class MainActivity : Activity() {
     private fun requestGuidedAssistanceEnablement() {
         val consentPrefs = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
         val hasConsent = consentPrefs.getBoolean("screen_access_disclosure_accepted", false)
-        val disclosure = "Guided Assistance can inspect text and controls visible in the app or webpage you are using when you ask Irai for help. The screen text and form labels may be sent to the Irai AI service to prepare an explanation. Irai does not intentionally read password-field contents, and assisted entry refuses password, payment-card, banking, and verification-code fields.\n\nWhen you ask, Irai can tap a control or enter ordinary form text only after you approve that specific action. Do not use it on screens containing information you do not want processed. You can turn this permission off in Android Accessibility Settings at any time."
+        val disclosure = "Guided Assistance can inspect text and controls visible in the app or webpage you are using when you ask Irai for help. The screen text and form labels may be sent to the Irai AI service to prepare an explanation. Irai does not intentionally read values typed into editable fields or password fields during screen inspection. Ordinary assisted entry refuses password, payment-card, banking, and verification-code fields.\n\nWhen you ask, Irai can tap a control or enter ordinary form text only after you approve that specific action. Separately, if you explicitly request a saved website password from Personal Vault, Irai can enter it only into a detected password field after you approve and Android verifies your device screen lock. That password is not sent to the AI service or spoken aloud. Do not use Guided Assistance on screens containing information you do not want processed. You can turn this permission off in Android Accessibility Settings at any time."
         AlertDialog.Builder(this)
             .setTitle("About Guided Assistance")
             .setMessage(disclosure)
@@ -2438,6 +2438,7 @@ class MainActivity : Activity() {
     }
 
     private fun showHome(email: String) {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         thread {
             var premium = false
             try {
@@ -2512,7 +2513,7 @@ class MainActivity : Activity() {
                     AlertDialog.Builder(this)
                         .setTitle("Irai Shopping & Paperwork Assistant")
                         .setMessage(
-                            "Open the app or webpage you need help with, then ask Irai to help you shop, compare products, choose a size, review your cart, understand a form, or complete a section.\\n\\nWith Guided Assistance enabled, Irai can read visible page details and, after your approval, tap controls or enter ordinary text. She will ask before consequential actions. Passwords, payment details, and verification codes are not entered by assisted text entry."
+                            "Open the app or webpage you need help with, then ask Irai to help you shop, compare products, choose a size, review your cart, understand a form, or complete a section.\\n\\nWith Guided Assistance enabled, Irai can read visible page details and, after your approval, tap controls or enter ordinary text. She will ask before consequential actions. Ordinary assisted entry excludes passwords, payment details, and verification codes. Saved website passwords are handled separately through Personal Vault only after Android screen-lock verification."
                         )
                         .setNegativeButton("Not now", null)
                         .setPositiveButton(if (IraiAssistAccessibilityService.isEnabled(this)) "Got it" else "Enable Guided Assistance") { _, _ ->
@@ -2697,6 +2698,7 @@ class MainActivity : Activity() {
     }
 
     private fun showPersonalVault() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         val scroll = ScrollView(this)
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2757,7 +2759,19 @@ class MainActivity : Activity() {
             } else Toast.makeText(this, "Enter an account name and password. The vault may be locked or unreadable.", Toast.LENGTH_LONG).show()
         })
         content.addView(label("Saved accounts: ${personalVault.credentialLabels().joinToString(", ").ifBlank { "None yet" }}", 13, muted))
-        content.addView(label("To use one, open its sign-in page and say: Irai, fill my saved password for [account name]. Irai asks before entering it.", 13, muted))
+        content.addView(label("To use one, open its sign-in page and say: Irai, fill my saved password for [account name]. Irai asks before entering it and Android verifies your screen lock.", 13, Color.rgb(112, 70, 65)))
+        content.addView(menuButton("Erase Personal Vault", "Permanently remove all encrypted profile details and saved passwords from this phone") {
+            AlertDialog.Builder(this)
+                .setTitle("Erase the Personal Vault?")
+                .setMessage("This permanently deletes all saved personal details and passwords from this device. This cannot be undone.")
+                .setNegativeButton("Keep my vault", null)
+                .setPositiveButton("Erase everything") { _, _ ->
+                    val erased = personalVault.clearAll()
+                    Toast.makeText(this, if (erased) "Personal Vault erased from this device." else "I couldn't erase the vault. Please try again.", Toast.LENGTH_LONG).show()
+                    if (erased) showPersonalVault()
+                }
+                .show()
+        })
         scroll.addView(content)
         root.removeAllViews()
         root.orientation = LinearLayout.VERTICAL
@@ -2766,6 +2780,7 @@ class MainActivity : Activity() {
     }
 
     private fun showSettings() {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         root.removeAllViews()
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.TOP
