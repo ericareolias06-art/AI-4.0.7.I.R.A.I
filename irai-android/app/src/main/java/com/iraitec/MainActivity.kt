@@ -1421,7 +1421,7 @@ class MainActivity : Activity() {
         }
 
         if (
-            text in listOf("send the message i typed", "send this typed message", "send this message", "send the message", "press send", "tap send", "please send this message", "send this message for me") ||,            text.contains("do it for me")
+            text in listOf("send the message i typed", "send this typed message", "send this message", "send the message", "press send", "tap send", "please send this message", "send this message for me") || text.contains("do it for me")
         ) {
             sendCurrentlyTypedMessage()
             return
