@@ -2339,6 +2339,7 @@ class MainActivity : Activity() {
     }
 
     private fun showTutorialStep() {
+        applyTutorialVoice()
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
@@ -2373,7 +2374,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(54)))
 
         page.addView(TextView(this).apply {
-            text = "WELCOME TO IRAI TEC"
+            text = "WELCOME TO I.R.A.I TEC"
             textSize = 13f
             letterSpacing = 0.18f
             gravity = Gravity.CENTER
@@ -2500,6 +2501,7 @@ class MainActivity : Activity() {
                 setStroke(dp(1), Color.argb(150, 170, 145, 240))
             }
             setOnClickListener {
+                applyTutorialVoice()
                 speechTts?.speak(
                     tutorialSteps[tutorialIndex],
                     TextToSpeech.QUEUE_FLUSH,
