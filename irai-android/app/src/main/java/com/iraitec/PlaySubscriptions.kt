@@ -28,7 +28,7 @@ class PlaySubscriptions(
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                     loadProducts(onReady)
-                } else onError("Google Play Billing unavailable: ${result.debugMessage}")
+                } else activity.runOnUiThread { onError("Google Play Billing unavailable: ${result.debugMessage}") }
             }
         })
     }
@@ -45,7 +45,7 @@ class PlaySubscriptions(
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 products = details
                 activity.runOnUiThread(onReady)
-            } else onError("Could not load subscriptions: ${result.debugMessage}")
+            } else activity.runOnUiThread { onError("Could not load subscriptions: ${result.debugMessage}") }
         }
     }
 
@@ -86,7 +86,7 @@ class PlaySubscriptions(
             .setProductType(BillingClient.ProductType.SUBS).build()
         client.queryPurchasesAsync(params) { result, purchases ->
             if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-                onError("Could not restore purchases: ${result.debugMessage}")
+                activity.runOnUiThread { onError("Could not restore purchases: ${result.debugMessage}") }
                 return@queryPurchasesAsync
             }
             purchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
