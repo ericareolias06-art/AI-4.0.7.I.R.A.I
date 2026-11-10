@@ -3217,7 +3217,7 @@ class MainActivity : Activity() {
             "The Calculator handles everyday arithmetic, including addition, subtraction, multiplication, division, decimals, and parentheses.",
             "The Text Message Assistant lets you choose a contact, describe what you want to say, and have me draft a natural message. Review the draft, then open your messaging app and tap Send when you are ready.",
             "The Phone Call Assistant lets you choose a contact or say a phone number. I will open the phone dialer and ask you to confirm before placing the call.",
-            "The Email Assistant lets you choose a contact, dictate the purpose, review and edit the subject and message, then open your email app. You must approve the final send in that app.",
+            "The Email Assistant lets you choose a contact, transcribe the purpose, review and edit the subject and message, then open your email app. You must approve the final send in that app.",
             "Scan Forms opens your camera so I can read a paper form and help explain it. You can also import a PDF. Please avoid scanning private information you do not want processed."
         )
         var step = 0
@@ -3354,7 +3354,7 @@ class MainActivity : Activity() {
         content.addView(menuButton("📞  Phone Call Assistant", "Call a contact or phone number after you confirm") {
             startCallFlow("")
         })
-        content.addView(menuButton("✉️  Email Assistant", "Dictate an email, review the subject and message, then send using your email app") {
+        content.addView(menuButton("✉️  Email Assistant", "Transcribe an email, review the subject and message, then send using your email app") {
             startEmailFlow()
         })
         content.addView(menuButton("🌷  Notes", "Create, transcribe, save, and listen to notes") {
