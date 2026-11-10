@@ -2002,9 +2002,9 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding((18 * density).toInt(), (15 * density).toInt(), (18 * density).toInt(), (15 * density).toInt())
             background = GradientDrawable().apply {
-                setColor(Color.rgb(34, 33, 57))
+                setColor(Color.rgb(255, 247, 237))
                 cornerRadius = 18 * density
-                setStroke((1 * density).toInt(), Color.argb(70, 190, 170, 255))
+                setStroke((1 * density).toInt(), Color.rgb(239, 157, 137))
             }
             isClickable = true
             isFocusable = true
@@ -2012,13 +2012,13 @@ class MainActivity : Activity() {
             addView(TextView(this@MainActivity).apply {
                 text = title
                 textSize = 17f
-                setTextColor(white)
+                setTextColor(Color.rgb(88, 52, 47))
                 typeface = Typeface.DEFAULT_BOLD
             })
             addView(TextView(this@MainActivity).apply {
                 text = subtitle
                 textSize = 13f
-                setTextColor(muted)
+                setTextColor(Color.rgb(133, 86, 76))
                 setPadding(0, (4 * density).toInt(), 0, 0)
             })
             setOnClickListener { onClick() }
@@ -2036,19 +2036,20 @@ class MainActivity : Activity() {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(8), 0, dp(6))
         }
         header.addView(Button(this).apply {
             text = "‹"
             textSize = 25f
-            setTextColor(white)
+            setTextColor(Color.rgb(88, 52, 47))
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { onBack() }
-        }, LinearLayout.LayoutParams((56 * resources.displayMetrics.density).toInt(), (52 * resources.displayMetrics.density).toInt()))
+        }, LinearLayout.LayoutParams((56 * resources.displayMetrics.density).toInt(), (60 * resources.displayMetrics.density).toInt()))
         header.addView(TextView(this).apply {
             text = title
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(white)
+            setTextColor(Color.rgb(88, 52, 47))
         })
         return header
     }
@@ -2442,7 +2443,7 @@ class MainActivity : Activity() {
                 root.setPadding(20, 28, 20, 18)
                 root.background = GradientDrawable(
                     GradientDrawable.Orientation.TOP_BOTTOM,
-                    intArrayOf(Color.rgb(25, 22, 49), Color.rgb(43, 31, 72), Color.rgb(18, 18, 32))
+                    intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
                 )
 
                 val topBar = LinearLayout(this).apply {
@@ -2453,14 +2454,14 @@ class MainActivity : Activity() {
                     text = "IRAI TEC"
                     textSize = 20f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(white)
+                    setTextColor(Color.rgb(79, 48, 45))
                     letterSpacing = 0.12f
                 }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 topBar.addView(Button(this).apply {
                     text = "⚙"
                     textSize = 23f
                     contentDescription = "Settings"
-                    setTextColor(white)
+                    setTextColor(Color.rgb(79, 48, 45))
                     setBackgroundColor(Color.TRANSPARENT)
                     setOnClickListener { showSettings() }
                 }, LinearLayout.LayoutParams((58 * resources.displayMetrics.density).toInt(), (52 * resources.displayMetrics.density).toInt()))
@@ -2473,10 +2474,10 @@ class MainActivity : Activity() {
                     setPadding(4, 18, 4, 18)
                 }
 
-                content.addView(label("✦", 66, Color.rgb(190, 164, 255)))
-                content.addView(label("Hello, I'm Irai.", 27, white))
-                content.addView(label("A little light in your day.", 15, muted))
-                content.addView(label(if (premium) "Premium is active" else "Your personal assistant", 13, accent).apply {
+                content.addView(label("✦", 66, Color.rgb(190, 91, 79)))
+                content.addView(label("Hello, I'm Irai.", 27, Color.rgb(79, 48, 45)))
+                content.addView(label("A little light in your day.", 15, Color.rgb(112, 70, 65)))
+                content.addView(label(if (premium) "Premium is active" else "Your personal assistant", 13, Color.rgb(155, 74, 62)).apply {
                     setPadding(0, 8, 0, 20)
                 })
 
@@ -2730,10 +2731,10 @@ class MainActivity : Activity() {
         root.removeAllViews()
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.TOP
-        root.setPadding(20, 14, 20, 20)
+        root.setPadding(20, 28, 20, 20)
         root.background = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.rgb(25, 22, 49), Color.rgb(43, 31, 72), Color.rgb(18, 18, 32))
+            intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
         )
         root.addView(screenHeader("Settings") { showHome(currentEmail) })
         val content = LinearLayout(this).apply {
