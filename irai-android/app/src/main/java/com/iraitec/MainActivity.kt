@@ -3819,10 +3819,17 @@ class MainActivity : Activity() {
         root.gravity = Gravity.TOP
         root.setPadding(20, 28, 20, 20)
         root.background = appearanceGradient()
+        // Keep the Settings title visible while allowing every option below it
+        // (including Privacy Policy and Log Out) to scroll on shorter screens.
         root.addView(screenHeader("Settings", true) { showHome(currentEmail) })
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            clipToPadding = false
+        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(4, 20, 4, 10)
+            setPadding(4, 20, 4, 18)
         }
         content.addView(label("Manage your I.R.A.I Tec experience.", 14, Color.rgb(112, 70, 65)).apply {
             gravity = Gravity.START
@@ -3866,7 +3873,15 @@ class MainActivity : Activity() {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://iraitec.dev/privacy.html")))
         })
         content.addView(menuButton("Log Out", "Sign out of this device") { logout() })
-        root.addView(content)
+        scroll.addView(content)
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        )
     }
 
     private fun showAccountInfo() {
