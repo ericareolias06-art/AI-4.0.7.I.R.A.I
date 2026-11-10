@@ -817,6 +817,95 @@ def stripe_webhook():
 
 
 
+
+GOOGLE_PLAY_PACKAGE = os.environ.get("GOOGLE_PLAY_PACKAGE", "com.Iraitec")
+GOOGLE_PLAN_LIMITS = {
+    "irai_starter": 300, "irai_plus": 1200,
+    "irai_premium": 3000, "irai_ultimate": 6000,
+}
+
+
+def google_play_session():
+    from google.oauth2 import service_account
+    from google.auth.transport.requests import AuthorizedSession
+    raw = os.environ.get("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "")
+    if not raw:
+        raise RuntimeError("Google Play service account is not configured")
+    credentials = service_account.Credentials.from_service_account_info(
+        json.loads(raw),
+        scopes=["https://www.googleapis.com/auth/androidpublisher"],
+    )
+    return AuthorizedSession(credentials)
+
+
+@app.post("/api/google-play/verify")
+def verify_google_play():
+    account_id = session.get("account_id")
+    if not account_id:
+        return jsonify(message="Sign in to restore a subscription."), 401
+    data = request.get_json(silent=True) or {}
+    token = data.get("purchase_token")
+    product_id = data.get("product_id")
+    if (not isinstance(token, str) or not 10 <= len(token) <= 4096
+            or product_id not in GOOGLE_PLAN_LIMITS):
+        return jsonify(message="Invalid Google Play purchase."), 400
+    from urllib.parse import quote
+    try:
+        google = google_play_session()
+        endpoint = (
+            "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+            + quote(GOOGLE_PLAY_PACKAGE, safe="")
+            + "/purchases/subscriptionsv2/tokens/"
+            + quote(token, safe="")
+        )
+        response = google.get(endpoint, timeout=15)
+        response.raise_for_status()
+        purchase = response.json()
+        items = [item for item in purchase.get("lineItems", [])
+                 if item.get("productId") == product_id]
+        expiry = max(
+            (parse_expiry(item.get("expiryTime")) for item in items
+             if parse_expiry(item.get("expiryTime"))),
+            default=None,
+        )
+        state = purchase.get("subscriptionState")
+        if (state not in ("SUBSCRIPTION_STATE_ACTIVE",
+                          "SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
+                          "SUBSCRIPTION_STATE_CANCELED")
+                or expiry is None or expiry <= datetime.now(timezone.utc)):
+            return jsonify(message="No active subscription for this plan."), 403
+
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with get_db() as conn:
+            owner = conn.execute(
+                "SELECT id FROM accounts WHERE google_purchase_token_hash = ?",
+                (token_hash,),
+            ).fetchone()
+            if owner and owner["id"] != account_id:
+                return jsonify(message="Purchase is linked to another account."), 409
+            conn.execute(
+                """UPDATE accounts SET google_purchase_token_hash = ?,
+                   google_subscription_product = ?, google_subscription_state = ?,
+                   google_subscription_expiry = ? WHERE id = ?""",
+                (token_hash, product_id, state, expiry.isoformat(), account_id),
+            )
+        if purchase.get("acknowledgementState") == "ACKNOWLEDGEMENT_STATE_PENDING":
+            ack_url = (
+                "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+                + quote(GOOGLE_PLAY_PACKAGE, safe="")
+                + "/purchases/subscriptions/"
+                + quote(product_id, safe="")
+                + "/tokens/" + quote(token, safe="") + ":acknowledge"
+            )
+            ack = google.post(ack_url, json={}, timeout=15)
+            if not ack.ok:
+                app.logger.warning("Google purchase acknowledgement returned %s", ack.status_code)
+        return jsonify(premium=True, plan=product_id, expires_at=expiry.isoformat())
+    except Exception:
+        app.logger.exception("Google Play verification failed")
+        return jsonify(message="Google Play verification unavailable."), 503
+
+
 # AI request controls.
 # One Gunicorn worker is used so these in-process limits apply globally
 # to this Render instance rather than being multiplied across workers.
