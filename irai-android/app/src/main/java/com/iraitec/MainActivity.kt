@@ -781,19 +781,19 @@ class MainActivity : Activity() {
                 )
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                // Give the user more time to pause and finish speaking before
-                // Android decides the utterance is complete.
+                // Give normal commands a longer pause window after the wake word.
+                // Speech providers may cap these hints, but request generous time.
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    if (notesMode) 15_000L else 8_000L
+                    if (notesMode) 20_000L else 15_000L
                 )
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    if (notesMode) 10_000L else 5_000L
+                    if (notesMode) 15_000L else 10_000L
                 )
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
-                    if (notesMode) 3_000L else 1_500L
+                    if (notesMode) 3_000L else 2_000L
                 )
             }
 
