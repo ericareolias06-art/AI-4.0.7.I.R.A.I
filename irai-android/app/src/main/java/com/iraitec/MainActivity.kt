@@ -96,7 +96,7 @@ class MainActivity : Activity() {
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private var latestDiagnostic = "Waiting for listening service..."
     private var lastRecognizedPhrase = ""
-    private val personalVault by lazy { IraiPersonalVault(this) }
+    private fun personalVault() = IraiPersonalVault(this, currentEmail)
     private data class PendingFormField(val label: String, val profileKey: String?, val value: String?)
     private val pendingFormFields = mutableListOf<PendingFormField>()
     private var pendingFormIndex = 0
@@ -1143,7 +1143,7 @@ class MainActivity : Activity() {
                     .setPositiveButton("Enter answer") { _, _ ->
                         val entered = IraiAssistAccessibilityService.typeIntoField(pending.label, answer)
                         if (entered && pending.profileKey != null) {
-                            personalVault.saveProfile(mapOf(pending.profileKey to answer))
+                            personalVault().saveProfile(mapOf(pending.profileKey to answer))
                         }
                         if (!entered) speakResponse("I couldn't enter that answer. The field may have changed or may not allow automated entry.")
                         pendingFormIndex++
@@ -2577,14 +2577,14 @@ class MainActivity : Activity() {
     }
 
     private fun profileValueForField(label: String, key: String): String {
-        val direct = personalVault.getProfileValue(key)
+        val direct = personalVault().getProfileValue(key)
         if (direct.isNotBlank()) return direct
-        val fullName = personalVault.getProfileValue("full_name").trim()
+        val fullName = personalVault().getProfileValue("full_name").trim()
         return when (key) {
-            "first_name" -> personalVault.getProfileValue("first_name").ifBlank { fullName.split(Regex("\\s+")).firstOrNull().orEmpty() }
-            "last_name" -> personalVault.getProfileValue("last_name").ifBlank { fullName.split(Regex("\\s+")).drop(1).joinToString(" ") }
+            "first_name" -> personalVault().getProfileValue("first_name").ifBlank { fullName.split(Regex("\\s+")).firstOrNull().orEmpty() }
+            "last_name" -> personalVault().getProfileValue("last_name").ifBlank { fullName.split(Regex("\\s+")).drop(1).joinToString(" ") }
             "full_name" -> fullName.ifBlank {
-                listOf(personalVault.getProfileValue("first_name"), personalVault.getProfileValue("last_name"))
+                listOf(personalVault().getProfileValue("first_name"), personalVault().getProfileValue("last_name"))
                     .filter { it.isNotBlank() }.joinToString(" ")
             }
             else -> ""
@@ -2674,7 +2674,7 @@ class MainActivity : Activity() {
             speakResponse("Tell me which saved account password you want to use.")
             return
         }
-        val password = personalVault.getCredentialPassword(serviceName)
+        val password = personalVault().getCredentialPassword(serviceName)
         if (password.isBlank()) {
             speakResponse("I couldn't find a saved password for ${serviceName}. You can add it in Settings, Personal Vault.")
             return
@@ -2744,7 +2744,7 @@ class MainActivity : Activity() {
             val input = EditText(this).apply {
                 hint = title
                 setSingleLine(true)
-                setText(personalVault.getProfileValue(key))
+                setText(personalVault().getProfileValue(key))
                 textSize = 15f
                 setTextColor(Color.BLACK)
             }
@@ -2753,7 +2753,7 @@ class MainActivity : Activity() {
         }
         content.addView(menuButton("Save personal details", "Encrypt and save these details on this phone") {
             val values = fields.mapValues { it.value.text?.toString().orEmpty() }
-            val saved = personalVault.saveProfile(values)
+            val saved = personalVault().saveProfile(values)
             Toast.makeText(this, if (saved) "Personal details saved securely on this device." else "I couldn't save the vault. Existing encrypted data was left untouched.", Toast.LENGTH_LONG).show()
         })
         content.addView(label("Saved account passwords", 18, white))
@@ -2772,7 +2772,7 @@ class MainActivity : Activity() {
         content.addView(credentialUser)
         content.addView(credentialPassword)
         content.addView(menuButton("Save encrypted password", "Password is encrypted locally and never sent to AI") {
-            val saved = personalVault.saveCredential(
+            val saved = personalVault().saveCredential(
                 credentialLabel.text?.toString().orEmpty(),
                 credentialUser.text?.toString().orEmpty(),
                 credentialPassword.text?.toString().orEmpty()
@@ -2782,7 +2782,7 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Password encrypted and saved on this device.", Toast.LENGTH_LONG).show()
             } else Toast.makeText(this, "Enter an account name and password. The vault may be locked or unreadable.", Toast.LENGTH_LONG).show()
         })
-        content.addView(label("Saved accounts: ${personalVault.credentialLabels().joinToString(", ").ifBlank { "None yet" }}", 13, muted))
+        content.addView(label("Saved accounts: ${personalVault().credentialLabels().joinToString(", ").ifBlank { "None yet" }}", 13, muted))
         content.addView(label("To use one, open its sign-in page and say: Irai, fill my saved password for [account name]. Irai asks before entering it and Android verifies your screen lock.", 13, Color.rgb(112, 70, 65)))
         content.addView(menuButton("Erase Personal Vault", "Permanently remove all encrypted profile details and saved passwords from this phone") {
             AlertDialog.Builder(this)
@@ -2790,7 +2790,7 @@ class MainActivity : Activity() {
                 .setMessage("This permanently deletes all saved personal details and passwords from this device. This cannot be undone.")
                 .setNegativeButton("Keep my vault", null)
                 .setPositiveButton("Erase everything") { _, _ ->
-                    val erased = personalVault.clearAll()
+                    val erased = personalVault().clearAll()
                     Toast.makeText(this, if (erased) "Personal Vault erased from this device." else "I couldn't erase the vault. Please try again.", Toast.LENGTH_LONG).show()
                     if (erased) showPersonalVault()
                 }
