@@ -1097,6 +1097,30 @@ class MainActivity : Activity() {
             }
             return
         }
+        if (requestCode == smsContactRequestCode) {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                var phone = ""
+                var contactName = "this contact"
+                try {
+                    contentResolver.query(data.data!!, arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            phone = cursor.getString(0).orEmpty()
+                            contactName = cursor.getString(1).orEmpty().ifBlank { "this contact" }
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("IRAI_SMS", "Could not read selected contact", e)
+                }
+                if (phone.isBlank()) speakResponse("I could not get a phone number from that contact. Please try another contact.")
+                else {
+                    pendingSmsPhone = phone
+                    pendingSmsContactName = contactName
+                    awaitingSmsMessage = true
+                    speakResponse("What would you like me to write to " + contactName + "? Tell me the situation and the point you want to get across.")
+                }
+            } else speakResponse("No contact selected. I cancelled the text message.")
+            return
+        }
         if (requestCode == homeBackgroundRequestCode) {
             if (resultCode == RESULT_OK && data?.data != null) {
                 val selected = data.data!!
@@ -1845,7 +1869,64 @@ class MainActivity : Activity() {
         }, 500)
     }
 
-    private fun sendMessageToIrai(message: String) {
+    private fun clearPendingSms() {
+        awaitingSmsMessage = false
+        pendingSmsPhone = ""
+        pendingSmsContactName = ""
+    }
+
+    private fun startTextMessageFlow() {
+        try {
+            val intent = Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
+            intent.type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+            startActivityForResult(intent, smsContactRequestCode)
+        } catch (e: Exception) {
+            speakResponse("I could not open your contacts. Please make sure a contacts app is available.")
+        }
+    }
+
+    private fun showSmsDraftConfirmation(draft: String) {
+        val editor = EditText(this).apply {
+            setText(draft)
+            minLines = 3
+            maxLines = 8
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Text to " + pendingSmsContactName)
+            .setMessage("Review or edit this draft. Nothing will be sent until you confirm in your messaging app.")
+            .setView(editor)
+            .setNegativeButton("Cancel") { _, _ ->
+                clearPendingSms()
+                speakResponse("I cancelled the message. Nothing was sent.")
+            }
+            .setNeutralButton("Try again") { _, _ ->
+                awaitingSmsMessage = true
+                speakResponse("Tell me how you would like the message changed.")
+            }
+            .setPositiveButton("Open Messages") { _, _ ->
+                val body = editor.text.toString().trim()
+                if (body.isBlank()) {
+                    clearPendingSms()
+                    speakResponse("The message was empty, so I cancelled it.")
+                } else {
+                    val smsIntent = Intent(Intent.ACTION_SENDTO).apply {
+                        data = Uri.parse("smsto:" + Uri.encode(pendingSmsPhone))
+                        putExtra("sms_body", body)
+                    }
+                    try {
+                        startActivity(smsIntent)
+                        speakResponse("I opened your messaging app with the draft addressed to " + pendingSmsContactName + ". Please review it and tap Send when you are ready.")
+                    } catch (e: Exception) {
+                        speakResponse("I could not open your messaging app. Nothing was sent.")
+                    } finally {
+                        clearPendingSms()
+                    }
+                }
+            }
+            .show()
+    }
+    private fun sendMessageToIrai(message: String, onReply: ((String) -> Unit)? = null) {
     val historySnapshot = aiConversationHistory.toList()
     latestDiagnostic = "Irai is thinking..."
     IraiAvatarOverlay.setStatus("Thinking...")
@@ -1923,7 +2004,7 @@ class MainActivity : Activity() {
                     totalChars -= aiConversationHistory.removeAt(0).optString("content").length
                 }
             }
-            speakResponse(reply)
+            if (onReply != null) onReply.invoke(reply) else speakResponse(reply)
         }
     }
     }
