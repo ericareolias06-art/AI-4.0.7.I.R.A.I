@@ -370,7 +370,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         val node = findBestMatchingNode(root, targetField, editableOnly = true) ?: return false
         if (!node.isEnabled || node.isPassword || isProtectedField(node)) return false
         val existingValue = node.text?.toString()?.trim().orEmpty()
-        if (!overwriteExisting && existingValue.isNotBlank()) return true
+        if (!overwriteExisting && existingValue.isNotBlank()) return false
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
