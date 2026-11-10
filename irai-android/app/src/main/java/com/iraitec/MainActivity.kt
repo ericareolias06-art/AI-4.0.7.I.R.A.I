@@ -316,6 +316,7 @@ class MainActivity : Activity() {
         thread {
             var email = ""
             var tutorialRequired = false
+            var subscriptionActive = false
             var valid = false
             var rejected = false
             var connectionFailed = false
@@ -336,6 +337,7 @@ class MainActivity : Activity() {
                     val json = JSONObject(result)
                     email = json.optString("email", "")
                     tutorialRequired = json.optBoolean("tutorial_required", false)
+                    subscriptionActive = json.optBoolean("premium", false)
                     valid = email.isNotBlank()
                 } else {
                     connectionFailed = true
@@ -350,8 +352,10 @@ class MainActivity : Activity() {
                 when {
                     valid -> {
                         currentEmail = email
-                        loggedIn = true
-                        if (tutorialRequired) {
+                        loggedIn = subscriptionActive
+                        if (!subscriptionActive) {
+                            showRenewSubscription()
+                        } else if (tutorialRequired) {
                             startFirstTimeTutorial()
                         } else {
                             showHome(email)
@@ -584,12 +588,7 @@ class MainActivity : Activity() {
                 } else if (success) {
                     currentEmail = email
                     loggedIn = true
-                    if (json.optBoolean("tutorial_required", false)) {
-                        startFirstTimeTutorial()
-                    } else {
-                        showHome(email)
-                        requestMicrophonePermission()
-                    }
+                    checkSubscriptionAccess()
                 }
             }
         }
@@ -4144,6 +4143,84 @@ class MainActivity : Activity() {
             runOnUiThread {
                 Toast.makeText(this, responseMessage, Toast.LENGTH_LONG).show()
                 if (success) showAccountInfo()
+            }
+        }
+    }
+
+    // Renewal gate: keep the session cookie so the user can restore access.
+    private fun showRenewSubscription() {
+        loggedIn = false
+        IraiAvatarOverlay.hide()
+        root.removeAllViews()
+        root.orientation = LinearLayout.VERTICAL
+        root.gravity = Gravity.CENTER
+        root.setPadding(32, 40, 32, 40)
+        root.setBackgroundColor(bg)
+
+        root.addView(label("Subscription required", 26, white).apply {
+            gravity = Gravity.CENTER
+        })
+        root.addView(label(
+            "Your Irai subscription is inactive. Renew to continue using Irai. " +
+                "Your account, memories, and conversations are preserved.",
+            16, muted
+        ).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, 24, 0, 24)
+        })
+        root.addView(Button(this).apply {
+            text = "Renew Subscription"
+            setOnClickListener { showBilling() }
+        })
+        root.addView(Button(this).apply {
+            text = "Check Subscription Again"
+            setOnClickListener { checkSubscriptionAccess() }
+        })
+        root.addView(Button(this).apply {
+            text = "Sign Out"
+            setOnClickListener { showAuth() }
+        })
+    }
+
+    private fun checkSubscriptionAccess() {
+        thread {
+            var verified = false
+            var active = false
+            var tutorialRequired = false
+            var accountEmail = ""
+            try {
+                val connection = openApiConnection("/api/me")
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                val code = connection.responseCode
+                if (code in 200..299) {
+                    val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                    active = json.optBoolean("premium", false)
+                    tutorialRequired = json.optBoolean("tutorial_required", false)
+                    accountEmail = json.optString("email", "")
+                    verified = true
+                }
+                connection.disconnect()
+            } catch (_: Exception) {
+                // Never grant access when the subscription cannot be verified.
+            }
+            runOnUiThread {
+                if (!verified) {
+                    loggedIn = false
+                    Toast.makeText(this, "Could not verify your subscription. Try again.", Toast.LENGTH_LONG).show()
+                    showRenewSubscription()
+                } else if (!active) {
+                    showRenewSubscription()
+                } else {
+                    currentEmail = accountEmail
+                    loggedIn = true
+                    if (tutorialRequired) startFirstTimeTutorial()
+                    else {
+                        showHome(currentEmail)
+                        requestMicrophonePermission()
+                    }
+                }
             }
         }
     }
