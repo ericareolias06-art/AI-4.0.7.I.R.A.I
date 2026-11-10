@@ -96,6 +96,11 @@ class MainActivity : Activity() {
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private var latestDiagnostic = "Waiting for listening service..."
     private var lastRecognizedPhrase = ""
+    private val personalVault by lazy { IraiPersonalVault(this) }
+    private data class PendingFormField(val label: String, val profileKey: String?, val value: String?)
+    private val pendingFormFields = mutableListOf<PendingFormField>()
+    private var pendingFormIndex = 0
+    private var awaitingFormAnswerFor: PendingFormField? = null
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var speechTts: TextToSpeech? = null
@@ -113,7 +118,7 @@ class MainActivity : Activity() {
 
     private val restartListeningRunnable = Runnable {
         if (loggedIn && !awaitingCommand && !listeningForCommand) {
-            if (notesMode) {
+            if (notesMode || awaitingFormAnswerFor != null) {
                 startVoiceCommand()
             } else {
                 // The service is stopped while Notes is open. Start it again
@@ -1082,7 +1087,48 @@ class MainActivity : Activity() {
             .trim()
         val text = routedCommand.lowercase(Locale.US)
 
+        // A spoken reply to a missing form field is treated as that field's
+        // answer, never routed to the AI chat endpoint.
+        awaitingFormAnswerFor?.let { pending ->
+            awaitingFormAnswerFor = null
+            if (text in listOf("cancel", "stop filling", "cancel filling", "skip this field")) {
+                speakResponse("Okay, I stopped filling the form.")
+                pendingFormFields.clear()
+                pendingFormIndex = 0
+                return
+            }
+            val answer = routedCommand.trim().removeSurrounding("\\\"")
+            if (answer.isBlank()) {
+                awaitingFormAnswerFor = pending
+                askForNextFormAnswer()
+            } else {
+                confirmAssistedAction(
+                    "Use this answer for ${pending.label}?",
+                    "I will enter the answer you just gave into ${pending.label}. Please check that it is correct."
+                ) {
+                    val entered = IraiAssistAccessibilityService.typeIntoField(pending.label, answer)
+                    if (entered && pending.profileKey != null) {
+                        personalVault.saveProfile(mapOf(pending.profileKey to answer))
+                    }
+                    if (!entered) speakResponse("I couldn't enter that answer. The field may have changed or may not allow automated entry.")
+                    pendingFormIndex++
+                    processNextFormField()
+                }
+            }
+            return
+        }
+
         when {
+            text in listOf("fill this form", "fill out this form", "fill the form", "fill out the form", "complete this form", "complete the form", "fill this out", "start filling this form", "fill in this form") -> {
+                beginAutomaticFormFill()
+                return
+            }
+            text.startsWith("fill my saved password for ") ||
+                text.startsWith("fill saved password for ") -> {
+                val serviceName = routedCommand.substringAfter("for", "").trim()
+                fillSavedPassword(serviceName)
+                return
+            }
             (text in listOf("import a pdf", "open a pdf", "read a pdf", "scan a pdf", "import pdf", "read this pdf", "help me with a pdf", "open document", "import document")) -> {
                 launchPdfImport()
                 return
@@ -2466,6 +2512,207 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun profileKeyForField(label: String): String? {
+        val value = label.lowercase(Locale.US)
+        return when {
+            Regex("\\b(first name|given name|forename)\\b").containsMatchIn(value) -> "first_name"
+            Regex("\\b(last name|surname|family name)\\b").containsMatchIn(value) -> "last_name"
+            Regex("\\b(full name|your name|name)\\b").containsMatchIn(value) -> "full_name"
+            Regex("\\b(birth|birthday|date of birth|dob)\\b").containsMatchIn(value) -> "birthday"
+            Regex("\\b(email|e mail)\\b").containsMatchIn(value) -> "email"
+            Regex("\\b(phone|mobile|telephone)\\b").containsMatchIn(value) -> "phone"
+            Regex("\\b(street address|mailing address|home address|address)\\b").containsMatchIn(value) -> "address"
+            Regex("\\bcity\\b").containsMatchIn(value) -> "city"
+            Regex("\\b(state|province)\\b").containsMatchIn(value) -> "state"
+            Regex("\\b(zip|postal code)\\b").containsMatchIn(value) -> "postal_code"
+            else -> null
+        }
+    }
+
+    private fun profileValueForField(label: String, key: String): String {
+        val direct = personalVault.getProfileValue(key)
+        if (direct.isNotBlank()) return direct
+        val fullName = personalVault.getProfileValue("full_name").trim()
+        return when (key) {
+            "first_name" -> personalVault.getProfileValue("first_name").ifBlank { fullName.split(Regex("\\s+")).firstOrNull().orEmpty() }
+            "last_name" -> personalVault.getProfileValue("last_name").ifBlank { fullName.split(Regex("\\s+")).drop(1).joinToString(" ") }
+            "full_name" -> fullName.ifBlank {
+                listOf(personalVault.getProfileValue("first_name"), personalVault.getProfileValue("last_name"))
+                    .filter { it.isNotBlank() }.joinToString(" ")
+            }
+            else -> ""
+        }
+    }
+
+    private fun beginAutomaticFormFill() {
+        if (!IraiAssistAccessibilityService.isEnabled(this)) {
+            requestGuidedAssistanceEnablement()
+            return
+        }
+        val labels = IraiAssistAccessibilityService.fillableFieldLabels()
+        if (labels.isEmpty()) {
+            speakResponse("I can't identify any labeled, ordinary text fields on this page. I won't guess where information belongs.")
+            return
+        }
+        pendingFormFields.clear()
+        pendingFormIndex = 0
+        labels.forEach { label ->
+            val key = profileKeyForField(label)
+            val value = if (key == null) "" else profileValueForField(label, key)
+            pendingFormFields.add(PendingFormField(label, key, value.ifBlank { null }))
+        }
+        val known = pendingFormFields.filter { it.value != null }.map { it.label }
+        val missing = pendingFormFields.filter { it.value == null }.map { it.label }
+        val description = buildString {
+            append("I found ${labels.size} labeled text fields. ")
+            if (known.isNotEmpty()) append("I can fill saved details in: ${known.joinToString(", ")}. ")
+            if (missing.isNotEmpty()) append("I'll ask you for: ${missing.joinToString(", ")}. ")
+            append("I will not fill passwords, payment details, government ID numbers, verification codes, or consent choices. I will not submit the form.")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Fill this form?")
+            .setMessage(description)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Start filling") { _, _ ->
+                speakResponse("Okay. I'll fill the information stored on this device and ask you about anything I don't know.")
+                handler.postDelayed({ processNextFormField() }, 1200)
+            }
+            .show()
+    }
+
+    private fun processNextFormField() {
+        if (pendingFormIndex >= pendingFormFields.size) {
+            pendingFormFields.clear()
+            pendingFormIndex = 0
+            awaitingFormAnswerFor = null
+            speakResponse("I've finished the fields I could identify. Please review every answer. I have not submitted the form.")
+            return
+        }
+        val field = pendingFormFields[pendingFormIndex]
+        val value = field.value
+        if (value != null) {
+            val entered = IraiAssistAccessibilityService.typeIntoField(field.label, value)
+            if (!entered) {
+                pendingFormFields[pendingFormIndex] = field.copy(value = null)
+                askForNextFormAnswer()
+            } else {
+                pendingFormIndex++
+                handler.postDelayed({ processNextFormField() }, 350)
+            }
+        } else {
+            askForNextFormAnswer()
+        }
+    }
+
+    private fun askForNextFormAnswer() {
+        if (pendingFormIndex >= pendingFormFields.size) {
+            processNextFormField()
+            return
+        }
+        val field = pendingFormFields[pendingFormIndex]
+        awaitingFormAnswerFor = field
+        speakResponse("I don't have the information for ${field.label}. Please say the answer now. Say cancel filling if you want me to stop.")
+        handler.removeCallbacks(restartListeningRunnable)
+        handler.postDelayed(restartListeningRunnable, 3500)
+    }
+
+    private fun fillSavedPassword(serviceName: String) {
+        if (!IraiAssistAccessibilityService.isEnabled(this)) {
+            requestGuidedAssistanceEnablement()
+            return
+        }
+        if (serviceName.isBlank()) {
+            speakResponse("Tell me which saved account password you want to use.")
+            return
+        }
+        val password = personalVault.getCredentialPassword(serviceName)
+        if (password.isBlank()) {
+            speakResponse("I couldn't find a saved password for ${serviceName}. You can add it in Settings, Personal Vault.")
+            return
+        }
+        val fields = IraiAssistAccessibilityService.passwordFieldLabels()
+        if (fields.isEmpty()) {
+            speakResponse("I can't find a password field on this screen.")
+            return
+        }
+        confirmAssistedAction(
+            "Use saved password for ${serviceName}?",
+            "I will enter the saved password directly from this device's encrypted vault into the password field. I will not send it to the AI service or speak it aloud."
+        ) {
+            val entered = IraiAssistAccessibilityService.enterStoredPassword(fields.first(), password)
+            speakResponse(if (entered) "I've entered the saved password. I will not read it aloud." else "I couldn't safely identify the password field.")
+        }
+    }
+
+    private fun showPersonalVault() {
+        val scroll = ScrollView(this)
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20, 12, 20, 24)
+        }
+        content.addView(screenHeader("Personal Vault") { showSettings() })
+        content.addView(label("Stored only on this phone. Details are encrypted with an AES-256 key protected by Android Keystore. They are not uploaded to Irai's AI server.", 13, muted))
+        val fields = linkedMapOf<String, EditText>()
+        val profileSpecs = listOf(
+            "full_name" to "Full name",
+            "first_name" to "First name",
+            "last_name" to "Last name",
+            "birthday" to "Birthday (for example, MM/DD/YYYY)",
+            "email" to "Email",
+            "phone" to "Phone",
+            "address" to "Street address",
+            "city" to "City",
+            "state" to "State",
+            "postal_code" to "ZIP / postal code"
+        )
+        profileSpecs.forEach { (key, title) ->
+            val input = EditText(this).apply {
+                hint = title
+                setSingleLine(true)
+                setText(personalVault.getProfileValue(key))
+                textSize = 15f
+                setTextColor(Color.BLACK)
+            }
+            fields[key] = input
+            content.addView(input)
+        }
+        content.addView(menuButton("Save personal details", "Encrypt and save these details on this phone") {
+            val values = fields.mapValues { it.value.text?.toString().orEmpty() }
+            val saved = personalVault.saveProfile(values)
+            Toast.makeText(this, if (saved) "Personal details saved securely on this device." else "I couldn't save the vault. Existing encrypted data was left untouched.", Toast.LENGTH_LONG).show()
+        })
+        content.addView(label("Saved account passwords", 18, white))
+        content.addView(label("Only save ordinary website/app login credentials here. Do not store bank, payment-card, government-ID, or recovery secrets.", 13, muted))
+        val credentialLabel = EditText(this).apply { hint = "Account or website name"; setSingleLine(true); setTextColor(Color.BLACK) }
+        val credentialUser = EditText(this).apply { hint = "Username or email (optional)"; setSingleLine(true); setTextColor(Color.BLACK) }
+        val credentialPassword = EditText(this).apply {
+            hint = "Password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setTextColor(Color.BLACK)
+        }
+        content.addView(credentialLabel)
+        content.addView(credentialUser)
+        content.addView(credentialPassword)
+        content.addView(menuButton("Save encrypted password", "Password is encrypted locally and never sent to AI") {
+            val saved = personalVault.saveCredential(
+                credentialLabel.text?.toString().orEmpty(),
+                credentialUser.text?.toString().orEmpty(),
+                credentialPassword.text?.toString().orEmpty()
+            )
+            if (saved) {
+                credentialPassword.text?.clear()
+                Toast.makeText(this, "Password encrypted and saved on this device.", Toast.LENGTH_LONG).show()
+            } else Toast.makeText(this, "Enter an account name and password. The vault may be locked or unreadable.", Toast.LENGTH_LONG).show()
+        })
+        content.addView(label("Saved accounts: ${personalVault.credentialLabels().joinToString(", ").ifBlank { "None yet" }}", 13, muted))
+        content.addView(label("To use one, open its sign-in page and say: Irai, fill my saved password for [account name]. Irai asks before entering it.", 13, muted))
+        scroll.addView(content)
+        root.removeAllViews()
+        root.orientation = LinearLayout.VERTICAL
+        root.setPadding(0, 0, 0, 0)
+        root.addView(scroll)
+    }
+
     private fun showSettings() {
         root.removeAllViews()
         root.orientation = LinearLayout.VERTICAL
@@ -2501,6 +2748,9 @@ class MainActivity : Activity() {
                 showAvatarOverlay()
                 Toast.makeText(this, "Floating Irai is enabled.", Toast.LENGTH_SHORT).show()
             }
+        })
+        content.addView(menuButton("Personal Vault", "Encrypted personal details and saved account passwords stored only on this phone") {
+            showPersonalVault()
         })
         content.addView(menuButton(
             if (IraiAssistAccessibilityService.isEnabled(this)) "Guided Assistance: Enabled" else "Enable Guided Assistance",
