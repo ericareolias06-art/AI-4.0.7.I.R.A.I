@@ -122,6 +122,11 @@ class MainActivity : Activity() {
     private val vaultUnlockRequestCode = 2303
     private val homeBackgroundRequestCode = 2304
     private val smsContactRequestCode = 2305
+    private val callContactRequestCode = 2306
+    private val emailContactRequestCode = 2307
+    private var awaitingEmailIntent = false
+    private var pendingEmailAddress = ""
+    private var pendingEmailName = ""
     private var awaitingSmsMessage = false
     private var pendingSmsPhone = ""
     private var pendingSmsContactName = ""
@@ -1121,6 +1126,38 @@ class MainActivity : Activity() {
             } else speakResponse("No contact selected. I cancelled the text message.")
             return
         }
+        if (requestCode == callContactRequestCode) {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                try {
+                    contentResolver.query(data.data!!, arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val number = cursor.getString(0).orEmpty()
+                            val name = cursor.getString(1).orEmpty()
+                            if (number.isNotBlank()) confirmPlaceCall(name.ifBlank { number }, number)
+                            else speakResponse("I couldn't find a phone number for that contact.")
+                        }
+                    }
+                } catch (_: Exception) { speakResponse("I couldn't read that contact's phone number.") }
+            } else speakResponse("Call cancelled.")
+            return
+        }
+        if (requestCode == emailContactRequestCode) {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                try {
+                    contentResolver.query(data.data!!, arrayOf(ContactsContract.CommonDataKinds.Email.ADDRESS, ContactsContract.CommonDataKinds.Email.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            pendingEmailAddress = cursor.getString(0).orEmpty()
+                            pendingEmailName = cursor.getString(1).orEmpty().ifBlank { pendingEmailAddress }
+                        }
+                    }
+                } catch (_: Exception) {}
+                if (pendingEmailAddress.isNotBlank()) {
+                    awaitingEmailIntent = true
+                    speakResponse("What would you like the email to say to " + pendingEmailName + "? Tell me the purpose and the important details, or say cancel.")
+                } else speakResponse("I couldn't get an email address from that contact.")
+            } else speakResponse("Email cancelled.")
+            return
+        }
         if (requestCode == homeBackgroundRequestCode) {
             if (resultCode == RESULT_OK && data?.data != null) {
                 val selected = data.data!!
@@ -1300,6 +1337,25 @@ class MainActivity : Activity() {
             .replace(Regex("(?i)^(?:hey\\s+)?(?:irai|i\\s*ray)[,\\s:.-]+"), "")
             .trim()
 
+        if (awaitingEmailIntent) {
+            awaitingEmailIntent = false
+            if (text in listOf("cancel", "never mind", "nevermind", "stop")) {
+                pendingEmailAddress = ""
+                pendingEmailName = ""
+                speakResponse("Okay, I cancelled the email.")
+            } else if (rawSpokenAnswer.isBlank()) {
+                awaitingEmailIntent = true
+                speakResponse("Tell me what you would like the email to say, or say cancel.")
+            } else {
+                val idea = rawSpokenAnswer
+                sendMessageToIrai("Draft a polished email based on this intent. Return only the email subject and body in this exact format: SUBJECT: ... then a blank line then BODY: ... Preserve facts and do not invent details. User intent: " + idea) { draft ->
+                    if (draft.isBlank() || draft.contains("couldn't connect", true) || draft.contains("could not", true)) speakResponse("I couldn't create the email draft. Please try again.")
+                    else showEmailDraftConfirmation(draft.trim())
+                }
+            }
+            return
+        }
+
         if (awaitingSmsMessage) {
             awaitingSmsMessage = false
             if (text in listOf("cancel", "cancel message", "never mind", "nevermind", "stop")) {
@@ -1417,6 +1473,15 @@ class MainActivity : Activity() {
                     }
                     .show()
             }
+            return
+        }
+
+        if (text == "call" || text == "make a call" || text == "phone someone" || text.startsWith("call ")) {
+            startCallFlow(text.removePrefix("call ").trim())
+            return
+        }
+        if (text in listOf("email", "write an email", "compose an email", "send an email", "email someone") || text.startsWith("email ") || text.startsWith("send an email to ")) {
+            startEmailFlow()
             return
         }
 
@@ -1904,6 +1969,65 @@ class MainActivity : Activity() {
             }
             .show()
     }
+    private fun startCallFlow(spokenTarget: String) {
+        if (spokenTarget.isNotBlank() && spokenTarget.any { it.isDigit() }) {
+            confirmPlaceCall(spokenTarget, spokenTarget)
+            return
+        }
+        try {
+            val intent = Intent(Intent.ACTION_PICK).apply {
+                setDataAndType(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE)
+            }
+            startActivityForResult(intent, callContactRequestCode)
+        } catch (_: Exception) { speakResponse("I could not open your contacts. You can say call followed by a phone number.") }
+    }
+
+    private fun confirmPlaceCall(name: String, number: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Call $name?")
+            .setMessage("I will open your phone dialer with $number. Review the number, then confirm the call in the dialer.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Open Dialer") { _, _ ->
+                try { startActivity(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null))) }
+                catch (_: Exception) { speakResponse("I could not open your phone dialer.") }
+            }
+            .show()
+    }
+
+    private fun startEmailFlow() {
+        try {
+            val intent = Intent(Intent.ACTION_PICK).apply {
+                setDataAndType(ContactsContract.CommonDataKinds.Email.CONTENT_URI, ContactsContract.CommonDataKinds.Email.CONTENT_TYPE)
+            }
+            startActivityForResult(intent, emailContactRequestCode)
+        } catch (_: Exception) { speakResponse("I could not open your contacts. Please try again.") }
+    }
+
+    private fun showEmailDraftConfirmation(draft: String) {
+        val subjectMatch = Regex("(?im)^SUBJECT:\\s*(.*)$").find(draft)
+        val bodyMatch = Regex("(?ims)^BODY:\\s*(.*)$").find(draft)
+        val subject = EditText(this).apply { setText(subjectMatch?.groupValues?.get(1)?.trim().orEmpty()); hint = "Subject" }
+        val body = EditText(this).apply { setText(bodyMatch?.groupValues?.get(1)?.trim().orEmpty().ifBlank { draft }); hint = "Email message"; minLines = 5; maxLines = 12 }
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), 0); addView(label("To: $pendingEmailName <$pendingEmailAddress>", 14, Color.DKGRAY)); addView(subject); addView(body) }
+        AlertDialog.Builder(this)
+            .setTitle("Review your email")
+            .setView(panel)
+            .setNegativeButton("Cancel") { _, _ -> pendingEmailAddress = ""; pendingEmailName = ""; speakResponse("Email cancelled. Nothing was sent.") }
+            .setPositiveButton("Open Email App") { _, _ ->
+                val recipient = pendingEmailAddress
+                val mail = Intent(Intent.ACTION_SENDTO).apply {
+                    data = Uri.parse("mailto:")
+                    putExtra(Intent.EXTRA_EMAIL, arrayOf(recipient))
+                    putExtra(Intent.EXTRA_SUBJECT, subject.text.toString())
+                    putExtra(Intent.EXTRA_TEXT, body.text.toString())
+                }
+                pendingEmailAddress = ""; pendingEmailName = ""
+                try { startActivity(mail); speakResponse("I opened your email app with the reviewed draft. Please check it and press Send when you are ready.") }
+                catch (_: Exception) { speakResponse("I could not open an email app. Nothing was sent.") }
+            }
+            .show()
+    }
+
     private fun clearPendingSms() {
         awaitingSmsMessage = false
         pendingSmsPhone = ""
@@ -2984,6 +3108,8 @@ class MainActivity : Activity() {
             "Notes lets you create and name notes, transcribe your voice, save your thoughts on this phone, and listen to them later.",
             "The Calculator handles everyday arithmetic, including addition, subtraction, multiplication, division, decimals, and parentheses.",
             "The Text Message Assistant lets you choose a contact, describe what you want to say, and have me draft a natural message. Review the draft, then open your messaging app and tap Send when you are ready.",
+            "The Phone Call Assistant lets you choose a contact or say a phone number. I will open the phone dialer and ask you to confirm before placing the call.",
+            "The Email Assistant lets you choose a contact, dictate the purpose, review and edit the subject and message, then open your email app. You must approve the final send in that app.",
             "Scan Forms opens your camera so I can read a paper form and help explain it. You can also import a PDF. Please avoid scanning private information you do not want processed."
         )
         var step = 0
@@ -3122,6 +3248,12 @@ class MainActivity : Activity() {
         })
         content.addView(menuButton("💬  Text Message Assistant", "Tell I.R.A.I what you want to say and let her draft a text") {
             startTextMessageFlow()
+        })
+        content.addView(menuButton("📞  Phone Call Assistant", "Call a contact or phone number after you confirm") {
+            startCallFlow("")
+        })
+        content.addView(menuButton("✉️  Email Assistant", "Dictate an email, review the subject and message, then send using your email app") {
+            startEmailFlow()
         })
         content.addView(menuButton("🌷  Notes", "Create, transcribe, save, and listen to notes") {
             startNotesMode()
