@@ -468,6 +468,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         fun passwordFieldLabels(): List<String> = activeService?.listPasswordFieldLabels().orEmpty()
         fun enterStoredPassword(target: String, password: String): Boolean = activeService?.enterStoredPassword(target, password) ?: false
         fun tapText(target: String): Boolean = activeService?.tapVisibleText(target) ?: false
+        fun hasClearlyLabeledSendButton(): Boolean = activeService?.hasClearlyLabeledSendButton() ?: false
         fun readTypedMessageDraft(): String = activeService?.readSingleTypedMessageDraft().orEmpty()
         fun pressSendButton(): Boolean = activeService?.clickClearlyLabeledSendButton() ?: false
         fun typeIntoField(target: String, value: String): Boolean = activeService?.enterText(target, value, true) ?: false
