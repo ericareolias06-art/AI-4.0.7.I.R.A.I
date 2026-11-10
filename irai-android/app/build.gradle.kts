@@ -26,7 +26,7 @@ android {
         applicationId = "com.Iraitec"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
+        versionCode = 6
         versionName = "1.5"
     }
 
