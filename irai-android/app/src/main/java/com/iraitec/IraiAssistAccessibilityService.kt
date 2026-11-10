@@ -385,6 +385,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
         fun describeCurrentForm(): String = activeService?.describeVisibleForm().orEmpty()
         fun fillableFieldLabels(): List<String> = activeService?.listFillableFieldLabels().orEmpty()
         fun passwordFieldLabels(): List<String> = activeService?.listPasswordFieldLabels().orEmpty()
+        fun enterStoredPassword(target: String, password: String): Boolean = activeService?.enterStoredPassword(target, password) ?: false
         fun tapText(target: String): Boolean = activeService?.tapVisibleText(target) ?: false
         fun typeIntoField(target: String, value: String): Boolean = activeService?.enterText(target, value, true) ?: false
         fun fillEmptyField(target: String, value: String): Boolean = activeService?.enterText(target, value, false) ?: false
