@@ -181,7 +181,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
     /** Explicitly invoked only for a credential selected from the local vault. */
     private fun isDisallowedCredentialField(node: AccessibilityNodeInfo): Boolean {
         val forbidden = Regex(
-            "\\b(card|cardholder|bank|routing|social security|tax id|ssn|cvv|cvc|verification|one.?time|recovery|otp|security code)\\b",
+            "\\b(card|cardholder|credit|debit|payment|bank|account number|routing|social security|tax id|ssn|cvv|cvc|pin|verification|one.?time|recovery|otp|security code|expiration|expiry)\\b",
             RegexOption.IGNORE_CASE
         )
         var current: AccessibilityNodeInfo? = node
@@ -202,7 +202,7 @@ class IraiAssistAccessibilityService : AccessibilityService() {
 
     fun enterStoredPassword(targetField: String, password: String): Boolean {
         if (password.isEmpty() || Regex(
-                "\\b(card|cardholder|bank|routing|social security|tax id|ssn|cvv|cvc|verification|one.?time|recovery|otp)\\b",
+                "\\b(card|cardholder|credit|debit|payment|bank|account number|routing|social security|tax id|ssn|cvv|cvc|pin|verification|one.?time|recovery|otp|security code|expiration|expiry)\\b",
                 RegexOption.IGNORE_CASE
             ).containsMatchIn(targetField)) return false
         val root = rootInActiveWindow ?: return false
