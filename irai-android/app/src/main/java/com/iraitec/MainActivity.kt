@@ -2055,7 +2055,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun screenHeader(title: String, onBack: () -> Unit): LinearLayout {
+    private fun screenHeader(title: String, onBack: () -> Unit, lightBackground: Boolean = false): LinearLayout {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -2064,7 +2064,7 @@ class MainActivity : Activity() {
         header.addView(Button(this).apply {
             text = "‹"
             textSize = 25f
-            setTextColor(Color.rgb(88, 52, 47))
+            setTextColor(if (lightBackground) Color.rgb(88, 52, 47) else white)
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { onBack() }
         }, LinearLayout.LayoutParams((56 * resources.displayMetrics.density).toInt(), (60 * resources.displayMetrics.density).toInt()))
@@ -2072,7 +2072,7 @@ class MainActivity : Activity() {
             text = title
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.rgb(88, 52, 47))
+            setTextColor(if (lightBackground) Color.rgb(88, 52, 47) else white)
         })
         return header
     }
@@ -2724,7 +2724,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 12, 20, 24)
         }
-        content.addView(screenHeader("Personal Vault") { showSettings() })
+        content.addView(screenHeader("Personal Vault", { showSettings() }, true))
         content.addView(label("Stored only on this phone. Details are encrypted with an AES-256 key protected by Android Keystore. They are not uploaded to Irai's AI server.", 13, muted))
         val fields = linkedMapOf<String, EditText>()
         val profileSpecs = listOf(
@@ -2810,7 +2810,7 @@ class MainActivity : Activity() {
             GradientDrawable.Orientation.TOP_BOTTOM,
             intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
         )
-        root.addView(screenHeader("Settings") { showHome(currentEmail) })
+        root.addView(screenHeader("Settings", { showHome(currentEmail) }, true))
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(4, 20, 4, 10)
