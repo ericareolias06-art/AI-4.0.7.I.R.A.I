@@ -4231,81 +4231,119 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun showBilling() {
+    private var playSubscriptions: PlaySubscriptions? = null
+
+    private fun billingClient(): PlaySubscriptions {
+        if (playSubscriptions == null) {
+            playSubscriptions = PlaySubscriptions(
+                this,
+                { productId, token -> verifyPlayPurchase(productId, token) },
+                { error -> runOnUiThread {
+                    Toast.makeText(this, error, Toast.LENGTH_LONG).show()
+                } }
+            )
+        }
+        return playSubscriptions!!
+    }
+
+    private fun verifyPlayPurchase(productId: String, purchaseToken: String) {
         thread {
-            var premium = false
-            var status = ""
-            var periodEnd = ""
+            var success = false
+            var detail = "Unable to verify Google Play purchase."
             try {
-                val connection = openApiConnection("/api/me")
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 15000
-                connection.readTimeout = 15000
+                val connection = openApiConnection("/api/google-play/verify")
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.connectTimeout = 20000
+                connection.readTimeout = 20000
+                val body = JSONObject()
+                    .put("product_id", productId)
+                    .put("purchase_token", purchaseToken)
+                connection.outputStream.use {
+                    it.write(body.toString().toByteArray(Charsets.UTF_8))
+                }
                 val code = connection.responseCode
                 val stream = if (code in 200..299) connection.inputStream else connection.errorStream
                 val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
-                if (code in 200..299) {
-                    val json = JSONObject(result)
-                    premium = json.optBoolean("premium", false)
-                    status = json.optString("subscription_status", "")
-                    periodEnd = json.optString("subscription_period_end", "")
-                }
+                val json = JSONObject(result)
+                success = code in 200..299 && json.optBoolean("premium", false)
+                detail = json.optString("message", detail)
                 connection.disconnect()
             } catch (_: Exception) {
+                detail = "Could not contact Irai's subscription server."
             }
-
             runOnUiThread {
-                root.removeAllViews()
-                root.orientation = LinearLayout.VERTICAL
-                root.gravity = Gravity.TOP
-                root.setPadding(20, 14, 20, 20)
-                root.background = GradientDrawable(
-                    GradientDrawable.Orientation.TOP_BOTTOM,
-                    intArrayOf(Color.rgb(25, 22, 49), Color.rgb(43, 31, 72), Color.rgb(18, 18, 32))
-                )
-                root.addView(screenHeader("Billing & Payments") { showSettings() })
-                val scroll = ScrollView(this)
-                val content = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(4, 18, 4, 12)
-                }
-                content.addView(label(if (premium) "Premium is active" else "Free account", 22, if (premium) accent else white))
-                content.addView(label(
-                    if (status.isNotBlank()) "Subscription status: $status" else "Manage your Irai Tec subscription securely.",
-                    14, muted
-                ))
-                if (periodEnd.isNotBlank()) {
-                    content.addView(label("Current billing period ends: ${periodEnd.take(10)}", 13, muted))
-                }
-                content.addView(menuButton("Manage Payment Methods", "Update cards, billing details, or cancel a paid subscription") {
-                    openBillingPortal()
-                })
-                if (!premium) {
-                    content.addView(label("$3/month", 18, accent).apply { setPadding(4, 20, 4, 4) })
-                    content.addView(Button(this).apply {
-                        text = "Subscribe Monthly"
-                        setOnClickListener { startCheckout("monthly") }
-                    }, params())
-                    content.addView(label("$30/year", 18, accent))
-                    content.addView(Button(this).apply {
-                        text = "Subscribe Yearly"
-                        setOnClickListener { startCheckout("yearly") }
-                    }, params())
-                    content.addView(Button(this).apply {
-                        text = "Redeem Promo Code"
-                        setOnClickListener { showPromoInput() }
-                    }, params())
-                }
-                content.addView(label(
-                    "Payment information is handled through Stripe's secure billing page. Irai Tec does not store your full card number.",
-                    12, muted
-                ).apply { setPadding(4, 22, 4, 8) })
-                scroll.addView(content)
-                root.addView(scroll, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-                ))
+                if (success) checkSubscriptionAccess()
+                else Toast.makeText(this, detail, Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private fun showBilling() {
+        loggedIn = false
+        root.removeAllViews()
+        root.orientation = LinearLayout.VERTICAL
+        root.gravity = Gravity.TOP
+        root.setPadding(24, 32, 24, 24)
+        root.setBackgroundColor(bg)
+        root.addView(TextView(this).apply {
+            text = "Irai subscriptions"
+            textSize = 25f
+            setTextColor(white)
+            gravity = Gravity.CENTER
+        })
+        root.addView(TextView(this).apply {
+            text = "Choose a Google Play subscription to unlock Irai. " +
+                "Subscriptions renew automatically until canceled in Google Play."
+            textSize = 15f
+            setTextColor(muted)
+            setPadding(0, 18, 0, 18)
+        })
+        val planContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        root.addView(planContainer)
+        planContainer.addView(TextView(this).apply {
+            text = "Loading plans from Google Play..."
+            setTextColor(muted)
+        })
+        val client = billingClient()
+        client.connect {
+            planContainer.removeAllViews()
+            val names = mapOf(
+                "irai_starter" to "Starter · 300 messages/month",
+                "irai_plus" to "Plus · 1,200 messages/month",
+                "irai_premium" to "Premium · 3,000 messages/month",
+                "irai_ultimate" to "Ultimate · 6,000 messages/month"
+            )
+            val plans = client.availablePlans()
+            if (plans.isEmpty()) {
+                planContainer.addView(TextView(this).apply {
+                    text = "No subscription products are available yet. " +
+                        "Set up the matching product IDs in Play Console."
+                    setTextColor(muted)
+                })
+            }
+            for ((id, price) in plans) {
+                planContainer.addView(Button(this).apply {
+                    text = "${names[id] ?: id} — $price"
+                    setOnClickListener { client.purchase(id) }
+                })
+            }
+        }
+        root.addView(Button(this).apply {
+            text = "Restore Google Play Purchase"
+            setOnClickListener { client.restorePurchases() }
+        })
+        root.addView(Button(this).apply {
+            text = "Check Subscription Again"
+            setOnClickListener { checkSubscriptionAccess() }
+        })
+        root.addView(Button(this).apply {
+            text = "Back"
+            setOnClickListener { showRenewSubscription() }
+        })
     }
 
     private fun openBillingPortal() {
