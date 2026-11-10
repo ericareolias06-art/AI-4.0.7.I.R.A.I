@@ -792,9 +792,31 @@ def stripe_webhook():
 
 
 
-# AI request limit: 10 requests per account per minute.
+# AI request controls.
+# One Gunicorn worker is used so these in-process limits apply globally
+# to this Render instance rather than being multiplied across workers.
 _ai_request_times = {}
 _ai_rate_lock = threading.Lock()
+
+def _setting_int(name, default, minimum=1, maximum=100000):
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(value, maximum))
+
+
+# Admit up to 75 simultaneous chat requests (active + waiting), while keeping
+# actual Ollama generation conservative by default on the user's laptop.
+_AI_MAX_INFLIGHT = _setting_int("AI_MAX_INFLIGHT", 75, 1, 200)
+_OLLAMA_MAX_PARALLEL = _setting_int("OLLAMA_MAX_PARALLEL", 1, 1, 4)
+_OLLAMA_QUEUE_TIMEOUT = _setting_int("OLLAMA_QUEUE_TIMEOUT", 60, 1, 180)
+_OLLAMA_TIMEOUT = _setting_int("OLLAMA_TIMEOUT", 90, 10, 240)
+_OLLAMA_NUM_CTX = _setting_int("OLLAMA_NUM_CTX", 8192, 1024, 32768)
+_OLLAMA_NUM_PREDICT = _setting_int("OLLAMA_NUM_PREDICT", 256, 64, 2048)
+
+_ai_inflight = threading.BoundedSemaphore(_AI_MAX_INFLIGHT)
+_ollama_slots = threading.BoundedSemaphore(_OLLAMA_MAX_PARALLEL)
 
 
 @app.post("/api/ai/chat")
@@ -936,6 +958,13 @@ def ai_chat():
         "model": "irai:latest",
         "messages": messages,
         "stream": False,
+        "keep_alive": os.environ.get("OLLAMA_KEEP_ALIVE", "10m"),
+        "options": {
+            # A practical context cap lowers KV-cache RAM use versus the
+            # model's 131k maximum while retaining the existing chat history.
+            "num_ctx": _OLLAMA_NUM_CTX,
+            "num_predict": _OLLAMA_NUM_PREDICT,
+        },
     }).encode("utf-8")
 
     outbound = Request(
@@ -950,8 +979,28 @@ def ai_chat():
     )
 
     try:
-        with urlopen(outbound, timeout=90) as response:
-            result = json.loads(response.read().decode("utf-8"))
+        # Bound total admitted requests so a burst cannot create an
+        # unbounded backlog or exhaust the Render process.
+        if not _ai_inflight.acquire(blocking=False):
+            busy = jsonify(message="Irai is busy right now. Please try again shortly.")
+            busy.headers["Retry-After"] = "10"
+            return busy, 503
+
+        try:
+            # Queue requests instead of launching too many generations against
+            # the laptop's CPU/RAM. The default is one Ollama generation at a time.
+            if not _ollama_slots.acquire(timeout=_OLLAMA_QUEUE_TIMEOUT):
+                busy = jsonify(message="Irai is handling other requests. Please try again shortly.")
+                busy.headers["Retry-After"] = "10"
+                return busy, 503
+
+            try:
+                with urlopen(outbound, timeout=_OLLAMA_TIMEOUT) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+            finally:
+                _ollama_slots.release()
+        finally:
+            _ai_inflight.release()
 
         answer = result.get("message", {}).get("content")
 
