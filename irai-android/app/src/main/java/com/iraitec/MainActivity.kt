@@ -112,6 +112,9 @@ class MainActivity : Activity() {
     private var pendingTutorialStart = false
     private val pageScanRequestCode = 2301
     private val pdfImportRequestCode = 2302
+    private val vaultUnlockRequestCode = 2303
+    private var pendingVaultPassword: String? = null
+    private var pendingVaultPasswordField: String? = null
     private var pendingScanImageUri: Uri? = null
     private var pendingScanPrompt = "Read this page and guide me through it"
     private val aiConversationHistory = mutableListOf<JSONObject>()
@@ -995,6 +998,19 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == vaultUnlockRequestCode) {
+            val password = pendingVaultPassword
+            val field = pendingVaultPasswordField
+            pendingVaultPassword = null
+            pendingVaultPasswordField = null
+            if (resultCode == RESULT_OK && !password.isNullOrEmpty() && !field.isNullOrBlank()) {
+                val entered = IraiAssistAccessibilityService.enterStoredPassword(field, password)
+                speakResponse(if (entered) "I've entered the saved password. I will not read it aloud." else "I couldn't safely identify the password field.")
+            } else {
+                speakResponse("Device verification was cancelled. I did not enter the password.")
+            }
+            return
+        }
         if (requestCode == pdfImportRequestCode) {
             if (resultCode == RESULT_OK && data?.data != null) processPdfImport(data.data!!)
             else speakResponse("PDF import was cancelled.")
@@ -2651,11 +2667,29 @@ class MainActivity : Activity() {
         }
         confirmAssistedAction(
             "Use saved password for ${serviceName}?",
-            "I will enter the saved password directly from this device's encrypted vault into the password field. I will not send it to the AI service or speak it aloud."
+            "I will first ask Android to verify your device screen lock, then enter the saved password directly from this device's encrypted vault. I will not send it to the AI service or speak it aloud."
         ) {
-            val entered = IraiAssistAccessibilityService.enterStoredPassword(fields.first(), password)
-            speakResponse(if (entered) "I've entered the saved password. I will not read it aloud." else "I couldn't safely identify the password field.")
+            requestDeviceUnlockForVaultPassword(fields.first(), password)
         }
+    }
+
+    private fun requestDeviceUnlockForVaultPassword(field: String, password: String) {
+        val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (!keyguard.isDeviceSecure) {
+            speakResponse("To use saved passwords, first set a screen lock PIN, pattern, or password in your Android settings.")
+            return
+        }
+        val intent = keyguard.createConfirmDeviceCredentialIntent(
+            "Unlock Irai Personal Vault",
+            "Confirm your phone's screen lock before Irai fills the saved password."
+        )
+        if (intent == null) {
+            speakResponse("Android couldn't open device verification. Your saved password was not used.")
+            return
+        }
+        pendingVaultPassword = password
+        pendingVaultPasswordField = field
+        startActivityForResult(intent, vaultUnlockRequestCode)
     }
 
     private fun showPersonalVault() {
