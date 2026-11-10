@@ -2045,12 +2045,39 @@ class MainActivity : Activity() {
     }
 
     private fun startEmailFlow() {
-        try {
-            val intent = Intent(Intent.ACTION_PICK).apply {
-                setDataAndType(ContactsContract.CommonDataKinds.Email.CONTENT_URI, ContactsContract.CommonDataKinds.Email.CONTENT_TYPE)
+        AlertDialog.Builder(this)
+            .setTitle("Choose an email recipient")
+            .setItems(arrayOf("Choose from contacts", "Enter email address")) { _, choice ->
+                if (choice == 0) {
+                    try {
+                        val intent = Intent(Intent.ACTION_PICK).apply {
+                            setDataAndType(ContactsContract.CommonDataKinds.Email.CONTENT_URI, ContactsContract.CommonDataKinds.Email.CONTENT_TYPE)
+                        }
+                        startActivityForResult(intent, emailContactRequestCode)
+                    } catch (_: Exception) { speakResponse("I could not open your contacts. Please try again.") }
+                } else {
+                    val address = EditText(this).apply {
+                        hint = "name@example.com"
+                        inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Email address")
+                        .setView(address)
+                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton("Continue") { _, _ ->
+                            val value = address.text.toString().trim()
+                            if (android.util.Patterns.EMAIL_ADDRESS.matcher(value).matches()) {
+                                pendingEmailAddress = value
+                                pendingEmailName = value
+                                awaitingEmailIntent = true
+                                speakResponse("What would you like the email to say to " + value + "? Tell me the purpose and important details, or say cancel.")
+                            } else speakResponse("That email address does not look valid. Please try again.")
+                        }
+                        .show()
+                }
             }
-            startActivityForResult(intent, emailContactRequestCode)
-        } catch (_: Exception) { speakResponse("I could not open your contacts. Please try again.") }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showEmailDraftConfirmation(draft: String) {
