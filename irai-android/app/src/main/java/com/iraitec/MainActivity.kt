@@ -568,6 +568,7 @@ class MainActivity : Activity() {
                     confirmInput.visibility = View.GONE
                     passwordInput.text.clear()
                     message.text = "Account created! You can now log in."
+                    offerInitialAppearanceChoice()
                 } else if (success) {
                     currentEmail = email
                     loggedIn = true
@@ -2948,11 +2949,44 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun isBlueAppearance(): Boolean =
+        getSharedPreferences("irai_appearance", Context.MODE_PRIVATE).getBoolean("blue_theme", false)
+
+    private fun applyAppearanceChoice(blue: Boolean) {
+        getSharedPreferences("irai_appearance", Context.MODE_PRIVATE).edit().putBoolean("blue_theme", blue).apply()
+        if (loggedIn) showHome(currentEmail)
+    }
+
+    private fun offerInitialAppearanceChoice() {
+        AlertDialog.Builder(this)
+            .setTitle("Choose your I.R.A.I style")
+            .setMessage("Choose the look you'd like to start with. You can change this any time in Settings.")
+            .setNegativeButton("Sunrise colors") { _, _ -> applyAppearanceChoice(false) }
+            .setPositiveButton("Blue theme") { _, _ -> applyAppearanceChoice(true) }
+            .setNeutralButton("Choose later", null)
+            .show()
+    }
+
+    private fun appearanceGradient(): GradientDrawable {
+        val colors = if (isBlueAppearance()) {
+            intArrayOf(Color.rgb(13, 34, 62), Color.rgb(25, 66, 105), Color.rgb(37, 91, 132))
+        } else {
+            intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
+        }
+        return GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, colors)
+    }
+
     private fun applySunriseSystemBars() {
-        window.statusBarColor = Color.rgb(255, 231, 207)
-        window.navigationBarColor = Color.rgb(238, 151, 139)
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
-            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR else 0)
+        if (isBlueAppearance()) {
+            window.statusBarColor = Color.rgb(13, 34, 62)
+            window.navigationBarColor = Color.rgb(37, 91, 132)
+            window.decorView.systemUiVisibility = 0
+        } else {
+            window.statusBarColor = Color.rgb(255, 231, 207)
+            window.navigationBarColor = Color.rgb(238, 151, 139)
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR else 0)
+        }
     }
 
     private fun showHome(email: String) {
@@ -2979,10 +3013,7 @@ class MainActivity : Activity() {
                 root.gravity = Gravity.TOP
                 // Give the home header a little more breathing room from the top edge.
                 root.setPadding(20, 28, 20, 18)
-                root.background = homeBackground(GradientDrawable(
-                    GradientDrawable.Orientation.TOP_BOTTOM,
-                    intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
-                ))
+                root.background = homeBackground(appearanceGradient())
 
                 val topBar = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -3716,10 +3747,7 @@ class MainActivity : Activity() {
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.TOP
         root.setPadding(20, 28, 20, 20)
-        root.background = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
-        )
+        root.background = appearanceGradient()
         root.addView(screenHeader("Settings", true) { showHome(currentEmail) })
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -3739,6 +3767,12 @@ class MainActivity : Activity() {
             } else {
                 openOverlayPermissionSettings()
             }
+        })
+        content.addView(menuButton(if (isBlueAppearance()) "Appearance: Blue Theme" else "Appearance: Sunrise Colors", "Choose the blue masculine look or the original sunrise colors") {
+            AlertDialog.Builder(this)
+                .setTitle("Choose appearance")
+                .setItems(arrayOf("Blue theme", "Sunrise colors")) { _, which -> applyAppearanceChoice(which == 0); showSettings() }
+                .show()
         })
         content.addView(menuButton("Choose Home Background Photo", "Select a photo from your phone for the I.R.A.I home screen") { chooseHomeBackground() })
         content.addView(menuButton("Remove Home Background Photo", "Restore the original sunrise background") { clearHomeBackground() })
