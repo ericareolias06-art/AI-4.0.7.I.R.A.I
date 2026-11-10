@@ -1094,14 +1094,16 @@ class MainActivity : Activity() {
 
     /** Accessibility must never be used until the user has accepted Irai's separate disclosure. */
     private fun isGuidedAssistanceReady(): Boolean {
-        val accepted = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
-            .getBoolean("screen_access_disclosure_accepted", false)
-        return accepted && IraiAssistAccessibilityService.isEnabled(this)
+        val acceptedVersion = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
+            .getInt("screen_access_disclosure_version", 0)
+        return acceptedVersion >= 2 && IraiAssistAccessibilityService.isEnabled(this)
     }
 
     private fun requestGuidedAssistanceEnablement() {
         val consentPrefs = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
-        val hasConsent = consentPrefs.getBoolean("screen_access_disclosure_accepted", false)
+        // Version the disclosure so existing installs must affirmatively accept
+        // the updated explanation before using Guided Assistance again.
+        val hasConsent = consentPrefs.getInt("screen_access_disclosure_version", 0) >= 2
         val disclosure = "Irai Guided Assistance uses Android Accessibility to read text, labels, and control states that the current app or webpage makes available. It does this only when you ask Irai to help with that screen; it does not capture screenshots or continuously collect screen content in the background.\n\nRelevant visible page text and a summary of form controls may be sent over the internet to the Irai AI service so it can answer your request and guide you. Form summaries hide the answers typed into editable fields. Screen-reading requests exclude editable-field text and password values. Some apps may expose additional visible text through accessibility labels. Do not request help on a screen containing information you do not want processed.\n\nIf you ask Irai to fill a form, it reads supported field labels and enters ordinary text only after you approve the filling step. It does not submit forms or make purchases, payments, or legal declarations for you. Passwords saved in Personal Vault are handled separately: only after your explicit request, your approval, and Android screen-lock verification are they entered directly from this device; they are not sent to the AI service or spoken aloud.\n\nGuided Assistance is optional. If you decline, it remains unavailable and the rest of Irai Tec continues to work. You can disable the service at any time in Android Accessibility Settings."
         AlertDialog.Builder(this)
             .setTitle("About Guided Assistance")
@@ -1109,7 +1111,7 @@ class MainActivity : Activity() {
             .setNegativeButton("Not now", null)
             .setPositiveButton(if (hasConsent) "Open Android Settings" else "Agree and continue") { _, _ ->
                 if (!hasConsent) {
-                    consentPrefs.edit().putBoolean("screen_access_disclosure_accepted", true).apply()
+                    consentPrefs.edit().putInt("screen_access_disclosure_version", 2).apply()
                 }
                 try {
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
