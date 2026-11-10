@@ -1192,7 +1192,7 @@ class MainActivity : Activity() {
     private fun isGuidedAssistanceReady(): Boolean {
         val acceptedVersion = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
             .getInt("screen_access_disclosure_version", 0)
-        return acceptedVersion >= 2 && IraiAssistAccessibilityService.isEnabled(this)
+        return acceptedVersion >= 3 && IraiAssistAccessibilityService.isEnabled(this)
     }
 
     private fun offerPersonalVaultOnboarding() {
@@ -1264,15 +1264,15 @@ class MainActivity : Activity() {
         val consentPrefs = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
         // Version the disclosure so existing installs must affirmatively accept
         // the updated explanation before using Guided Assistance again.
-        val hasConsent = consentPrefs.getInt("screen_access_disclosure_version", 0) >= 2
-        val disclosure = "Irai Guided Assistance uses Android Accessibility to read text, labels, and control states that the current app or webpage makes available. It does this only when you ask Irai to help with that screen; it does not capture screenshots or continuously collect screen content in the background.\n\nRelevant visible page text and a summary of form controls may be sent over the internet to the Irai AI service so it can answer your request and guide you. Form summaries hide the answers typed into editable fields. Screen-reading requests exclude editable-field text and password values. Some apps may expose additional visible text through accessibility labels. Do not request help on a screen containing information you do not want processed.\n\nIf you ask Irai to fill a form, it reads supported field labels and enters ordinary text only after you approve the filling step. It does not submit forms or make purchases, payments, or legal declarations for you. Passwords saved in Personal Vault are handled separately: only after your explicit request, your approval, and Android screen-lock verification are they entered directly from this device; they are not sent to the AI service or spoken aloud.\n\nGuided Assistance is optional. If you decline, it remains unavailable and the rest of Irai Tec continues to work. You can disable the service at any time in Android Accessibility Settings."
+        val hasConsent = consentPrefs.getInt("screen_access_disclosure_version", 0) >= 3
+        val disclosure = "Irai Guided Assistance uses Android Accessibility to read text, labels, and control states that the current app or webpage makes available. It does this only when you ask Irai to help with that screen; it does not capture screenshots or continuously collect screen content in the background.\n\nRelevant visible page text and a summary of form controls may be sent over the internet to the Irai AI service so it can answer your request and guide you. Form summaries hide the answers typed into editable fields. Screen-reading requests exclude editable-field text and password values. Some apps may expose additional visible text through accessibility labels. Do not request help on a screen containing information you do not want processed.\n\nIf you ask Irai to fill a form, it reads supported field labels and enters ordinary text only after you approve the filling step. It does not submit forms or make purchases, payments, or legal declarations for you. If you explicitly ask it to send a message already typed in the current app, it may read the single visible non-password message field locally, show you the exact text, and press a clearly labeled Send button only after you confirm. It will not send if the message field or Send button is ambiguous. Passwords saved in Personal Vault are handled separately: only after your explicit request, your approval, and Android screen-lock verification are they entered directly from this device; they are not sent to the AI service or spoken aloud.\n\nGuided Assistance is optional. If you decline, it remains unavailable and the rest of Irai Tec continues to work. You can disable the service at any time in Android Accessibility Settings."
         AlertDialog.Builder(this)
             .setTitle("About Guided Assistance")
             .setMessage(disclosure)
             .setNegativeButton("Not now", null)
             .setPositiveButton(if (hasConsent) "Open Android Settings" else "Agree and continue") { _, _ ->
                 if (!hasConsent) {
-                    consentPrefs.edit().putInt("screen_access_disclosure_version", 2).apply()
+                    consentPrefs.edit().putInt("screen_access_disclosure_version", 3).apply()
                 }
                 try {
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -1420,6 +1420,14 @@ class MainActivity : Activity() {
             return
         }
 
+        if (
+            text in listOf("send the message I typed", "send this typed message", "press send", "tap send", "please send this message", "send this message for me") ||
+            (text.contains("send") && (text.contains("message") || text.contains("text"))) ||
+            (text.contains("do it for me") && (text.contains("message") || text.contains("text")))
+        ) {
+            sendCurrentlyTypedMessage()
+            return
+        }
         if (text in listOf("text message", "write a text", "write a text message", "send a text", "send a text message", "help me write a text", "compose a text", "message someone", "text someone") || text.startsWith("text ") || text.startsWith("send a text to ") || text.startsWith("send a message to ") || text.startsWith("message ")) {
             startTextMessageFlow()
             return
@@ -1869,6 +1877,31 @@ class MainActivity : Activity() {
         }, 500)
     }
 
+    private fun sendCurrentlyTypedMessage() {
+        if (!isGuidedAssistanceReady()) {
+            speakResponse("To help send a message, Guided Assistance must be enabled first.")
+            requestGuidedAssistanceEnablement()
+            return
+        }
+        val draft = IraiAssistAccessibilityService.readTypedMessageDraft()
+        if (draft.isBlank()) {
+            speakResponse("I could not safely identify one message field with typed text. Please make sure the message is ready in the conversation and try again.")
+            return
+        }
+        if (draft.length > 2500) {
+            speakResponse("That message is too long for a safe review preview. Please shorten it or send it yourself.")
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Review before sending")
+            .setMessage("Check that the correct conversation is open. This is the exact text currently in the message field:\n\n" + draft + "\n\nNothing will be sent unless you choose Send Now.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Send Now") { _, _ ->
+                val sent = IraiAssistAccessibilityService.pressSendButton()
+                speakResponse(if (sent) "I pressed the Send button. Please check the conversation to make sure the message was sent." else "I could not find a clear Send button, so I did not send the message.")
+            }
+            .show()
+    }
     private fun clearPendingSms() {
         awaitingSmsMessage = false
         pendingSmsPhone = ""
