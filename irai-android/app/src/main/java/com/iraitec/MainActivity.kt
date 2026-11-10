@@ -3072,7 +3072,7 @@ class MainActivity : Activity() {
                     text = "I.R.A.I TEC"
                     textSize = 20f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.rgb(79, 48, 45))
+                    setTextColor(if (isBlueAppearance()) Color.rgb(235, 245, 255) else Color.rgb(79, 48, 45))
                     letterSpacing = 0.12f
                 }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 topBar.addView(Button(this).apply {
@@ -3092,10 +3092,10 @@ class MainActivity : Activity() {
                     setPadding(4, 18, 4, 18)
                 }
 
-                content.addView(label("☀", 66, Color.rgb(190, 91, 79)))
-                content.addView(label("Hello, I'm I.R.A.I.", 27, Color.rgb(79, 48, 45)))
-                content.addView(label("A little light in your day.", 15, Color.rgb(112, 70, 65)))
-                content.addView(label(if (premium) "Premium is active" else "Your personal assistant", 13, Color.rgb(155, 74, 62)).apply {
+                content.addView(label("☀", 66, if (isBlueAppearance()) Color.rgb(255, 215, 120) else Color.rgb(190, 91, 79)))
+                content.addView(label("Hello, I'm I.R.A.I.", 27, if (isBlueAppearance()) Color.WHITE else Color.rgb(79, 48, 45)))
+                content.addView(label("A little light in your day.", 15, if (isBlueAppearance()) Color.rgb(220, 235, 248) else Color.rgb(112, 70, 65)))
+                content.addView(label(if (premium) "Premium is active" else "Your personal assistant", 13, if (isBlueAppearance()) Color.rgb(180, 220, 248) else Color.rgb(155, 74, 62)).apply {
                     setPadding(0, 8, 0, 20)
                 })
 
@@ -3134,7 +3134,7 @@ class MainActivity : Activity() {
                 typeface = Typeface.create("sans-serif", Typeface.BOLD)
                 letterSpacing = 0.08f
                 gravity = Gravity.CENTER
-                setTextColor(Color.rgb(105, 53, 64))
+                setTextColor(if (isBlueAppearance()) Color.WHITE else Color.rgb(105, 53, 64))
             })
             addView(TextView(this@MainActivity).apply {
                 text = "🌷   🌼   🌸"
@@ -3146,7 +3146,7 @@ class MainActivity : Activity() {
                 text = "Your little garden of helpful tools"
                 textSize = 13f
                 gravity = Gravity.CENTER
-                setTextColor(Color.rgb(112, 61, 68))
+                setTextColor(if (isBlueAppearance()) Color.rgb(224, 238, 250) else Color.rgb(112, 61, 68))
             })
             setOnClickListener { openFeaturesForFirstTimeIfNeeded() }
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
