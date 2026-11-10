@@ -1124,6 +1124,11 @@ class MainActivity : Activity() {
                 return
             }
             val answer = rawSpokenAnswer
+                .replace(
+                    Regex("(?i)^(?:my\\s+(?:first name|last name|full name|name|email|phone|birthday|date of birth|address)\\s+is|the\\s+(?:email|phone|address)\\s+is|it\\s+is|it's)\\s+"),
+                    ""
+                )
+                .trim()
             if (answer.isBlank()) {
                 awaitingFormAnswerFor = pending
                 askForNextFormAnswer()
