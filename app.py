@@ -651,6 +651,19 @@ def redeem_promo():
 
     try:
         with get_db() as conn:
+            # Serialize redemptions to enforce the 30-use limit.
+            if conn.is_postgres:
+                conn.execute("SELECT pg_advisory_xact_lock(736202611)")
+            else:
+                conn.execute("BEGIN IMMEDIATE")
+
+            redeemed_count = conn.execute(
+                "SELECT COUNT(*) AS total FROM promo_redemptions WHERE promo_hash = ?",
+                (promo_hash,),
+            ).fetchone()["total"]
+            if redeemed_count >= 30:
+                return jsonify(message="This promo code has reached its 30-redemption limit"), 409
+
             account = conn.execute(
                 """
                 SELECT id, premium_until,
@@ -682,7 +695,11 @@ def redeem_promo():
                 ),
             )
 
-            expires = now + timedelta(days=365)
+            import calendar
+            next_year = now.year + (now.month // 12)
+            next_month = (now.month % 12) + 1
+            expiry_day = min(now.day, calendar.monthrange(next_year, next_month)[1])
+            expires = now.replace(year=next_year, month=next_month, day=expiry_day)
 
             conn.execute(
                 """
@@ -701,7 +718,7 @@ def redeem_promo():
     return jsonify(
         message=(
             "Promo code accepted! Premium access granted "
-            "for one year."
+            "for one month."
         ),
         premium=True,
         premium_until=expires.isoformat(),
