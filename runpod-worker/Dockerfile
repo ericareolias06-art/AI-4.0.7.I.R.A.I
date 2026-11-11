@@ -7,4 +7,4 @@ ENV OLLAMA_HOST=127.0.0.1:11434
 ENV OLLAMA_MODEL=llama3.2:3b
 COPY handler.py /worker/handler.py
 WORKDIR /worker
-CMD ["python3", "-u", "handler.py"]
+ENTRYPOINT ["python3", "-u", "/worker/handler.py"]
