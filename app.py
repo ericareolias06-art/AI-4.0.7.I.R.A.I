@@ -368,8 +368,18 @@ def _send_account_email(address, subject, body):
                     return True
                 app.logger.error("Resend delivery rejected: HTTP %s", response.status)
         except HTTPError as exc:
-            # Resend error bodies can contain addresses; avoid logging private details.
-            app.logger.error("Resend delivery rejected: HTTP %s", exc.code)
+            # Log only Resend's machine-readable error type, never its free-text
+            # message (which may contain email addresses or other private data).
+            error_type = "unknown"
+            try:
+                error_payload = json.loads(exc.read(4096).decode("utf-8"))
+                if isinstance(error_payload, dict):
+                    candidate = error_payload.get("name") or error_payload.get("code")
+                    if isinstance(candidate, str) and candidate.replace("_", "").isalnum() and len(candidate) <= 80:
+                        error_type = candidate
+            except (ValueError, UnicodeError, OSError):
+                pass
+            app.logger.error("Resend delivery rejected: HTTP %s type=%s", exc.code, error_type)
         except (URLError, OSError, TimeoutError):
             app.logger.exception("Resend delivery connection failed")
         return False
