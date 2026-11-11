@@ -368,18 +368,29 @@ def _send_account_email(address, subject, body):
                     return True
                 app.logger.error("Resend delivery rejected: HTTP %s", response.status)
         except HTTPError as exc:
-            # Log only Resend's machine-readable error type, never its free-text
-            # message (which may contain email addresses or other private data).
+            # Resend's JSON error explains a 403. Redact private values before
+            # logging; never log the authorization header or verification URL.
             error_type = "unknown"
+            explanation = "unavailable"
             try:
                 error_payload = json.loads(exc.read(4096).decode("utf-8"))
                 if isinstance(error_payload, dict):
                     candidate = error_payload.get("name") or error_payload.get("code")
-                    if isinstance(candidate, str) and candidate.replace("_", "").isalnum() and len(candidate) <= 80:
+                    if isinstance(candidate, str) and len(candidate) <= 80:
                         error_type = candidate
+                    detail = error_payload.get("message")
+                    if isinstance(detail, str):
+                        import re
+                        detail = re.sub(r"https?://\\S+", "[URL]", detail)
+                        detail = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "[EMAIL]", detail)
+                        detail = re.sub(r"re_[A-Za-z0-9_\\-]+", "[API_KEY]", detail)
+                        explanation = detail[:240].replace("\\n", " ")
             except (ValueError, UnicodeError, OSError):
                 pass
-            app.logger.error("Resend delivery rejected: HTTP %s type=%s", exc.code, error_type)
+            app.logger.error(
+                "Resend delivery rejected: HTTP %s type=%s reason=%s",
+                exc.code, error_type, explanation,
+            )
         except (URLError, OSError, TimeoutError):
             app.logger.exception("Resend delivery connection failed")
         return False
