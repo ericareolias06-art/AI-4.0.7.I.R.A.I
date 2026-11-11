@@ -6,7 +6,7 @@ import requests
 import runpod
 
 HOST = "http://127.0.0.1:11434"
-MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 
 
 def initialize():
