@@ -359,6 +359,7 @@ def _send_account_email(address, subject, body):
             headers={
                 "Authorization": "Bearer " + resend_key,
                 "Content-Type": "application/json",
+                "User-Agent": "IraiTec/1.0",
             },
             method="POST",
         )
