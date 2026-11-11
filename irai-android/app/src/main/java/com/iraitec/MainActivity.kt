@@ -326,6 +326,9 @@ class MainActivity : Activity() {
         val code = uri.getQueryParameter("code").orEmpty()
         intent.data = null // Do not retain the one-time code in Activity state.
         if (code.length < 30 || code.length > 256) {
+            val pendingEmail = sessionPrefs.getString("pending_verification_email", null)
+            if (!pendingEmail.isNullOrBlank()) showVerificationScreen(pendingEmail)
+            else showAuth()
             Toast.makeText(this, "Invalid email verification link.", Toast.LENGTH_LONG).show()
             return true
         }
