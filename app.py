@@ -484,7 +484,62 @@ def verify_email_link():
             return "This link is invalid or expired.", 400
         conn.execute("UPDATE accounts SET email_verified=? WHERE id=?", (True, record["account_id"]))
         conn.execute("DELETE FROM account_email_tokens WHERE account_id=? AND purpose=?", (record["account_id"], "verify"))
-    return "Email verified. You can return to Irai and sign in.", 200
+    # Hand off to Android with a separate short-lived, single-use login code.
+    # The email verification token has already been consumed above.
+    handoff = secrets.token_urlsafe(32)
+    handoff_hash = hashlib.sha256(handoff.encode()).hexdigest()
+    issued = datetime.now(timezone.utc)
+    with get_db() as conn:
+        conn.execute("DELETE FROM account_email_tokens WHERE account_id=? AND purpose=?",
+                     (record["account_id"], "app_login"))
+        conn.execute(
+            "INSERT INTO account_email_tokens (account_id, purpose, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
+            (record["account_id"], "app_login", handoff_hash,
+             (issued + timedelta(minutes=5)).isoformat(), issued.isoformat()),
+        )
+    from flask import redirect
+    from urllib.parse import urlencode
+    from html import escape
+    app_link = "iraitec://verified?" + urlencode({"code": handoff})
+    # A manual button is useful when the mail app/browser refuses to open the app automatically.
+    return (
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<meta name="referrer" content="no-referrer"><title>Irai Tec verified</title></head>'
+        '<body style="font-family:sans-serif;text-align:center;padding:40px">'
+        '<h2>Email verified!</h2><p>Opening Irai Tec to finish signing you in.</p>'
+        '<p><a href="' + escape(app_link, quote=True) + '">Open Irai Tec</a></p>'
+        '<script>window.location.href=' + json.dumps(app_link) + ';</script>'
+        '</body></html>'
+    ), 200, {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+
+
+@app.post("/api/account/complete-verification")
+def complete_email_verification():
+    data = request.get_json(silent=True) or {}
+    code = data.get("code")
+    if not isinstance(code, str) or len(code) < 30 or len(code) > 256:
+        return jsonify(message="Invalid verification sign-in link."), 400
+    code_hash = hashlib.sha256(code.encode()).hexdigest()
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        record = conn.execute(
+            "SELECT account_id FROM account_email_tokens WHERE purpose=? AND token_hash=? AND expires_at>?",
+            ("app_login", code_hash, now),
+        ).fetchone()
+        if not record:
+            return jsonify(message="The sign-in link has expired or was already used."), 400
+        account = conn.execute(
+            "SELECT id, email, email_verified FROM accounts WHERE id=?", (record["account_id"],)
+        ).fetchone()
+        if not account or not account["email_verified"]:
+            return jsonify(message="This account is not verified."), 403
+        conn.execute("DELETE FROM account_email_tokens WHERE account_id=? AND purpose=?",
+                     (account["id"], "app_login"))
+    session.clear()
+    session.permanent = True
+    session["account_id"] = account["id"]
+    session["email"] = account["email"]
+    return jsonify(message="Email verified. Signed in successfully.", email=account["email"]), 200
 
 
 @app.post("/api/account/forgot-password")
