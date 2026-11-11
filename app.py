@@ -337,9 +337,43 @@ def health():
 
 
 
-# One-time email links. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD,
-# SMTP_FROM and PUBLIC_API_URL in the server environment (never in the app).
+# One-time account links use Resend over HTTPS when RESEND_API_KEY is set.
+# Set RESEND_API_KEY, RESEND_FROM, and PUBLIC_API_URL on the server.
+# Legacy SMTP configuration remains available as a fallback when no Resend key is set.
 def _send_account_email(address, subject, body):
+    resend_key = os.environ.get("RESEND_API_KEY", "").strip()
+    if resend_key:
+        sender = os.environ.get("RESEND_FROM", "").strip()
+        if not sender:
+            app.logger.error("RESEND_FROM is not configured")
+            return False
+        payload = json.dumps({
+            "from": sender,
+            "to": [address],
+            "subject": subject,
+            "text": body,
+        }).encode("utf-8")
+        email_request = Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": "Bearer " + resend_key,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(email_request, timeout=15) as response:
+                if response.status in (200, 201, 202):
+                    return True
+                app.logger.error("Resend delivery rejected: HTTP %s", response.status)
+        except HTTPError as exc:
+            # Resend error bodies can contain addresses; avoid logging private details.
+            app.logger.error("Resend delivery rejected: HTTP %s", exc.code)
+        except (URLError, OSError, TimeoutError):
+            app.logger.exception("Resend delivery connection failed")
+        return False
+
     host = os.environ.get("SMTP_HOST", "").strip()
     sender = os.environ.get("SMTP_FROM", "").strip()
     if not host or not sender:
@@ -361,7 +395,6 @@ def _send_account_email(address, subject, body):
     except Exception:
         app.logger.exception("Account email delivery failed")
         return False
-
 
 def _issue_account_token(account_id, email, purpose):
     # Throttle repeated requests and keep only a SHA-256 digest in the database.
