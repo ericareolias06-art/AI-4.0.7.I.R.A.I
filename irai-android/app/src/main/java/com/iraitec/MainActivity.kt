@@ -778,7 +778,7 @@ class MainActivity : Activity() {
      */
     private fun beginStartupPermissions() {
         val prefs = getSharedPreferences("irai_permission_setup", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("offered_v1", false)) {
+        if (prefs.getBoolean("offered_v2", false)) {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED) startIraiListeningService()
             maybeOfferVaultAfterPermissionSetup()
@@ -796,7 +796,7 @@ class MainActivity : Activity() {
             )
             .setPositiveButton("Set up now") { _, _ -> startPermissionSetupWizard() }
             .setNegativeButton("Maybe later") { _, _ ->
-                prefs.edit().putBoolean("offered_v1", true).apply()
+                prefs.edit().putBoolean("offered_v2", true).apply()
                 if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                     PackageManager.PERMISSION_GRANTED) startIraiListeningService()
                 maybeOfferVaultAfterPermissionSetup()
@@ -908,7 +908,7 @@ class MainActivity : Activity() {
         permissionSetupActive = false
         permissionSetupAwaitingSettings = false
         getSharedPreferences("irai_permission_setup", Context.MODE_PRIVATE)
-            .edit().putBoolean("offered_v1", true).apply()
+            .edit().putBoolean("offered_v2", true).apply()
 
         val allowed = "Enabled"
         val notAllowed = "Not enabled"
