@@ -387,9 +387,12 @@ def _send_account_email(address, subject, body):
                         error_type = candidate
             except (ValueError, UnicodeError, OSError):
                 pass
+            ray_id = exc.headers.get("CF-Ray", "").strip()
+            if not ray_id or len(ray_id) > 100 or not all(ch.isalnum() or ch in "-_" for ch in ray_id):
+                ray_id = "unavailable"
             app.logger.error(
-                "Resend request rejected: HTTP %s content_type=%s server=%s body_kind=%s type=%s",
-                exc.code, content_type[:60], server_name, body_kind, error_type,
+                "Resend request rejected: HTTP %s content_type=%s server=%s body_kind=%s type=%s cf_ray=%s",
+                exc.code, content_type[:60], server_name, body_kind, error_type, ray_id,
             )
         except (URLError, OSError, TimeoutError):
             app.logger.exception("Resend delivery connection failed")
