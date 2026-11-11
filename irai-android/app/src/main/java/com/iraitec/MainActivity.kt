@@ -93,12 +93,6 @@ class MainActivity : Activity() {
     private var avatarPermissionPrompted = false
     private var avatarHiddenUntilWake = false
     private var stickyWindowParams: WindowManager.LayoutParams? = null
-    private val avatarInactivityRunnable = Runnable {
-        if (loggedIn && !avatarHiddenUntilWake) {
-            avatarHiddenUntilWake = true
-            IraiAvatarOverlay.hide()
-        }
-    }
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private var latestDiagnostic = "Waiting for listening service..."
     private var lastRecognizedPhrase = ""
@@ -198,7 +192,6 @@ class MainActivity : Activity() {
                     // A fresh wake word restores the companion after "go away".
                     avatarHiddenUntilWake = false
                     showAvatarOverlay()
-                    scheduleAvatarInactivityTimeout()
                     IraiAvatarOverlay.setStatus("Listening...")
                     startVoiceCommand()
                 }
@@ -278,7 +271,6 @@ class MainActivity : Activity() {
                         override fun onStart(utteranceId: String?) {}
                         override fun onDone(utteranceId: String?) {
                             if (utteranceId == "irai_response") runOnUiThread {
-                                scheduleAvatarInactivityTimeout()
                                 if (notesMode && loggedIn && !awaitingCommand) startVoiceCommand()
                             }
                         }
@@ -1010,18 +1002,10 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun scheduleAvatarInactivityTimeout() {
-        handler.removeCallbacks(avatarInactivityRunnable)
-        if (loggedIn && !avatarHiddenUntilWake) {
-            handler.postDelayed(avatarInactivityRunnable, 60_000L)
-        }
-    }
-
     private fun showAvatarOverlay() {
         if (!loggedIn || avatarHiddenUntilWake) return
         if (IraiAvatarOverlay.hasPermission(this)) {
             IraiAvatarOverlay.show(applicationContext)
-            scheduleAvatarInactivityTimeout()
         }
     }
 
@@ -1210,7 +1194,6 @@ class MainActivity : Activity() {
                                 speakResponse("Sorry, I didn't catch that.")
                             } else {
                                 lastRecognizedPhrase = spokenText
-                                scheduleAvatarInactivityTimeout()
                                 latestDiagnostic = "Routing recognized command..."
                                 refreshDiagnostic()
                                 handleVoiceCommand(spokenText)
@@ -5042,7 +5025,6 @@ class MainActivity : Activity() {
                             awaitingCommand = false
                             listeningForCommand = false
                             handler.removeCallbacks(restartListeningRunnable)
-                            handler.removeCallbacks(avatarInactivityRunnable)
                             IraiAvatarOverlay.hide()
                             stopIraiListeningService()
                             sessionPrefs.edit().clear().apply()
@@ -5069,7 +5051,6 @@ class MainActivity : Activity() {
         pendingFormFields.clear()
 
         handler.removeCallbacks(restartListeningRunnable)
-        handler.removeCallbacks(avatarInactivityRunnable)
         IraiAvatarOverlay.hide()
         stopIraiListeningService()
 
