@@ -368,28 +368,28 @@ def _send_account_email(address, subject, body):
                     return True
                 app.logger.error("Resend delivery rejected: HTTP %s", response.status)
         except HTTPError as exc:
-            # Resend's JSON error explains a 403. Redact private values before
-            # logging; never log the authorization header or verification URL.
+            # Diagnose the source of HTTP errors without exposing credentials,
+            # recipient addresses, verification tokens, or response body.
+            content_type = exc.headers.get("Content-Type", "missing").split(";")[0].strip().lower()
+            server_name = exc.headers.get("Server", "missing").strip().lower()
+            if len(server_name) > 60 or not all(ch.isalnum() or ch in "-_. /" for ch in server_name):
+                server_name = "unrecognized"
             error_type = "unknown"
-            explanation = "unavailable"
+            body_kind = "unreadable"
             try:
-                error_payload = json.loads(exc.read(4096).decode("utf-8"))
+                raw_error = exc.read(4096)
+                body_kind = "empty" if not raw_error else "non_json"
+                error_payload = json.loads(raw_error.decode("utf-8"))
+                body_kind = "json"
                 if isinstance(error_payload, dict):
                     candidate = error_payload.get("name") or error_payload.get("code")
-                    if isinstance(candidate, str) and len(candidate) <= 80:
+                    if isinstance(candidate, str) and len(candidate) <= 80 and all(ch.isalnum() or ch in "_-" for ch in candidate):
                         error_type = candidate
-                    detail = error_payload.get("message")
-                    if isinstance(detail, str):
-                        import re
-                        detail = re.sub(r"https?://\\S+", "[URL]", detail)
-                        detail = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "[EMAIL]", detail)
-                        detail = re.sub(r"re_[A-Za-z0-9_\\-]+", "[API_KEY]", detail)
-                        explanation = detail[:240].replace("\\n", " ")
             except (ValueError, UnicodeError, OSError):
                 pass
             app.logger.error(
-                "Resend delivery rejected: HTTP %s type=%s reason=%s",
-                exc.code, error_type, explanation,
+                "Resend request rejected: HTTP %s content_type=%s server=%s body_kind=%s type=%s",
+                exc.code, content_type[:60], server_name, body_kind, error_type,
             )
         except (URLError, OSError, TimeoutError):
             app.logger.exception("Resend delivery connection failed")
