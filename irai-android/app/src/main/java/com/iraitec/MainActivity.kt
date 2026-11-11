@@ -308,12 +308,9 @@ class MainActivity : Activity() {
         }
 
         if (!handleVerificationIntent(intent)) {
-            val pendingEmail = sessionPrefs.getString("pending_verification_email", null)
-            if (!pendingEmail.isNullOrBlank()) {
-                showVerificationScreen(pendingEmail)
-            } else {
-                restoreSession()
-            }
+            // Restore a valid existing session first; an old pending-signup marker
+            // must never hide the account screen for a signed-in user.
+            restoreSession()
         }
     }
 
@@ -447,7 +444,9 @@ class MainActivity : Activity() {
     private fun restoreSession() {
         val cookie = sessionPrefs.getString("cookie", null)
         if (cookie.isNullOrBlank()) {
-            showAuth()
+            val pendingEmail = sessionPrefs.getString("pending_verification_email", null)
+            if (!pendingEmail.isNullOrBlank()) showVerificationScreen(pendingEmail)
+            else showAuth()
             return
         }
 
