@@ -363,7 +363,7 @@ class MainActivity : Activity() {
                 if (succeeded) {
                     sessionPrefs.edit().remove("pending_verification_email").apply()
                     pendingVerificationEmail = null
-                    checkSubscriptionAccess()
+                    restoreSession()
                 } else {
                     val email = sessionPrefs.getString("pending_verification_email", null)
                     if (!email.isNullOrBlank()) {
