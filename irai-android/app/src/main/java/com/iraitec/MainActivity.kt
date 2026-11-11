@@ -121,6 +121,12 @@ class MainActivity : Activity() {
     private var tutorialInProgress = false
     private var pendingTutorialStart = false
     private var pendingFeaturesTutorial = false
+    private val initialContactsPermissionRequestCode = 2310
+    private var permissionSetupActive = false
+    private var permissionSetupStep = 0
+    private var permissionSetupAwaitingSettings = false
+    private var offerVaultAfterPermissionSetup = false
+
     private val pageScanRequestCode = 2301
     private val pdfImportRequestCode = 2302
     private val vaultUnlockRequestCode = 2303
@@ -499,7 +505,7 @@ class MainActivity : Activity() {
                             startFirstTimeTutorial()
                         } else {
                             showHome(email)
-                            requestMicrophonePermission()
+                            beginStartupPermissions()
                         }
                     }
                     rejected -> {
@@ -771,6 +777,158 @@ class MainActivity : Activity() {
         }
     }
 
+
+    /**
+     * First-run, user-controlled permission tour. Android runtime permissions
+     * must be granted by the user; overlay and Accessibility require settings.
+     */
+    private fun beginStartupPermissions() {
+        val prefs = getSharedPreferences("irai_permission_setup", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("offered_v1", false)) {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED) startIraiListeningService()
+            maybeOfferVaultAfterPermissionSetup()
+            return
+        }
+        prefs.edit().putBoolean("offered_v1", true).apply()
+        AlertDialog.Builder(this)
+            .setTitle("Set up Irai's permissions")
+            .setMessage(
+                "Let's get Irai ready from the start. You'll be guided through microphone " +
+                "(voice commands), notifications (background listening), floating avatar " +
+                "(appear over other apps), Guided Assistance (read the screen when you ask), " +
+                "and optional contacts (finding people by name).\n\n" +
+                "Android will ask you to approve each permission separately. " +
+                "You can skip any step or set it up later in Irai's Settings."
+            )
+            .setPositiveButton("Set up now") { _, _ -> startPermissionSetupWizard() }
+            .setNegativeButton("Maybe later") { _, _ ->
+                maybeOfferVaultAfterPermissionSetup()
+            }
+            .show()
+    }
+
+    private fun maybeOfferVaultAfterPermissionSetup() {
+        if (!offerVaultAfterPermissionSetup) return
+        offerVaultAfterPermissionSetup = false
+        handler.postDelayed({
+            if (loggedIn && !isFinishing) offerPersonalVaultOnboarding()
+        }, 2000L)
+    }
+
+    private fun startPermissionSetupWizard() {
+        if (permissionSetupActive) return
+        permissionSetupActive = true
+        permissionSetupStep = 0
+        advancePermissionSetup()
+    }
+
+    private fun advancePermissionSetup() {
+        if (!permissionSetupActive || isFinishing) return
+        when (permissionSetupStep++) {
+            0 -> {
+                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
+                    PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1001)
+                } else advancePermissionSetup()
+            }
+            1 -> {
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1002)
+                } else advancePermissionSetup()
+            }
+            2 -> {
+                if (IraiAvatarOverlay.hasPermission(this)) {
+                    advancePermissionSetup()
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("Floating Irai")
+                        .setMessage(
+                            "Allow 'Display over other apps' to keep Irai's avatar visible " +
+                            "while using a browser or another app. This is optional. " +
+                            "Choose I.R.A.I Tec in Android's special access screen, then return here."
+                        )
+                        .setNegativeButton("Skip") { _, _ -> advancePermissionSetup() }
+                        .setPositiveButton("Open settings") { _, _ ->
+                            permissionSetupAwaitingSettings = true
+                            try {
+                                startActivity(Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:$packageName")
+                                ))
+                            } catch (_: Exception) {
+                                permissionSetupAwaitingSettings = false
+                                Toast.makeText(this, "Could not open overlay settings.", Toast.LENGTH_LONG).show()
+                                advancePermissionSetup()
+                            }
+                        }
+                        .show()
+                }
+            }
+            3 -> {
+                if (isGuidedAssistanceReady()) advancePermissionSetup()
+                else requestGuidedAssistanceEnablement()
+            }
+            4 -> {
+                if (checkSelfPermission(Manifest.permission.READ_CONTACTS) ==
+                    PackageManager.PERMISSION_GRANTED) {
+                    advancePermissionSetup()
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("Optional contact lookup")
+                        .setMessage(
+                            "Allow Contacts only if you'd like Irai to look up people " +
+                            "by name when you ask her to call or message them. " +
+                            "You can skip this and choose contacts manually instead."
+                        )
+                        .setNegativeButton("Skip") { _, _ -> advancePermissionSetup() }
+                        .setPositiveButton("Allow contacts") { _, _ ->
+                            requestPermissions(
+                                arrayOf(Manifest.permission.READ_CONTACTS),
+                                initialContactsPermissionRequestCode
+                            )
+                        }
+                        .show()
+                }
+            }
+            else -> finishPermissionSetupWizard()
+        }
+    }
+
+    private fun finishPermissionSetupWizard() {
+        permissionSetupActive = false
+        permissionSetupAwaitingSettings = false
+        getSharedPreferences("irai_permission_setup", Context.MODE_PRIVATE)
+            .edit().putBoolean("offered_v1", true).apply()
+
+        val allowed = "Enabled"
+        val notAllowed = "Not enabled"
+        val states = listOf(
+            "Microphone: " + if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED) allowed else notAllowed,
+            "Notifications: " + if (Build.VERSION.SDK_INT < 33 ||
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED) allowed else notAllowed,
+            "Floating avatar: " + if (IraiAvatarOverlay.hasPermission(this)) allowed else notAllowed,
+            "Guided Assistance: " + if (isGuidedAssistanceReady()) allowed else notAllowed,
+            "Contacts (optional): " + if (checkSelfPermission(Manifest.permission.READ_CONTACTS) ==
+                PackageManager.PERMISSION_GRANTED) allowed else notAllowed
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Irai's permission setup")
+            .setMessage(states.joinToString("\n") +
+                "\n\nYou can change these choices in Android Settings, or repeat the setup from Irai's Settings.")
+            .setPositiveButton("Done") { _, _ ->
+                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED) startIraiListeningService()
+                showAvatarOverlay()
+                maybeOfferVaultAfterPermissionSetup()
+            }
+            .show()
+    }
+
     private fun requestMicrophonePermission() {
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
@@ -911,7 +1069,13 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         when (requestCode) {
-            1002 -> requestMicrophonePermissionAfterNotifications()
+            1002 -> {
+                if (permissionSetupActive) advancePermissionSetup()
+                else requestMicrophonePermissionAfterNotifications()
+            }
+            initialContactsPermissionRequestCode -> {
+                if (permissionSetupActive) advancePermissionSetup()
+            }
             callContactsPermissionRequestCode -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     lookupAndConfirmContactCall(pendingCallContactName)
@@ -930,7 +1094,9 @@ class MainActivity : Activity() {
                 }
             }
             1001 -> {
-                if (grantResults.isNotEmpty() &&
+                if (permissionSetupActive) {
+                    advancePermissionSetup()
+                } else if (grantResults.isNotEmpty() &&
                     grantResults[0] == PackageManager.PERMISSION_GRANTED
                 ) {
                     startIraiListeningService()
@@ -1513,15 +1679,20 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("About Guided Assistance")
             .setMessage(disclosure)
-            .setNegativeButton("Not now", null)
+            .setNegativeButton("Not now") { _, _ ->
+                if (permissionSetupActive) advancePermissionSetup()
+            }
             .setPositiveButton(if (hasConsent) "Open Android Settings" else "Agree and continue") { _, _ ->
                 if (!hasConsent) {
                     consentPrefs.edit().putInt("screen_access_disclosure_version", 3).apply()
                 }
+                if (permissionSetupActive) permissionSetupAwaitingSettings = true
                 try {
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 } catch (_: Exception) {
+                    permissionSetupAwaitingSettings = false
                     Toast.makeText(this, "Open Android Accessibility settings to enable Irai Guided Assistance.", Toast.LENGTH_LONG).show()
+                    if (permissionSetupActive) advancePermissionSetup()
                 }
             }
             .show()
@@ -3412,8 +3583,8 @@ class MainActivity : Activity() {
             }
             runOnUiThread {
                 showHome(currentEmail)
-                requestMicrophonePermission()
-                handler.postDelayed({ offerPersonalVaultOnboarding() }, 4500L)
+                offerVaultAfterPermissionSetup = true
+                beginStartupPermissions()
             }
         }
     }
@@ -4284,6 +4455,10 @@ class MainActivity : Activity() {
                 .setItems(arrayOf("Blue theme", "Sunrise colors")) { _, which -> applyAppearanceChoice(which == 0); showSettings() }
                 .show()
         })
+        content.addView(menuButton(
+            "Review App Permissions",
+            "Set up microphone, notifications, floating Irai, screen reading, and contacts."
+        ) { startPermissionSetupWizard() })
         content.addView(menuButton("Choose Home Background Photo", "Select a photo from your phone for the I.R.A.I home screen") { chooseHomeBackground() })
         content.addView(menuButton("Remove Home Background Photo", "Restore the original sunrise background") { clearHomeBackground() })
         content.addView(menuButton("Personal Vault", "Encrypted personal details and saved account passwords stored only on this phone") {
@@ -4505,7 +4680,7 @@ class MainActivity : Activity() {
                     if (tutorialRequired) startFirstTimeTutorial()
                     else {
                         showHome(currentEmail)
-                        requestMicrophonePermission()
+                        beginStartupPermissions()
                     }
                 }
             }
@@ -4960,6 +5135,10 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (permissionSetupActive && permissionSetupAwaitingSettings) {
+            permissionSetupAwaitingSettings = false
+            handler.post { advancePermissionSetup() }
+        }
         if (loggedIn && IraiAvatarOverlay.hasPermission(this) && !avatarHiddenUntilWake) {
             showAvatarOverlay()
         }
