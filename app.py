@@ -380,9 +380,19 @@ def _issue_account_token(account_id, email, purpose):
             "INSERT INTO account_email_tokens (account_id, purpose, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
             (account_id, purpose, digest, (now + timedelta(minutes=30)).isoformat(), now.isoformat()),
         )
-    base = os.environ.get("PUBLIC_API_URL", "").rstrip("/")
-    if not base.startswith("https://"):
-        app.logger.error("PUBLIC_API_URL must be an HTTPS URL")
+    raw_base = os.environ.get("PUBLIC_API_URL", "")
+    base = raw_base.strip().strip(chr(34) + chr(39)).strip().rstrip("/")
+    from urllib.parse import urlsplit
+    parsed_base = urlsplit(base)
+    if (parsed_base.scheme != "https" or not parsed_base.netloc
+            or parsed_base.username or parsed_base.password
+            or parsed_base.query or parsed_base.fragment
+            or parsed_base.path not in ("", "/")):
+        app.logger.error(
+            "PUBLIC_API_URL invalid: configured=%s length=%d leading_whitespace=%s trailing_whitespace=%s",
+            bool(raw_base), len(raw_base),
+            bool(raw_base[:1].isspace()), bool(raw_base[-1:].isspace()),
+        )
         return False
     url = base + "/api/account/" + purpose + "?token=" + token
     label = "Verify your Irai email" if purpose == "verify" else "Reset your Irai password"
