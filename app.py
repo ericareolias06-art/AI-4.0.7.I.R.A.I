@@ -1392,6 +1392,62 @@ def ai_chat():
                 if not entries:
                     del _ai_request_times[key]
 
+    # RunPod Serverless takes precedence when configured. Keep the existing
+    # Cloudflare/Ollama route as a fallback for deployments without RunPod.
+    runpod_key = os.environ.get("RUNPOD_API_KEY", "").strip()
+    runpod_endpoint = os.environ.get("RUNPOD_ENDPOINT_ID", "").strip()
+    if runpod_key and runpod_endpoint:
+        if not runpod_endpoint.isalnum():
+            app.logger.error("Invalid RunPod endpoint ID")
+            return jsonify(message="AI service configuration error."), 503
+
+        runpod_payload = json.dumps({"input": {"messages": messages}}).encode("utf-8")
+        runpod_request = Request(
+            "https://api.runpod.ai/v2/" + runpod_endpoint + "/runsync",
+            data=runpod_payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + runpod_key,
+            },
+            method="POST",
+        )
+        if not _ai_inflight.acquire(blocking=False):
+            busy = jsonify(message="Irai is busy right now. Please try again shortly.")
+            busy.headers["Retry-After"] = "10"
+            return busy, 503
+        try:
+            if not _ollama_slots.acquire(timeout=_OLLAMA_QUEUE_TIMEOUT):
+                busy = jsonify(message="Irai is handling another request. Please try again shortly.")
+                busy.headers["Retry-After"] = "10"
+                return busy, 503
+            try:
+                # RunPod's synchronous endpoint can include queue/cold-start time.
+                with urlopen(runpod_request, timeout=_setting_int("RUNPOD_TIMEOUT", 95, 10, 240)) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+            finally:
+                _ollama_slots.release()
+        except HTTPError as exc:
+            app.logger.error("RunPod HTTP error %s", exc.code)
+            return jsonify(message="AI service is temporarily unavailable."), 502
+        except (URLError, TimeoutError, OSError):
+            app.logger.exception("Could not reach RunPod")
+            return jsonify(message="AI service is temporarily unavailable."), 503
+        except (ValueError, UnicodeDecodeError):
+            app.logger.exception("Could not parse RunPod response")
+            return jsonify(message="AI returned an invalid response."), 502
+        finally:
+            _ai_inflight.release()
+
+        if result.get("status") != "COMPLETED":
+            app.logger.warning("RunPod job status: %s", result.get("status"))
+            return jsonify(message="Irai is starting up. Please try again shortly."), 503
+        output = result.get("output")
+        answer = output.get("response") if isinstance(output, dict) else None
+        if not isinstance(answer, str) or not answer.strip():
+            app.logger.error("RunPod returned empty output")
+            return jsonify(message="AI returned an invalid response."), 502
+        return jsonify(response=answer.strip()), 200
+
     ollama_url = os.environ.get("OLLAMA_URL", "").strip().rstrip("/")
     access_id = os.environ.get("CF_ACCESS_CLIENT_ID", "").strip()
     access_secret = os.environ.get("CF_ACCESS_CLIENT_SECRET", "").strip()
