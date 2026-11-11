@@ -119,6 +119,7 @@ class MainActivity : Activity() {
     private var permissionSetupActive = false
     private var permissionSetupStep = 0
     private var permissionSetupAwaitingSettings = false
+    private var guidedAssistanceSettingsPending = false
     private var offerVaultAfterPermissionSetup = false
 
     private val pageScanRequestCode = 2301
@@ -161,7 +162,8 @@ class MainActivity : Activity() {
     private val aiConversationHistory = mutableListOf<JSONObject>()
 
     private val restartListeningRunnable = Runnable {
-        if (loggedIn && !awaitingCommand && !listeningForCommand) {
+        if (loggedIn && !permissionSetupActive && !guidedAssistanceSettingsPending &&
+            !awaitingCommand && !listeningForCommand) {
             if (notesMode || awaitingFormAnswerFor != null || awaitingEmailIntent ||
                 awaitingSmsMessage || awaitingCommunicationRecipientChoice ||
                 awaitingCommunicationSendConfirmation) {
@@ -782,7 +784,6 @@ class MainActivity : Activity() {
             maybeOfferVaultAfterPermissionSetup()
             return
         }
-        prefs.edit().putBoolean("offered_v1", true).apply()
         AlertDialog.Builder(this)
             .setTitle("Set up Irai's permissions")
             .setMessage(
@@ -795,6 +796,9 @@ class MainActivity : Activity() {
             )
             .setPositiveButton("Set up now") { _, _ -> startPermissionSetupWizard() }
             .setNegativeButton("Maybe later") { _, _ ->
+                prefs.edit().putBoolean("offered_v1", true).apply()
+                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED) startIraiListeningService()
                 maybeOfferVaultAfterPermissionSetup()
             }
             .show()
@@ -812,6 +816,17 @@ class MainActivity : Activity() {
         if (permissionSetupActive) return
         permissionSetupActive = true
         permissionSetupStep = 0
+        // Pause voice while the user reviews permission dialogs. No time limit.
+        handler.removeCallbacks(restartListeningRunnable)
+        try {
+            speechRecognizer?.cancel()
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {}
+        speechRecognizer = null
+        awaitingCommand = false
+        listeningForCommand = false
+        stopIraiListeningService()
+        IraiAvatarOverlay.setStatus("Waiting for permission setup...")
         advancePermissionSetup()
     }
 
@@ -916,6 +931,7 @@ class MainActivity : Activity() {
                 if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                     PackageManager.PERMISSION_GRANTED) startIraiListeningService()
                 showAvatarOverlay()
+                IraiAvatarOverlay.setStatus("Ready")
                 maybeOfferVaultAfterPermissionSetup()
             }
             .show()
@@ -1010,7 +1026,8 @@ class MainActivity : Activity() {
     }
 
     private fun startIraiListeningService() {
-        if (!loggedIn || awaitingCommand || listeningForCommand || notesMode) return
+        if (!loggedIn || permissionSetupActive || guidedAssistanceSettingsPending ||
+            awaitingCommand || listeningForCommand || notesMode) return
 
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
@@ -1094,7 +1111,8 @@ class MainActivity : Activity() {
 
     // In-app speech recognition: does not launch the Google voice UI.
     private fun startVoiceCommand() {
-        if (awaitingCommand || !loggedIn) return
+        if (awaitingCommand || !loggedIn || permissionSetupActive ||
+            guidedAssistanceSettingsPending) return
 
         awaitingCommand = true
         listeningForCommand = true
@@ -1138,6 +1156,10 @@ class MainActivity : Activity() {
                         runOnUiThread {
                             awaitingCommand = false
                             listeningForCommand = false
+                            // Cancellation by permission setup is not a timeout.
+                            if (permissionSetupActive || guidedAssistanceSettingsPending) {
+                                return@runOnUiThread
+                            }
 
                             val description = when (error) {
                                 SpeechRecognizer.ERROR_AUDIO -> "Microphone audio error"
@@ -1187,6 +1209,9 @@ class MainActivity : Activity() {
                         runOnUiThread {
                             awaitingCommand = false
                             listeningForCommand = false
+                            if (permissionSetupActive || guidedAssistanceSettingsPending) {
+                                return@runOnUiThread
+                            }
 
                             if (spokenText.isBlank()) {
                                 latestDiagnostic = "I didn't catch that."
@@ -1654,6 +1679,10 @@ class MainActivity : Activity() {
     }
 
     private fun requestGuidedAssistanceEnablement() {
+        if (!permissionSetupActive) {
+            handler.removeCallbacks(restartListeningRunnable)
+            stopIraiListeningService()
+        }
         val consentPrefs = getSharedPreferences("irai_guided_assistance", Context.MODE_PRIVATE)
         // Version the disclosure so existing installs must affirmatively accept
         // the updated explanation before using Guided Assistance again.
@@ -1664,19 +1693,27 @@ class MainActivity : Activity() {
             .setMessage(disclosure)
             .setNegativeButton("Not now") { _, _ ->
                 if (permissionSetupActive) advancePermissionSetup()
+                else startIraiListeningService()
             }
             .setPositiveButton(if (hasConsent) "Open Android Settings" else "Agree and continue") { _, _ ->
                 if (!hasConsent) {
                     consentPrefs.edit().putInt("screen_access_disclosure_version", 3).apply()
                 }
                 if (permissionSetupActive) permissionSetupAwaitingSettings = true
+                else guidedAssistanceSettingsPending = true
                 try {
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 } catch (_: Exception) {
                     permissionSetupAwaitingSettings = false
+                    guidedAssistanceSettingsPending = false
                     Toast.makeText(this, "Open Android Accessibility settings to enable Irai Guided Assistance.", Toast.LENGTH_LONG).show()
                     if (permissionSetupActive) advancePermissionSetup()
+                    else startIraiListeningService()
                 }
+            }
+            .setOnCancelListener {
+                if (permissionSetupActive) advancePermissionSetup()
+                else startIraiListeningService()
             }
             .show()
     }
@@ -5119,6 +5156,10 @@ class MainActivity : Activity() {
         if (permissionSetupActive && permissionSetupAwaitingSettings) {
             permissionSetupAwaitingSettings = false
             handler.post { advancePermissionSetup() }
+        }
+        if (guidedAssistanceSettingsPending) {
+            guidedAssistanceSettingsPending = false
+            handler.post { startIraiListeningService() }
         }
         if (loggedIn && IraiAvatarOverlay.hasPermission(this) && !avatarHiddenUntilWake) {
             showAvatarOverlay()
