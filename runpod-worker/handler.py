@@ -38,7 +38,7 @@ def handler(job):
     try:
         response = requests.post(
             HOST + "/api/chat",
-            json={"model": MODEL, "messages": messages, "stream": False},
+            json={"model": MODEL, "messages": messages, "stream": False, "options": {"num_predict": 220}},
             timeout=240,
         )
         response.raise_for_status()
