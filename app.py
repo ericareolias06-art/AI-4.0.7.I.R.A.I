@@ -497,7 +497,6 @@ def verify_email_link():
             (record["account_id"], "app_login", handoff_hash,
              (issued + timedelta(minutes=5)).isoformat(), issued.isoformat()),
         )
-    from flask import redirect
     from urllib.parse import urlencode
     from html import escape
     app_link = "iraitec://verified?" + urlencode({"code": handoff})
