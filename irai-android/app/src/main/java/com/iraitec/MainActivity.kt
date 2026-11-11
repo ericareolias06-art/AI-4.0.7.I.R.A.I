@@ -73,6 +73,7 @@ class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
 
     private var registering = false
+    private var pendingVerificationEmail: String? = null
     private var currentEmail = ""
     private var receiverRegistered = false
     private var loggedIn = false
@@ -306,7 +307,141 @@ class MainActivity : Activity() {
             }
         }
 
-        restoreSession()
+        if (!handleVerificationIntent(intent)) {
+            val pendingEmail = sessionPrefs.getString("pending_verification_email", null)
+            if (!pendingEmail.isNullOrBlank()) {
+                showVerificationScreen(pendingEmail)
+            } else {
+                restoreSession()
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleVerificationIntent(intent)
+    }
+
+    private fun handleVerificationIntent(intent: Intent?): Boolean {
+        val uri = intent?.data ?: return false
+        if (uri.scheme != "iraitec" || uri.host != "verified") return false
+        val code = uri.getQueryParameter("code").orEmpty()
+        intent.data = null // Do not retain the one-time code in Activity state.
+        if (code.length < 30 || code.length > 256) {
+            Toast.makeText(this, "Invalid email verification link.", Toast.LENGTH_LONG).show()
+            return true
+        }
+        showVerificationCompletion()
+        thread {
+            var succeeded = false
+            var feedback = "This verification link has expired. Please request a new email."
+            try {
+                val connection = openApiConnection("/api/account/complete-verification")
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 20000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use {
+                    it.write(JSONObject().put("code", code).toString().toByteArray(Charsets.UTF_8))
+                }
+                val status = connection.responseCode
+                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                val payload = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (status in 200..299) {
+                    saveSessionCookie(connection)
+                    succeeded = true
+                } else {
+                    feedback = JSONObject(payload).optString("message", feedback)
+                }
+                connection.disconnect()
+            } catch (_: Exception) {
+                feedback = "Couldn't finish signing in. Please reopen your verification email."
+            }
+            runOnUiThread {
+                if (succeeded) {
+                    sessionPrefs.edit().remove("pending_verification_email").apply()
+                    pendingVerificationEmail = null
+                    checkSubscriptionAccess()
+                } else {
+                    val email = sessionPrefs.getString("pending_verification_email", null)
+                    if (!email.isNullOrBlank()) {
+                        showVerificationScreen(email)
+                        message.text = feedback
+                    } else {
+                        showAuth()
+                        message.text = feedback
+                    }
+                }
+            }
+        }
+        return true
+    }
+
+    private fun showVerificationCompletion() {
+        root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(28, 24, 28, 24)
+            setBackgroundColor(bg)
+        }
+        root.addView(label("Verifying your email and signing you in...", 20, white))
+        setContentView(root)
+    }
+
+    private fun showVerificationScreen(email: String) {
+        pendingVerificationEmail = email
+        root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(28, 24, 28, 24)
+            setBackgroundColor(bg)
+        }
+        root.addView(label("Verify Your Email", 28, white))
+        root.addView(label("We sent a verification link to " + email +
+            ". Open your email and tap the link to finish creating your account.", 16, muted))
+        val resend = Button(this).apply {
+            text = "Resend verification email"
+            setOnClickListener { requestVerificationForPendingEmail(email) }
+        }
+        root.addView(resend, params())
+        root.addView(Button(this).apply {
+            text = "Back to Log In"
+            setOnClickListener {
+                sessionPrefs.edit().remove("pending_verification_email").apply()
+                pendingVerificationEmail = null
+                registering = false
+                showAuth()
+            }
+        }, params())
+        message = label("", 14, muted)
+        root.addView(message)
+        setContentView(root)
+    }
+
+    private fun requestVerificationForPendingEmail(email: String) {
+        message.text = "Requesting another email..."
+        thread {
+            var feedback = "Couldn't request the email. Please try again."
+            try {
+                val connection = openApiConnection("/api/account/request-verification")
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 20000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use {
+                    it.write(JSONObject().put("email", email).toString().toByteArray(Charsets.UTF_8))
+                }
+                val code = connection.responseCode
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                feedback = JSONObject(body).optString("message", feedback)
+                connection.disconnect()
+            } catch (_: Exception) {}
+            runOnUiThread { message.text = feedback }
+        }
     }
 
     private fun restoreSession() {
@@ -494,14 +629,6 @@ class MainActivity : Activity() {
             setPadding(8, 14, 8, 14)
             setOnClickListener { requestAccountEmailLink("/api/account/forgot-password") }
         })
-        content.addView(TextView(this).apply {
-            text = "Resend verification email"
-            textSize = 15f
-            gravity = Gravity.CENTER
-            setTextColor(accent)
-            setPadding(8, 12, 8, 12)
-            setOnClickListener { requestAccountEmailLink("/api/account/request-verification") }
-        })
         message = label("", 14, muted)
         content.addView(message)
 
@@ -631,10 +758,8 @@ class MainActivity : Activity() {
 
                 if (success && registering) {
                     registering = false
-                    confirmInput.visibility = View.GONE
-                    passwordInput.text.clear()
-                    message.text = "Account created! You can now log in."
-                    offerInitialAppearanceChoice()
+                    sessionPrefs.edit().putString("pending_verification_email", email).apply()
+                    showVerificationScreen(email)
                 } else if (success) {
                     currentEmail = email
                     loggedIn = true
