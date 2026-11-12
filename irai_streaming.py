@@ -50,7 +50,7 @@ def stream_runpod(messages, endpoint, api_key, timeout=120, poll_interval=0.4):
     seen = 0
     started = time.monotonic()
     try:
-        submitted = _request_json(base + "/run", api_key, {"input": {"messages": messages}})
+        submitted = _request_json(base + "/run", api_key, {"input": {"messages": messages, "stream": True}})
         job_id = submitted.get("id") if isinstance(submitted, dict) else None
         if not isinstance(job_id, str) or not re.fullmatch(r"[a-zA-Z0-9-]{1,100}", job_id):
             raise ValueError("RunPod did not return a valid job id")
@@ -61,6 +61,10 @@ def stream_runpod(messages, endpoint, api_key, timeout=120, poll_interval=0.4):
             if isinstance(chunks, list):
                 for item in chunks[seen:]:
                     part = _text_from_output(item.get("output") if isinstance(item, dict) else item)
+                    if isinstance(item, dict) and isinstance(item.get("output"), dict) and item["output"].get("error"):
+                        finished = True
+                        yield _event("error", message="Irai could not finish that response.")
+                        return
                     if part:
                         yielded = True
                         yield _event("delta", text=part)
