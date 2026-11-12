@@ -17,7 +17,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import stripe
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, Response, stream_with_context
+from irai_streaming import stream_runpod
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -1226,10 +1227,14 @@ _OLLAMA_NUM_PREDICT = _setting_int("OLLAMA_NUM_PREDICT", 256, 64, 2048)
 
 _ai_inflight = threading.BoundedSemaphore(_AI_MAX_INFLIGHT)
 _ollama_slots = threading.BoundedSemaphore(_OLLAMA_MAX_PARALLEL)
+_RUNPOD_MAX_PARALLEL = _setting_int("RUNPOD_MAX_PARALLEL", 12, 1, 100)
+_runpod_slots = threading.BoundedSemaphore(_RUNPOD_MAX_PARALLEL)
 
 
 @app.post("/api/ai/chat")
+@app.post("/api/ai/chat/stream")
 def ai_chat():
+    stream_mode = request.path.endswith("/stream")
     if "account_id" not in session:
         return jsonify(message="Please log in first."), 401
 
@@ -1371,6 +1376,32 @@ def ai_chat():
             app.logger.error("Invalid RunPod endpoint ID")
             return jsonify(message="AI service configuration error."), 503
 
+        if stream_mode:
+            if not _ai_inflight.acquire(blocking=False):
+                return jsonify(message="Irai is busy right now."), 503
+            if not _runpod_slots.acquire(blocking=False):
+                _ai_inflight.release()
+                return jsonify(message="Irai is handling another request."), 503
+
+            def send_stream():
+                try:
+                    yield from stream_runpod(
+                        messages, runpod_endpoint, runpod_key,
+                        timeout=_setting_int("RUNPOD_TIMEOUT", 120, 10, 240),
+                    )
+                finally:
+                    _runpod_slots.release()
+                    _ai_inflight.release()
+
+            return Response(
+                stream_with_context(send_stream()),
+                mimetype="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+
         runpod_payload = json.dumps({"input": {"messages": messages}}).encode("utf-8")
         runpod_request = Request(
             "https://api.runpod.ai/v2/" + runpod_endpoint + "/runsync",
@@ -1386,7 +1417,7 @@ def ai_chat():
             busy.headers["Retry-After"] = "10"
             return busy, 503
         try:
-            if not _ollama_slots.acquire(timeout=_OLLAMA_QUEUE_TIMEOUT):
+            if not _runpod_slots.acquire(timeout=_OLLAMA_QUEUE_TIMEOUT):
                 busy = jsonify(message="Irai is handling another request. Please try again shortly.")
                 busy.headers["Retry-After"] = "10"
                 return busy, 503
@@ -1395,7 +1426,7 @@ def ai_chat():
                 with urlopen(runpod_request, timeout=_setting_int("RUNPOD_TIMEOUT", 95, 10, 240)) as response:
                     result = json.loads(response.read().decode("utf-8"))
             finally:
-                _ollama_slots.release()
+                _runpod_slots.release()
         except HTTPError as exc:
             app.logger.error("RunPod HTTP error %s", exc.code)
             return jsonify(message="AI service is temporarily unavailable."), 502
@@ -1417,6 +1448,9 @@ def ai_chat():
             app.logger.error("RunPod returned empty output")
             return jsonify(message="AI returned an invalid response."), 502
         return jsonify(response=answer.strip()), 200
+
+    if stream_mode:
+        return jsonify(message="Streaming requires a configured RunPod endpoint."), 503
 
     ollama_url = os.environ.get("OLLAMA_URL", "").strip().rstrip("/")
     access_id = os.environ.get("CF_ACCESS_CLIENT_ID", "").strip()
