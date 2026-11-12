@@ -8,9 +8,9 @@
 - It attempts `/cancel/{job_id}` when the client disconnects or times out.
 - RunPod concurrency is separately controlled with `RUNPOD_MAX_PARALLEL` (default 12) instead of the local Ollama semaphore (default 1). The existing `AI_MAX_INFLIGHT` still applies per Render process.
 
-## Android app integration (not automatically enabled)
+## Android app integration (implemented in Kotlin, not yet deployed)
 
-The app must make an authenticated **POST** with the same session cookie and JSON body it sends to `/api/ai/chat`, but to `/api/ai/chat/stream`.
+`MainActivity.kt` now calls `IraiStreamingChat.read` for spoken replies with an authenticated POST to `/api/ai/chat/stream`. Structured drafting callbacks still use the original full-response endpoint. Android falls back to the legacy endpoint on an HTTP 404 only. Rebuild and test the APK to activate this change.
 
 Set request header `Accept: text/event-stream`; read the HTTP response body as a stream (for example, OkHttp's `ResponseBody.source()` rather than `string()`). Parse SSE frames split by an empty line:
 
@@ -23,9 +23,9 @@ Only update Android UI on the main thread. Do not start TTS on every token: grou
 
 For HTTP 4xx/5xx, read the JSON error (subscription required, invalid auth, rate limit, etc.) exactly as the current endpoint does. The stream route is opt-in, so current app versions still work.
 
-## RunPod worker (separate deployment required)
+## RunPod worker (handler code updated, deployment still required)
 
-Token-by-token streaming **requires updating the actual RunPod handler/container**. A normal handler that `return {"response": full_text}` will still return only a final answer. The RunPod Python SDK supports generator handlers:
+The repository's `runpod-worker/handler.py` and root `handler.py` now use a generator handler with `stream: true` calling Ollama's `/api/chat` token stream. The handler uses `return_aggregate_stream=True` to preserve compatibility with `/runsync`; Render accepts aggregated output. The RunPod Python SDK supports generator handlers:
 
 ```python
 def handler(job):
@@ -37,7 +37,7 @@ def handler(job):
 runpod.serverless.start({"handler": handler})
 ```
 
-`model_generate_iter` above is a placeholder, **not** a runnable function. Adapt the actual deployed inference library and keep the exact persona/system prompts from Render. Confirm the chunk shape from the chosen handler. This repo change does **not** automatically deploy a new RunPod image.
+`model_generate_iter` above is a placeholder, **not** a runnable function. Adapt the actual deployed inference library and keep the exact persona/system prompts from Render. Confirm the chunk shape from the chosen handler. The code is updated, but this does **not** automatically build or deploy a new RunPod image. Neither RunPod nor Render has been changed by this pull request.
 
 ## Deployment and performance validation
 
