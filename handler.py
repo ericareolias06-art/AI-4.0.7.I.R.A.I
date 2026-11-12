@@ -73,12 +73,16 @@ def _stream_chat(messages):
 
 
 def handler(job):
+    # RunPod checks whether the handler FUNCTION is a generator, not whether
+    # its return value happens to be one.
     payload = job.get("input") or {}
     messages = _input_messages(payload)
     if messages is None:
-        return {"error": "Provide messages or a prompt"}
+        yield {"error": "Provide messages or a prompt"}
+        return
     if payload.get("stream") is True:
-        return _stream_chat(messages)
+        yield from _stream_chat(messages)
+        return
     try:
         response = requests.post(
             HOST + "/api/chat",
@@ -87,10 +91,10 @@ def handler(job):
         )
         response.raise_for_status()
         result = response.json()
-        return {"response": result.get("message", {}).get("content", "")}
+        yield {"response": result.get("message", {}).get("content", "")}
     except requests.RequestException:
-        return {"error": "Ollama request failed"}
+        yield {"error": "Ollama request failed"}
 
 
 initialize()
-runpod.serverless.start({"handler": handler})
+runpod.serverless.start({"handler": handler, "return_aggregate_stream": True})
