@@ -28,6 +28,11 @@ class IraiListeningService : Service() {
         const val ACTION_DIAGNOSTIC = "com.iraitec.WAKE_DIAGNOSTIC"
         const val EXTRA_STATUS = "status"
         const val ACTION_RESUME_LISTENING = "com.iraitec.RESUME_LISTENING"
+
+        // Keep an existing foreground microphone service alive between turns.
+        // Resuming its receiver avoids Android's background service-start limits.
+        @Volatile var serviceAlive: Boolean = false
+            private set
     }
 
     private val running = AtomicBoolean(false)
@@ -54,6 +59,7 @@ class IraiListeningService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        serviceAlive = true
         createNotificationChannel()
 
         val resumeFilter = IntentFilter(ACTION_RESUME_LISTENING)
@@ -254,6 +260,7 @@ class IraiListeningService : Service() {
     }
 
     override fun onDestroy() {
+        serviceAlive = false
         running.set(false)
 
         try {
