@@ -2747,7 +2747,111 @@ class MainActivity : Activity() {
             }
             .show()
     }
+    // AI chat uses streaming for spoken answers. Drafting/other callback-based
+    // actions continue using the original full-response endpoint.
+    private fun sendStreamingMessageToIrai(message: String) {
+        val historySnapshot = aiConversationHistory.toList()
+        latestDiagnostic = "Irai is thinking..."
+        IraiAvatarOverlay.setStatus("Thinking...")
+        refreshDiagnostic()
+
+        val historyJson = JSONArray()
+        historySnapshot.takeLast(10).forEach { historyJson.put(it) }
+        val payload = JSONObject()
+            .put("message", message)
+            .put("history", historyJson)
+            .toString()
+
+        thread {
+            val pendingSpeech = StringBuilder()
+            var startedSpeaking = false
+
+            fun enqueueSpeech(phrase: String, final: Boolean = false) {
+                runOnUiThread {
+                    if (!ttsReady) return@runOnUiThread
+                    if (phrase.isNotBlank()) {
+                        latestDiagnostic = "I.R.A.I: " + phrase
+                        IraiAvatarOverlay.setStatus("Speaking...")
+                        refreshDiagnostic()
+                        val spoken = phrase.replace(
+                            Regex("(?i)\\bI\\.?R\\.?A\\.?I\\b|\\bIrai\\b"),
+                            "eye ray"
+                        )
+                        speechTts?.speak(
+                            spoken,
+                            if (!startedSpeaking) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,
+                            null,
+                            if (final) "irai_response" else "irai_stream_part"
+                        )
+                        startedSpeaking = true
+                    } else if (final && startedSpeaking) {
+                        speechTts?.playSilentUtterance(
+                            1, TextToSpeech.QUEUE_ADD, "irai_response"
+                        )
+                    }
+                }
+            }
+
+            var result: IraiStreamingChat.Result
+            try {
+                val connection = openApiConnection("/api/ai/chat/stream")
+                result = IraiStreamingChat.read(connection, payload) { piece ->
+                    pendingSpeech.append(piece)
+                    // Speak complete sentences; don't reset the voice for every token.
+                    while (true) {
+                        val match = Regex("[.!?](?:\\s+|$)").find(pendingSpeech.toString()) ?: break
+                        val end = match.range.first + 1
+                        val sentence = pendingSpeech.substring(0, end).trim()
+                        pendingSpeech.delete(0, match.range.last + 1)
+                        if (sentence.isNotBlank()) enqueueSpeech(sentence)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("IRAI_AI", "Streaming request failed", e)
+                result = IraiStreamingChat.Result(
+                    "I couldn't connect to my AI service. Please try again.", false
+                )
+            }
+
+            if (result.unsupported) {
+                // Older Render deployments still support the previous endpoint.
+                runOnUiThread {
+                    sendMessageToIrai(message) { answer -> speakResponse(answer) }
+                }
+                return@thread
+            }
+
+            if (result.success) {
+                val remainder = pendingSpeech.toString().trim()
+                enqueueSpeech(remainder, final = true)
+            }
+            runOnUiThread {
+                if (result.success) {
+                    aiConversationHistory.add(JSONObject().put("role", "user").put("content", message))
+                    aiConversationHistory.add(JSONObject().put("role", "assistant").put("content", result.reply.take(3500)))
+                    while (aiConversationHistory.size > 10) aiConversationHistory.removeAt(0)
+                    var totalChars = aiConversationHistory.sumOf { it.optString("content").length }
+                    while (aiConversationHistory.isNotEmpty() && totalChars > 7_500) {
+                        totalChars -= aiConversationHistory.removeAt(0).optString("content").length
+                    }
+                    if (!ttsReady) {
+                        speakResponse(result.reply)
+                    } else if (!startedSpeaking) {
+                        restartListeningAfterDelay()
+                    }
+                } else {
+                    // Never add a partial AI answer to conversation history.
+                    speakResponse(result.reply)
+                }
+            }
+        }
+    }
+
     private fun sendMessageToIrai(message: String, onReply: ((String) -> Unit)? = null) {
+    if (onReply == null) {
+        sendStreamingMessageToIrai(message)
+        return
+    }
     val historySnapshot = aiConversationHistory.toList()
     latestDiagnostic = "Irai is thinking..."
     IraiAvatarOverlay.setStatus("Thinking...")

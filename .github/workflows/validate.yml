@@ -7,6 +7,14 @@ on:
       - "app.py"
       - "irai-android/**"
       - ".github/workflows/validate.yml"
+  pull_request:
+    paths:
+      - "app.py"
+      - "handler.py"
+      - "irai_streaming.py"
+      - "runpod-worker/**"
+      - "irai-android/**"
+      - ".github/workflows/validate.yml"
   workflow_dispatch:
 
 permissions:
@@ -21,7 +29,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Check Python source compiles
-        run: python -m py_compile app.py
+        run: python -m py_compile app.py irai_streaming.py handler.py runpod-worker/handler.py
   android-debug:
     runs-on: ubuntu-latest
     steps:
