@@ -107,6 +107,9 @@ class MainActivity : Activity() {
     private var formFillPackage: String? = null
 
     private var speechRecognizer: SpeechRecognizer? = null
+    private var speechRecognitionSessionId = 0
+    private var speechRecognitionTimeout: Runnable? = null
+
     private var speechTts: TextToSpeech? = null
     private var ttsReady = false
     private var originalTtsVoice: android.speech.tts.Voice? = null
@@ -274,12 +277,14 @@ class MainActivity : Activity() {
                         override fun onDone(utteranceId: String?) {
                             if (utteranceId == "irai_response") runOnUiThread {
                                 if (notesMode && loggedIn && !awaitingCommand) startVoiceCommand()
+                                else if (!notesMode) restartListeningAfterDelay()
                             }
                         }
                         @Deprecated("Deprecated in Java")
                         override fun onError(utteranceId: String?) {
                             if (utteranceId == "irai_response") runOnUiThread {
                                 if (notesMode && loggedIn && !awaitingCommand) handler.postDelayed({ startVoiceCommand() }, 800)
+                                else if (!notesMode) restartListeningAfterDelay()
                             }
                         }
                     })
@@ -818,6 +823,8 @@ class MainActivity : Activity() {
         permissionSetupStep = 0
         // Pause voice while the user reviews permission dialogs. No time limit.
         handler.removeCallbacks(restartListeningRunnable)
+        clearSpeechRecognitionTimeout()
+        speechRecognitionSessionId++
         try {
             speechRecognizer?.cancel()
             speechRecognizer?.destroy()
@@ -1109,6 +1116,11 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun clearSpeechRecognitionTimeout() {
+        speechRecognitionTimeout?.let { handler.removeCallbacks(it) }
+        speechRecognitionTimeout = null
+    }
+
     // In-app speech recognition: does not launch the Google voice UI.
     private fun startVoiceCommand() {
         if (awaitingCommand || !loggedIn || permissionSetupActive ||
@@ -1117,6 +1129,8 @@ class MainActivity : Activity() {
         awaitingCommand = true
         listeningForCommand = true
         handler.removeCallbacks(restartListeningRunnable)
+        clearSpeechRecognitionTimeout()
+        val speechSessionId = ++speechRecognitionSessionId
 
 
         latestDiagnostic = "Irai heard you. Listening for your command..."
@@ -1137,6 +1151,7 @@ class MainActivity : Activity() {
                 object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         runOnUiThread {
+                            if (speechSessionId != speechRecognitionSessionId) return@runOnUiThread
                             latestDiagnostic = "Listening inside Irai Tec..."
                             refreshDiagnostic()
                         }
@@ -1147,6 +1162,7 @@ class MainActivity : Activity() {
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {
                         runOnUiThread {
+                            if (speechSessionId != speechRecognitionSessionId) return@runOnUiThread
                             latestDiagnostic = "Processing your command..."
                             refreshDiagnostic()
                         }
@@ -1154,6 +1170,9 @@ class MainActivity : Activity() {
 
                     override fun onError(error: Int) {
                         runOnUiThread {
+                            if (speechSessionId != speechRecognitionSessionId) return@runOnUiThread
+                            clearSpeechRecognitionTimeout()
+                            speechRecognitionSessionId++
                             awaitingCommand = false
                             listeningForCommand = false
                             // Cancellation by permission setup is not a timeout.
@@ -1207,6 +1226,9 @@ class MainActivity : Activity() {
                             .orEmpty()
 
                         runOnUiThread {
+                            if (speechSessionId != speechRecognitionSessionId) return@runOnUiThread
+                            clearSpeechRecognitionTimeout()
+                            speechRecognitionSessionId++
                             awaitingCommand = false
                             listeningForCommand = false
                             if (permissionSetupActive || guidedAssistanceSettingsPending) {
@@ -1232,7 +1254,9 @@ class MainActivity : Activity() {
             )
 
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                // Allow the system's installed recognition service to use its
+                // supported mode if an offline English speech pack is missing.
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
                 putExtra(
                     RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
@@ -1260,7 +1284,30 @@ class MainActivity : Activity() {
             }
 
             speechRecognizer?.startListening(intent)
+            // Some device speech providers never deliver onResults or onError.
+            // Recover the wake-word listener instead of remaining stuck forever.
+            val timeout = Runnable {
+                if (speechSessionId != speechRecognitionSessionId || !awaitingCommand ||
+                    permissionSetupActive || guidedAssistanceSettingsPending) return@Runnable
+                clearSpeechRecognitionTimeout()
+                speechRecognitionSessionId++
+                awaitingCommand = false
+                listeningForCommand = false
+                try {
+                    speechRecognizer?.cancel()
+                    speechRecognizer?.destroy()
+                } catch (_: Exception) {}
+                speechRecognizer = null
+                latestDiagnostic = "Speech recognition timed out. Say Irai to try again."
+                IraiAvatarOverlay.setStatus("Speech timeout — say Irai again")
+                refreshDiagnostic()
+                restartListeningAfterDelay()
+            }
+            speechRecognitionTimeout = timeout
+            handler.postDelayed(timeout, 30_000L)
         } catch (e: Exception) {
+            clearSpeechRecognitionTimeout()
+            speechRecognitionSessionId++
             awaitingCommand = false
             listeningForCommand = false
             latestDiagnostic = "Could not start speech recognition: ${e.message}"
@@ -3156,17 +3203,19 @@ class MainActivity : Activity() {
         val spokenText = text.replace(Regex("(?i)\\bI\\.?R\\.?A\\.?I\\b|\\bIrai\\b"), "eye ray")
 
         if (ttsReady) {
-            speechTts?.speak(
+            val started = speechTts?.speak(
                 spokenText,
                 TextToSpeech.QUEUE_FLUSH,
                 null,
                 "irai_response"
             )
+            // Wake-word listening restarts from the TTS completion callback,
+            // so Irai does not mistake her own voice for a new command.
+            if (started != TextToSpeech.SUCCESS && !notesMode) restartListeningAfterDelay()
         } else {
             Toast.makeText(this, text, Toast.LENGTH_LONG).show()
+            if (!notesMode) restartListeningAfterDelay()
         }
-
-        if (!notesMode || !ttsReady) restartListeningAfterDelay()
     }
 
     private fun restartListeningAfterDelay() {
@@ -3711,6 +3760,13 @@ class MainActivity : Activity() {
                 })
 
                 content.addView(featuresEntryButton())
+                diagnosticText = label("", 12, if (isBlueAppearance())
+                    Color.rgb(215, 232, 245) else Color.rgb(105, 53, 64)).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(dp(8), dp(14), dp(8), dp(6))
+                }
+                content.addView(diagnosticText)
+                refreshDiagnostic()
 
                 scroll.addView(content)
                 root.addView(scroll, LinearLayout.LayoutParams(
@@ -4479,6 +4535,26 @@ class MainActivity : Activity() {
             "Review App Permissions",
             "Set up microphone, notifications, floating Irai, screen reading, and contacts."
         ) { startPermissionSetupWizard() })
+        content.addView(menuButton(
+            "Test AI Connection",
+            "Send one test message through Render to RunPod. Uses one monthly AI message."
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("Test Irai's AI connection?")
+                .setMessage("This sends one short message to the AI server. If it fails, the result helps identify whether the issue is speech recognition or the server.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Run test") { _, _ ->
+                    Toast.makeText(this, "Sending a test message to Render...", Toast.LENGTH_LONG).show()
+                    sendMessageToIrai("Please reply with a short greeting for a connection test.") { reply ->
+                        AlertDialog.Builder(this)
+                            .setTitle("Irai AI connection result")
+                            .setMessage(reply)
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                }
+                .show()
+        })
         content.addView(menuButton("Choose Home Background Photo", "Select a photo from your phone for the I.R.A.I home screen") { chooseHomeBackground() })
         content.addView(menuButton("Remove Home Background Photo", "Restore the original sunrise background") { clearHomeBackground() })
         content.addView(menuButton("Personal Vault", "Encrypted personal details and saved account passwords stored only on this phone") {
@@ -5184,6 +5260,8 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
         }
         speechRecognizer = null
+        clearSpeechRecognitionTimeout()
+        speechRecognitionSessionId++
         pendingVaultAccount = null
         pendingVaultPasswordField = null
         pendingFormFields.clear()
