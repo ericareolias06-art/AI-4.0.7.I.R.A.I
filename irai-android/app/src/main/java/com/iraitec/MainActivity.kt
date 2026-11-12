@@ -1045,6 +1045,19 @@ class MainActivity : Activity() {
         }
 
         try {
+            // Keep the already-running foreground service alive between
+            // speech turns. Restarting a microphone FGS from a background
+            // Activity is blocked on newer Android versions.
+            if (IraiListeningService.serviceAlive) {
+                sendBroadcast(
+                    Intent(IraiListeningService.ACTION_RESUME_LISTENING)
+                        .setPackage(packageName)
+                )
+                latestDiagnostic = "Resuming Irai wake-word listening..."
+                refreshDiagnostic()
+                return
+            }
+
             val serviceIntent =
                 Intent(this, IraiListeningService::class.java)
 
@@ -1058,6 +1071,7 @@ class MainActivity : Activity() {
             refreshDiagnostic()
         } catch (e: Exception) {
             latestDiagnostic = "Could not start listening: ${e.message}"
+            android.util.Log.e("IRAI_VOICE", "Failed to restart listening", e)
             refreshDiagnostic()
         }
     }
