@@ -1443,7 +1443,20 @@ def ai_chat():
             app.logger.warning("RunPod job status: %s", result.get("status"))
             return jsonify(message="Irai is starting up. Please try again shortly."), 503
         output = result.get("output")
-        answer = output.get("response") if isinstance(output, dict) else None
+        # Generator workers aggregate outputs for /runsync; older workers
+        # return a single dict. Accept either without changing Android JSON.
+        if isinstance(output, list):
+            outputs = [
+                entry.get("output", entry) if isinstance(entry, dict) else entry
+                for entry in output
+            ]
+            answer = "".join(
+                entry.get("response", "") for entry in outputs
+                if isinstance(entry, dict)
+                and isinstance(entry.get("response"), str)
+            )
+        else:
+            answer = output.get("response") if isinstance(output, dict) else None
         if not isinstance(answer, str) or not answer.strip():
             app.logger.error("RunPod returned empty output")
             return jsonify(message="AI returned an invalid response."), 502
