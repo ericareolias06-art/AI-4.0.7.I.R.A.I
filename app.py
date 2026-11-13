@@ -1480,8 +1480,19 @@ def ai_chat():
                         endpoint_url + "/stream/" + job_id,
                         headers=auth_headers, method="GET",
                     )
-                    with urlopen(stream_request, timeout=12) as result_response:
-                        stream_data = json.load(result_response)
+                    # /stream can long-poll while a cold GPU starts. A
+                    # read timeout is not a generation failure; continue
+                    # checking the job's status without canceling it.
+                    try:
+                        with urlopen(stream_request, timeout=25) as result_response:
+                            stream_data = json.load(result_response)
+                    except TimeoutError:
+                        stream_data = []
+                    except URLError as exc:
+                        if isinstance(exc.reason, TimeoutError):
+                            stream_data = []
+                        else:
+                            raise
                     for chunk in collect_chunks(stream_data):
                         accumulated.append(chunk)
                         yield event({"delta": chunk})
