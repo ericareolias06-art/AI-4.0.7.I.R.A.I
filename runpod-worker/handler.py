@@ -21,10 +21,21 @@ def initialize():
     else:
         raise RuntimeError("Ollama failed to start")
 
-    response = requests.post(
-        HOST + "/api/pull", json={"name": MODEL, "stream": False}, timeout=1800
-    )
+    # Models are baked into the Docker image. Do not download during a
+    # paid Runpod cold start: a 2 GB pull can cost far more than the reply.
+    response = requests.get(HOST + "/api/tags", timeout=10)
     response.raise_for_status()
+    available = {
+        item.get("name") or item.get("model")
+        for item in response.json().get("models", [])
+        if isinstance(item, dict)
+    }
+    if MODEL not in available:
+        raise RuntimeError(
+            "Model " + MODEL + " was not included in the worker image. "
+            "Rebuild the Docker image with this model instead of pulling "
+            "it on every billed worker startup."
+        )
 
 
 def handler(job):
