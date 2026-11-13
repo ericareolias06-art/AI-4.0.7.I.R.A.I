@@ -35,10 +35,20 @@ def handler(job):
         if not isinstance(prompt, str) or not prompt.strip():
             return {"error": "Provide messages or a prompt"}
         messages = [{"role": "user", "content": prompt}]
+    # Lower sampling randomness to reduce speculative or invented details.
+    # The server may supply bounded tuning, but cannot inject arbitrary
+    # Ollama options into the worker.
+    options = {"num_predict": 220, "temperature": 0.25, "top_p": 0.85}
+    supplied_options = payload.get("options")
+    if isinstance(supplied_options, dict):
+        for name in ("temperature", "top_p"):
+            value = supplied_options.get(name)
+            if type(value) in (int, float) and 0 <= value <= 1:
+                options[name] = float(value)
     try:
         response = requests.post(
             HOST + "/api/chat",
-            json={"model": MODEL, "messages": messages, "stream": False, "options": {"num_predict": 220}},
+            json={"model": MODEL, "messages": messages, "stream": False, "options": options},
             timeout=240,
         )
         response.raise_for_status()
