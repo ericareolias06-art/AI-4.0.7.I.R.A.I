@@ -1423,7 +1423,6 @@ def ai_chat():
         def stream_events():
             job_id = None
             finished = False
-            chunks_seen = set()
             accumulated = []
             try:
                 # Send response headers promptly, even for a cold GPU.
@@ -1441,10 +1440,12 @@ def ai_chat():
                     return
 
                 def collect_chunks(result):
-                    # /stream returns an array. Ignore duplicates if its API
-                    # repeats previously returned chunks across polls.
+                    # Streaming polls may return either all prior chunks or
+                    # only new chunks. Match sequence overlap with what was
+                    # already delivered so repeated words remain intact while
+                    # /status cannot cause the entire reply to replay.
                     items = result if isinstance(result, list) else [result]
-                    new_chunks = []
+                    candidate = []
                     for item in items:
                         if not isinstance(item, dict):
                             continue
@@ -1455,17 +1456,21 @@ def ai_chat():
                             chunk = output.get("delta")
                             if not isinstance(chunk, str) or not chunk:
                                 chunk = output.get("response")
-                            if not isinstance(chunk, str) or not chunk:
-                                continue
-                            # /status often omits /stream's metrics. Dedupe
-                            # on the output text rather than the wrapper so
-                            # the final response never replays spoken chunks.
-                            # Identical separate chunks are rare with 65-char
-                            # batching, but this is deliberately conservative.
-                            if chunk not in chunks_seen:
-                                chunks_seen.add(chunk)
-                                new_chunks.append(chunk)
-                    return new_chunks
+                            if isinstance(chunk, str) and chunk:
+                                candidate.append(chunk)
+                    if not candidate:
+                        return []
+                    if len(candidate) >= len(accumulated) and (
+                        candidate[:len(accumulated)] == accumulated
+                    ):
+                        return candidate[len(accumulated):]
+                    overlap = 0
+                    maximum = min(len(accumulated), len(candidate))
+                    for size in range(maximum, 0, -1):
+                        if accumulated[-size:] == candidate[:size]:
+                            overlap = size
+                            break
+                    return candidate[overlap:]
 
                 deadline = time.monotonic() + _setting_int(
                     "RUNPOD_STREAM_TIMEOUT", 165, 30, 240
