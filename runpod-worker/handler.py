@@ -1,4 +1,5 @@
 import os
+import json
 import subprocess
 import time
 
@@ -56,17 +57,47 @@ def handler(job):
             value = supplied_options.get(name)
             if type(value) in (int, float) and 0 <= value <= 1:
                 options[name] = float(value)
+    # RunPod detects generator handlers and publishes each yield to /stream.
+    # Keep one-yield compatibility for non-streaming /runsync clients.
+    streaming = payload.get("stream") is True
     try:
-        response = requests.post(
+        if not streaming:
+            response = requests.post(
+                HOST + "/api/chat",
+                json={"model": MODEL, "messages": messages, "stream": False, "options": options},
+                timeout=240,
+            )
+            response.raise_for_status()
+            yield {"response": response.json().get("message", {}).get("content", "")}
+            return
+
+        with requests.post(
             HOST + "/api/chat",
-            json={"model": MODEL, "messages": messages, "stream": False, "options": options},
-            timeout=240,
-        )
-        response.raise_for_status()
-        result = response.json()
-        return {"response": result.get("message", {}).get("content", "")}
-    except requests.RequestException as exc:
-        return {"error": "Ollama request failed: " + str(exc)}
+            json={"model": MODEL, "messages": messages, "stream": True, "options": options},
+            stream=True, timeout=(10, 150),
+        ) as response:
+            response.raise_for_status()
+            # Batch tokens into short phrases to reduce RunPod stream traffic
+            # while providing text much earlier than a full-generation reply.
+            pending = ""
+            for line in response.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                item = json.loads(line)
+                pending += item.get("message", {}).get("content", "")
+                if pending and (
+                    len(pending) >= 65
+                    or (len(pending) >= 12 and pending.rstrip().endswith((".", "!", "?", "\\n")))
+                    or item.get("done")
+                ):
+                    yield {"delta": pending}
+                    pending = ""
+                if item.get("done"):
+                    break
+            if pending:
+                yield {"delta": pending}
+    except (requests.RequestException, ValueError) as exc:
+        yield {"error": "Ollama generation failed: " + str(exc)}
 
 
 initialize()
