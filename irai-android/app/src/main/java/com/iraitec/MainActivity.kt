@@ -2834,9 +2834,7 @@ class MainActivity : Activity() {
             Toast.makeText(this, text.trim(), Toast.LENGTH_SHORT).show()
             return
         }
-        val spoken = text.trim().replace(
-            Regex("(?i)\bI\.?R\.?A\.?I\b|\bIrai\b"), "eye ray"
-        )
+        val spoken = text.trim().replace("Irai", "eye ray", ignoreCase = true)
         val queueMode = if (speechPieces == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
         speechPieces++
         IraiAvatarOverlay.setStatus("Speaking...")
