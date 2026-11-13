@@ -112,6 +112,11 @@ class MainActivity : Activity() {
 
     private var speechTts: TextToSpeech? = null
     private var ttsReady = false
+    private var streamActive = false
+    private var streamFinished = false
+    private var speechPieces = 0
+    private var speechSequence = 0
+    private var speechRemainder = ""
     private var originalTtsVoice: android.speech.tts.Voice? = null
     private var tutorialSteps = listOf<String>()
     private var tutorialIndex = 0
@@ -275,14 +280,20 @@ class MainActivity : Activity() {
                     speechTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                         override fun onStart(utteranceId: String?) {}
                         override fun onDone(utteranceId: String?) {
-                            if (utteranceId == "irai_response") runOnUiThread {
+                            if (utteranceId?.startsWith("irai_stream_") == true) runOnUiThread {
+                                 streamSpeechPieceDone()
+                             }
+                             if (utteranceId == "irai_response") runOnUiThread {
                                 if (notesMode && loggedIn && !awaitingCommand) startVoiceCommand()
                                 else if (!notesMode) restartListeningAfterDelay()
                             }
                         }
                         @Deprecated("Deprecated in Java")
                         override fun onError(utteranceId: String?) {
-                            if (utteranceId == "irai_response") runOnUiThread {
+                            if (utteranceId?.startsWith("irai_stream_") == true) runOnUiThread {
+                                 streamSpeechPieceDone()
+                             }
+                             if (utteranceId == "irai_response") runOnUiThread {
                                 if (notesMode && loggedIn && !awaitingCommand) handler.postDelayed({ startVoiceCommand() }, 800)
                                 else if (!notesMode) restartListeningAfterDelay()
                             }
@@ -2808,88 +2819,166 @@ class MainActivity : Activity() {
             }
             .show()
     }
-    private fun sendMessageToIrai(message: String, onReply: ((String) -> Unit)? = null) {
-    val historySnapshot = aiConversationHistory.toList()
-    latestDiagnostic = "Irai is thinking..."
-    IraiAvatarOverlay.setStatus("Thinking...")
-    refreshDiagnostic()
-
-    thread {
-        var reply = ""
-        var requestSucceeded = false
-
-        try {
-            val connection = openApiConnection("/api/ai/chat")
-            connection.requestMethod = "POST"
-            connection.connectTimeout = 15000
-            connection.readTimeout = 100000
-            connection.doOutput = true
-            connection.setRequestProperty(
-                "Content-Type",
-                "application/json; charset=UTF-8"
-            )
-
-            val historyJson = JSONArray()
-            historySnapshot.takeLast(10).forEach { historyJson.put(it) }
-            val payload = JSONObject()
-                .put("message", message)
-                .put("history", historyJson)
-                .toString()
-
-            connection.outputStream.use { output ->
-                output.write(payload.toByteArray(Charsets.UTF_8))
-            }
-
-            saveSessionCookie(connection)
-
-            val status = connection.responseCode
-            val responseStream = if (status in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream
-            }
-
-            val responseText = responseStream?.bufferedReader()?.use {
-                it.readText()
-            } ?: ""
-
-            val json = JSONObject(responseText)
-
-            reply = if (status in 200..299) {
-                requestSucceeded = true
-                json.optString("response", "I received an empty response.")
-            } else {
-                json.optString(
-                    "message",
-                    "Sorry, I couldn't reach my AI service."
-                )
-            }
-
-            connection.disconnect()
-
-        } catch (e: Exception) {
-            reply = "I couldn't connect to my AI service. Please try again."
-            android.util.Log.e(
-                "IRAI_AI",
-                "AI request failed",
-                e
-            )
+    private fun streamSpeechPieceDone() {
+        if (!streamActive) return
+        speechPieces = (speechPieces - 1).coerceAtLeast(0)
+        if (streamFinished && speechPieces == 0) {
+            streamActive = false
+            restartListeningAfterDelay()
         }
+    }
 
-        runOnUiThread {
-            if (requestSucceeded) {
-                aiConversationHistory.add(JSONObject().put("role", "user").put("content", message))
-                aiConversationHistory.add(JSONObject().put("role", "assistant").put("content", reply.take(3500)))
-                while (aiConversationHistory.size > 10) aiConversationHistory.removeAt(0)
-                var totalChars = aiConversationHistory.sumOf { it.optString("content").length }
-                while (aiConversationHistory.isNotEmpty() && totalChars > 7_500) {
-                    totalChars -= aiConversationHistory.removeAt(0).optString("content").length
+    private fun speakStreamText(text: String) {
+        if (text.isBlank()) return
+        if (!ttsReady) {
+            Toast.makeText(this, text.trim(), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val spoken = text.trim().replace(
+            Regex("(?i)\bI\.?R\.?A\.?I\b|\bIrai\b"), "eye ray"
+        )
+        val queueMode = if (speechPieces == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+        speechPieces++
+        IraiAvatarOverlay.setStatus("Speaking...")
+        if (speechTts?.speak(spoken, queueMode, null, "irai_stream_" + (++speechSequence)) != TextToSpeech.SUCCESS) {
+            streamSpeechPieceDone()
+        }
+    }
+
+    private fun receiveStreamText(chunk: String, complete: Boolean = false) {
+        speechRemainder += chunk
+        while (speechRemainder.isNotEmpty()) {
+            val mark = speechRemainder.indexOfFirst { it == '.' || it == '!' || it == '?' || it == '\n' }
+            val end = when {
+                mark >= 0 && mark < 190 -> mark + 1
+                speechRemainder.length >= 140 -> {
+                    val blank = speechRemainder.lastIndexOf(' ', 140)
+                    if (blank > 40) blank + 1 else 140
+                }
+                complete -> speechRemainder.length
+                else -> break
+            }
+            speakStreamText(speechRemainder.substring(0, end))
+            speechRemainder = speechRemainder.substring(end)
+        }
+        if (complete) {
+            streamFinished = true
+            if (speechPieces == 0) {
+                streamActive = false
+                restartListeningAfterDelay()
+            }
+        }
+    }
+
+    private fun sendMessageToIrai(message: String, onReply: ((String) -> Unit)? = null) {
+        val historySnapshot = aiConversationHistory.toList()
+        if (onReply == null) {
+            streamActive = true
+            streamFinished = false
+            speechPieces = 0
+            speechRemainder = ""
+        }
+        latestDiagnostic = "Contacting Irai's AI server..."
+        IraiAvatarOverlay.setStatus("Thinking...")
+        refreshDiagnostic()
+        handler.removeCallbacks(restartListeningRunnable)
+
+        thread {
+            val text = StringBuilder()
+            var errorMessage: String? = null
+            var completed = false
+            var gotChunks = false
+            var connection: HttpURLConnection? = null
+            try {
+                connection = openApiConnection("/api/ai/chat")
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 20000
+                connection.readTimeout = 180000
+                connection.doOutput = true
+                connection.setRequestProperty("Accept", "text/event-stream")
+                connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                val history = JSONArray()
+                historySnapshot.takeLast(10).forEach { history.put(it) }
+                val payload = JSONObject()
+                    .put("message", message)
+                    .put("history", history)
+                    .put("stream", true)
+                    .toString()
+                connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+                saveSessionCookie(connection)
+
+                val httpCode = connection.responseCode
+                if (httpCode !in 200..299) {
+                    val body = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    errorMessage = try {
+                        JSONObject(body).optString("message", "AI error (HTTP " + httpCode + ").")
+                    } catch (_: Exception) {
+                        "AI error (HTTP " + httpCode + ")."
+                    }
+                } else if (connection.contentType?.startsWith("text/event-stream") == true) {
+                    connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                        while (true) {
+                            val line = reader.readLine() ?: break
+                            if (!line.startsWith("data: ")) continue
+                            val event = JSONObject(line.substring(6))
+                            if (event.has("delta")) {
+                                val chunk = event.optString("delta")
+                                if (chunk.isNotEmpty()) {
+                                    gotChunks = true
+                                    text.append(chunk)
+                                    if (onReply == null) runOnUiThread {
+                                        latestDiagnostic = "Irai is answering..."
+                                        refreshDiagnostic()
+                                        receiveStreamText(chunk)
+                                    }
+                                }
+                            } else if (event.optBoolean("done", false)) {
+                                completed = true
+                                break
+                            } else if (event.has("error")) {
+                                errorMessage = event.optString("error")
+                                break
+                            }
+                        }
+                    }
+                } else {
+                    text.append(JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                        .optString("response"))
+                    completed = text.isNotEmpty()
+                }
+            } catch (e: Exception) {
+                errorMessage = "I couldn't connect to my AI service. Please try again."
+                android.util.Log.e("IRAI_AI", "Streaming request failed", e)
+            } finally {
+                connection?.disconnect()
+            }
+            val reply = text.toString().trim()
+            runOnUiThread {
+                if (completed && reply.isNotEmpty()) {
+                    aiConversationHistory.add(JSONObject().put("role", "user").put("content", message))
+                    aiConversationHistory.add(JSONObject().put("role", "assistant").put("content", reply.take(3500)))
+                    while (aiConversationHistory.size > 10) aiConversationHistory.removeAt(0)
+                    var count = aiConversationHistory.sumOf { it.optString("content").length }
+                    while (aiConversationHistory.isNotEmpty() && count > 7500) {
+                        count -= aiConversationHistory.removeAt(0).optString("content").length
+                    }
+                }
+                if (onReply != null) {
+                    onReply.invoke(if (completed && reply.isNotEmpty()) reply
+                        else errorMessage ?: "The AI returned an empty response.")
+                } else if (reply.isNotEmpty()) {
+                    receiveStreamText(if (gotChunks) "" else reply, complete = true)
+                    if (!completed && errorMessage != null) {
+                        Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
+                    }
+                } else {
+                    streamActive = false
+                    speakResponse(errorMessage ?: "I didn't receive an AI response.")
                 }
             }
-            if (onReply != null) onReply.invoke(reply) else speakResponse(reply)
         }
     }
-    }
+
     private fun ensureStickyNotePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Toast.makeText(this, "Allow Irai Tec to display over other apps so your Notes sticky note can stay visible.", Toast.LENGTH_LONG).show()
