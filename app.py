@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import stripe
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, Response, stream_with_context
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -1397,6 +1397,137 @@ def ai_chat():
                 if not entries:
                     del _ai_request_times[key]
 
+    # Stream incremental text to Android as Server-Sent Events. Authorization,
+    # account allowances and per-user rate limits above apply equally here.
+    if data.get("stream") is True:
+        runpod_key = os.environ.get("RUNPOD_API_KEY", "").strip()
+        endpoint_id = os.environ.get("RUNPOD_ENDPOINT_ID", "").strip()
+        if not (runpod_key and endpoint_id and endpoint_id.isalnum()):
+            return jsonify(message="Streaming AI endpoint is not configured."), 503
+        if not _ai_inflight.acquire(blocking=False):
+            return jsonify(message="Irai is busy right now. Try again shortly."), 503
+
+        endpoint_url = "https://api.runpod.ai/v2/" + endpoint_id
+        auth_headers = {"Authorization": "Bearer " + runpod_key}
+        request_body = json.dumps({
+            "input": {
+                "messages": messages,
+                "stream": True,
+                "options": {"temperature": 0.25, "top_p": 0.85},
+            }
+        }).encode("utf-8")
+
+        def event(payload):
+            return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+
+        def stream_events():
+            job_id = None
+            finished = False
+            chunks_seen = set()
+            accumulated = []
+            try:
+                # Send response headers promptly, even for a cold GPU.
+                yield event({"status": "connecting"})
+                job_request = Request(
+                    endpoint_url + "/run", data=request_body,
+                    headers={**auth_headers, "Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(job_request, timeout=20) as outgoing:
+                    started = json.load(outgoing)
+                job_id = started.get("id")
+                if not isinstance(job_id, str) or not job_id:
+                    yield event({"error": "RunPod did not accept the AI job."})
+                    return
+
+                def collect_chunks(result):
+                    # /stream returns an array. Ignore duplicates if its API
+                    # repeats previously returned chunks across polls.
+                    items = result if isinstance(result, list) else [result]
+                    new_chunks = []
+                    for item in items:
+                        if not isinstance(item, dict):
+                            continue
+                        output = item.get("output", item)
+                        if isinstance(output, dict):
+                            if output.get("error"):
+                                raise ValueError("Worker reported generation failure")
+                            chunk = output.get("delta")
+                            if not isinstance(chunk, str) or not chunk:
+                                chunk = output.get("response")
+                            if not isinstance(chunk, str) or not chunk:
+                                continue
+                            metrics = item.get("metrics")
+                            index = metrics.get("stream_index") if isinstance(metrics, dict) else None
+                            key = ("index", index) if index is not None else (
+                                "item", json.dumps(item, sort_keys=True)
+                            )
+                            if key not in chunks_seen:
+                                chunks_seen.add(key)
+                                new_chunks.append(chunk)
+                    return new_chunks
+
+                deadline = time.monotonic() + _setting_int(
+                    "RUNPOD_STREAM_TIMEOUT", 165, 30, 240
+                )
+                while time.monotonic() < deadline:
+                    stream_request = Request(
+                        endpoint_url + "/stream/" + job_id,
+                        headers=auth_headers, method="GET",
+                    )
+                    with urlopen(stream_request, timeout=12) as result_response:
+                        stream_data = json.load(result_response)
+                    for chunk in collect_chunks(stream_data):
+                        accumulated.append(chunk)
+                        yield event({"delta": chunk})
+                    status_request = Request(
+                        endpoint_url + "/status/" + job_id,
+                        headers=auth_headers, method="GET",
+                    )
+                    with urlopen(status_request, timeout=12) as status_response:
+                        job_status = json.load(status_response)
+                    state = job_status.get("status")
+                    if state == "COMPLETED":
+                        # Fetch the final accumulated output in case the last
+                        # streamed chunk was not visible in our final poll.
+                        for chunk in collect_chunks(job_status.get("output", [])):
+                            accumulated.append(chunk)
+                            yield event({"delta": chunk})
+                        if not accumulated:
+                            yield event({"error": "AI generated no text."})
+                        else:
+                            finished = True
+                            yield event({"done": True})
+                        return
+                    if state in ("FAILED", "CANCELLED", "TIMED_OUT"):
+                        yield event({"error": "AI generation failed. Please retry."})
+                        return
+                    time.sleep(0.4)
+                yield event({"error": "AI generation timed out. Please retry."})
+            except (HTTPError, URLError, TimeoutError, OSError, ValueError, TypeError):
+                app.logger.exception("RunPod streamed AI request failed")
+                yield event({"error": "I couldn't reach my AI service. Please try again."})
+            finally:
+                if job_id and not finished:
+                    try:
+                        cancel_request = Request(
+                            endpoint_url + "/cancel/" + job_id,
+                            headers=auth_headers, method="POST",
+                        )
+                        with urlopen(cancel_request, timeout=5):
+                            pass
+                    except Exception:
+                        app.logger.warning("Could not cancel unfinished AI job")
+                _ai_inflight.release()
+
+        response = Response(
+            stream_with_context(stream_events()),
+            content_type="text/event-stream; charset=utf-8",
+        )
+        response.headers["Cache-Control"] = "no-cache, no-transform"
+        response.headers["X-Accel-Buffering"] = "no"
+        return response
+
     # RunPod Serverless takes precedence when configured. Keep the existing
     # Cloudflare/Ollama route as a fallback for deployments without RunPod.
     runpod_key = os.environ.get("RUNPOD_API_KEY", "").strip()
@@ -1454,7 +1585,13 @@ def ai_chat():
             app.logger.warning("RunPod job status: %s", result.get("status"))
             return jsonify(message="Irai is starting up. Please try again shortly."), 503
         output = result.get("output")
-        answer = output.get("response") if isinstance(output, dict) else None
+        if isinstance(output, list):
+            answer = "".join(
+                item.get("response", item.get("delta", ""))
+                for item in output if isinstance(item, dict)
+            )
+        else:
+            answer = output.get("response") if isinstance(output, dict) else None
         if not isinstance(answer, str) or not answer.strip():
             app.logger.error("RunPod returned empty output")
             return jsonify(message="AI returned an invalid response."), 502
