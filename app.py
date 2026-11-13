@@ -1457,13 +1457,13 @@ def ai_chat():
                                 chunk = output.get("response")
                             if not isinstance(chunk, str) or not chunk:
                                 continue
-                            metrics = item.get("metrics")
-                            index = metrics.get("stream_index") if isinstance(metrics, dict) else None
-                            key = ("index", index) if index is not None else (
-                                "item", json.dumps(item, sort_keys=True)
-                            )
-                            if key not in chunks_seen:
-                                chunks_seen.add(key)
+                            # /status often omits /stream's metrics. Dedupe
+                            # on the output text rather than the wrapper so
+                            # the final response never replays spoken chunks.
+                            # Identical separate chunks are rare with 65-char
+                            # batching, but this is deliberately conservative.
+                            if chunk not in chunks_seen:
+                                chunks_seen.add(chunk)
                                 new_chunks.append(chunk)
                     return new_chunks
 
