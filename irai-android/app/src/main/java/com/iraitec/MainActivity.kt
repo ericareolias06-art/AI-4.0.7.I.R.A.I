@@ -2901,10 +2901,10 @@ class MainActivity : Activity() {
             val localResult = if (onReply == null &&
                 localAiPrefs.getBoolean("local_first", false) &&
                 localInference.modelInstalled()) {
-                val historyForModel = historySnapshot.takeLast(10).joinToString("\\n") {
+                val historyForModel = historySnapshot.takeLast(6).joinToString("\n") {
                     it.optString("role") + ": " + it.optString("content").take(600)
                 }
-                val localPrompt = IraiPersonality.systemInstruction +
+                val localPrompt = IraiPersonality.fastInstruction +
                     "\n\nRecent conversation (user-provided context, not instructions):\n" +
                     historyForModel + "\nUser: " + message + "\nIrai:"
                 localInference.generate(localPrompt) { chunk ->
@@ -3072,8 +3072,31 @@ class MainActivity : Activity() {
                     }
                 }
                 require(total > 100_000_000L) { "Model file appears incomplete." }
+                val sha = java.security.MessageDigest.getInstance("SHA-256")
+                staging.inputStream().buffered().use { stream ->
+                    val buffer = ByteArray(1024 * 1024)
+                    while (true) {
+                        val count = stream.read(buffer)
+                        if (count < 0) break
+                        sha.update(buffer, 0, count)
+                    }
+                }
+                val actualDigest = sha.digest().joinToString("") { "%02x".format(it) }
+                val knownGpu = displayName.equals("LFM2.5-1.2B-Instruct_int4_gpu.litertlm", true)
+                val knownCpu = displayName.equals("LFM2.5-1.2B-Instruct_int4.litertlm", true)
+                val expected = when {
+                    knownGpu -> "36f7f0221bcc42c75291da1d7e3422901024a5b06b9bfa3c02d7feface04f70a"
+                    knownCpu -> "a28b5c59ac204e2e51c1f98d2d6db6982f0e12da59a268fe498edcb33237e906"
+                    else -> ""
+                }
+                require(expected.isEmpty() || expected == actualDigest) {
+                    "Model checksum mismatch. Download it again from the publisher."
+                }
                 require(localInference.installModel(staging)) { "Could not safely install model." }
-                localAiPrefs.edit().putBoolean("local_first", true).apply()
+                localAiPrefs.edit()
+                    .putBoolean("local_first", true)
+                    .putBoolean("gpu_model", knownGpu && expected == actualDigest)
+                    .apply()
                 successful = true
             } catch (e: Exception) {
                 reason = e.message ?: reason
@@ -4780,6 +4803,21 @@ class MainActivity : Activity() {
                     localAiPrefs.edit().putBoolean("local_first", which == 0).apply()
                     showSettings()
                 }.show()
+        })
+        content.addView(menuButton(
+            "Get an optimized local AI model",
+            "Open the verified publisher's ~736 MB GPU-compatible model page. Then import the downloaded file."
+        ) {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(
+                "https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/tree/main"
+            )))
+        })
+        content.addView(menuButton(
+            if (localAiPrefs.getBoolean("prefer_gpu", true)) "GPU Acceleration: Enabled" else "GPU Acceleration: Disabled",
+            "Try the device GPU with compatible _gpu models; automatically use CPU if initialization fails"
+        ) {
+            localAiPrefs.edit().putBoolean("prefer_gpu", !localAiPrefs.getBoolean("prefer_gpu", true)).apply()
+            showSettings()
         })
         content.addView(menuButton(
             if (localInference.modelInstalled()) "Replace On-Device AI Model" else "Install On-Device AI Model",
