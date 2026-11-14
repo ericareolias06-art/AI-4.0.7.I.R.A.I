@@ -4326,11 +4326,11 @@ class MainActivity : Activity() {
     private fun showCallAssistantOptions() {
         val info = IraiCallCapabilities.detect(this)
         val message = buildString {
-            append("Device: ").append(info.device).append("\\n\\n")
+            append("Device: ").append(info.device).append("\n\n")
             append(if (info.hasCellularCalling) "Cellular calling detected. Calls use your existing carrier plan and number." else "No cellular calling capability detected.")
-            append("\\n\\nSpoken replies: ").append(info.nativeSpokenRepliesHint)
-            append("\\n\\nRTT: ").append(info.rttHint)
-            append("\\n\\nIrai cannot automatically read the other side of a cellular call or inject her own voice into call audio.")
+            append("\n\nSpoken replies: ").append(info.nativeSpokenRepliesHint)
+            append("\n\nRTT: ").append(info.rttHint)
+            append("\n\nIrai cannot automatically read the other side of a cellular call or inject her own voice into call audio.")
         }
         AlertDialog.Builder(this)
             .setTitle("Irai Call Assistant")
