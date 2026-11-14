@@ -3107,7 +3107,6 @@ class MainActivity : Activity() {
 
                 val expected = when {
                     knownGpu -> IraiModelDownloader.EXPECTED_SHA256
-                    knownCpu -> ""
                     else -> ""
                 }
                 require(expected.isEmpty() || expected == actualDigest) {
