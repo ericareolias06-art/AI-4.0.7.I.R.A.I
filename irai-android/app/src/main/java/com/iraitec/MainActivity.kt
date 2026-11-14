@@ -3493,9 +3493,9 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding((18 * density).toInt(), (15 * density).toInt(), (18 * density).toInt(), (15 * density).toInt())
             background = GradientDrawable().apply {
-                setColor(if (isBlueAppearance()) Color.rgb(232, 242, 250) else Color.rgb(255, 247, 237))
-                cornerRadius = 18 * density
-                setStroke((1 * density).toInt(), if (isBlueAppearance()) Color.rgb(83, 143, 190) else Color.rgb(239, 157, 137))
+                setColor(if (isBlueAppearance()) Color.rgb(20, 41, 66) else Color.rgb(255, 248, 252))
+                cornerRadius = (if (isBlueAppearance()) 10 else 23) * density
+                setStroke((1 * density).toInt(), if (isBlueAppearance()) Color.rgb(62, 130, 190) else Color.rgb(228, 148, 193))
             }
             isClickable = true
             isFocusable = true
@@ -3503,13 +3503,13 @@ class MainActivity : Activity() {
             addView(TextView(this@MainActivity).apply {
                 text = title
                 textSize = 17f
-                setTextColor(if (isBlueAppearance()) Color.rgb(20, 52, 83) else Color.rgb(88, 52, 47))
+                setTextColor(if (isBlueAppearance()) Color.rgb(233, 243, 255) else Color.rgb(106, 48, 90))
                 typeface = Typeface.DEFAULT_BOLD
             })
             addView(TextView(this@MainActivity).apply {
                 text = subtitle
                 textSize = 13f
-                setTextColor(if (isBlueAppearance()) Color.rgb(56, 91, 122) else Color.rgb(133, 86, 76))
+                setTextColor(if (isBlueAppearance()) Color.rgb(158, 194, 228) else Color.rgb(152, 90, 133))
                 setPadding(0, (4 * density).toInt(), 0, 0)
             })
             setOnClickListener { onClick() }
@@ -3533,7 +3533,7 @@ class MainActivity : Activity() {
         header.addView(Button(this).apply {
             text = "‹"
             textSize = 25f
-            setTextColor(if (lightBackground) Color.rgb(88, 52, 47) else white)
+            setTextColor(if (isBlueAppearance()) Color.rgb(225, 239, 255) else if (lightBackground) Color.rgb(106, 48, 90) else white)
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { onBack() }
         }, LinearLayout.LayoutParams((56 * resources.displayMetrics.density).toInt(), (60 * resources.displayMetrics.density).toInt()))
@@ -3541,7 +3541,7 @@ class MainActivity : Activity() {
             text = title
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(if (lightBackground) Color.rgb(88, 52, 47) else white)
+            setTextColor(if (isBlueAppearance()) Color.rgb(225, 239, 255) else if (lightBackground) Color.rgb(106, 48, 90) else white)
         })
         return header
     }
@@ -3930,29 +3930,29 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Choose your I.R.A.I style")
             .setMessage("Choose the look you'd like to start with. You can change this any time in Settings.")
-            .setNegativeButton("Sunrise colors") { _, _ -> applyAppearanceChoice(false) }
-            .setPositiveButton("Blue theme") { _, _ -> applyAppearanceChoice(true) }
+            .setNegativeButton("Rose Garden") { _, _ -> applyAppearanceChoice(false) }
+            .setPositiveButton("Midnight Steel") { _, _ -> applyAppearanceChoice(true) }
             .setNeutralButton("Choose later", null)
             .show()
     }
 
     private fun appearanceGradient(): GradientDrawable {
         val colors = if (isBlueAppearance()) {
-            intArrayOf(Color.rgb(13, 34, 62), Color.rgb(25, 66, 105), Color.rgb(37, 91, 132))
+            intArrayOf(Color.rgb(8, 16, 31), Color.rgb(14, 34, 60), Color.rgb(20, 57, 92))
         } else {
-            intArrayOf(Color.rgb(255, 231, 207), Color.rgb(250, 190, 174), Color.rgb(238, 151, 139))
+            intArrayOf(Color.rgb(255, 239, 245), Color.rgb(253, 213, 230), Color.rgb(230, 190, 234))
         }
         return GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, colors)
     }
 
     private fun applySunriseSystemBars() {
         if (isBlueAppearance()) {
-            window.statusBarColor = Color.rgb(13, 34, 62)
-            window.navigationBarColor = Color.rgb(37, 91, 132)
+            window.statusBarColor = Color.rgb(8, 16, 31)
+            window.navigationBarColor = Color.rgb(20, 57, 92)
             window.decorView.systemUiVisibility = 0
         } else {
-            window.statusBarColor = Color.rgb(255, 231, 207)
-            window.navigationBarColor = Color.rgb(238, 151, 139)
+            window.statusBarColor = Color.rgb(255, 239, 245)
+            window.navigationBarColor = Color.rgb(230, 190, 234)
             window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
                 (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR else 0)
         }
@@ -4005,7 +4005,7 @@ class MainActivity : Activity() {
                     text = "⚙"
                     textSize = 23f
                     contentDescription = "Settings"
-                    setTextColor(Color.rgb(79, 48, 45))
+                    setTextColor(if (isBlueAppearance()) Color.rgb(216, 234, 255) else Color.rgb(116, 62, 96))
                     setBackgroundColor(Color.TRANSPARENT)
                     setOnClickListener { showSettings() }
                 }, LinearLayout.LayoutParams((58 * resources.displayMetrics.density).toInt(), (52 * resources.displayMetrics.density).toInt()))
@@ -4018,9 +4018,9 @@ class MainActivity : Activity() {
                     setPadding(4, 18, 4, 18)
                 }
 
-                content.addView(label("☀", 66, if (isBlueAppearance()) Color.rgb(255, 215, 120) else Color.rgb(190, 91, 79)))
-                content.addView(label("Hello, I'm I.R.A.I.", 27, if (isBlueAppearance()) Color.WHITE else Color.rgb(79, 48, 45)))
-                content.addView(label("A little light in your day.", 15, if (isBlueAppearance()) Color.rgb(220, 235, 248) else Color.rgb(112, 70, 65)))
+                content.addView(label(if (isBlueAppearance()) "◆" else "✿", 66, if (isBlueAppearance()) Color.rgb(80, 177, 255) else Color.rgb(202, 92, 149)))
+                content.addView(label("Hello, I'm I.R.A.I.", 27, if (isBlueAppearance()) Color.WHITE else Color.rgb(101, 45, 84)))
+                content.addView(label(if (isBlueAppearance()) "READY WHEN YOU ARE" else "A little magic in your day.", 15, if (isBlueAppearance()) Color.rgb(181, 212, 245) else Color.rgb(148, 73, 122)))
                 content.addView(label(if (premium) "Premium is active" else "Your personal assistant", 13, if (isBlueAppearance()) Color.rgb(180, 220, 248) else Color.rgb(155, 74, 62)).apply {
                     setPadding(0, 8, 0, 20)
                 })
@@ -4055,18 +4055,18 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(17), dp(20), dp(17))
             background = GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                if (isBlueAppearance()) intArrayOf(Color.rgb(31, 83, 130), Color.rgb(39, 115, 157), Color.rgb(43, 139, 166))
-                else intArrayOf(Color.rgb(255, 214, 190), Color.rgb(250, 174, 174), Color.rgb(239, 157, 178))
+                if (isBlueAppearance()) intArrayOf(Color.rgb(13, 45, 79), Color.rgb(18, 79, 130), Color.rgb(23, 109, 164))
+                else intArrayOf(Color.rgb(255, 221, 237), Color.rgb(247, 177, 212), Color.rgb(220, 143, 196))
             ).apply {
-                cornerRadius = dp(24).toFloat()
-                setStroke(dp(2), Color.rgb(255, 239, 220))
+                cornerRadius = dp(if (isBlueAppearance()) 12 else 27).toFloat()
+                setStroke(dp(2), if (isBlueAppearance()) Color.rgb(83, 165, 228) else Color.rgb(255, 245, 250))
             }
             elevation = 7 * density
             isClickable = true
             isFocusable = true
             contentDescription = "Features: Notes, Calculator, and Scan Forms"
             addView(TextView(this@MainActivity).apply {
-                text = "✿   FEATURES   ✿"
+                text = if (isBlueAppearance()) "◆   COMMAND CENTER   ◆" else "✿   MY LITTLE GARDEN   ✿"
                 textSize = 21f
                 typeface = Typeface.create("sans-serif", Typeface.BOLD)
                 letterSpacing = 0.08f
@@ -4074,13 +4074,13 @@ class MainActivity : Activity() {
                 setTextColor(if (isBlueAppearance()) Color.WHITE else Color.rgb(105, 53, 64))
             })
             addView(TextView(this@MainActivity).apply {
-                text = "🌷   🌼   🌸"
+                text = if (isBlueAppearance()) "▰   ◈   ▰" else "🌷   🌼   🌸"
                 textSize = 25f
                 gravity = Gravity.CENTER
                 setPadding(0, dp(5), 0, dp(4))
             })
             addView(TextView(this@MainActivity).apply {
-                text = "Your little garden of helpful tools"
+                text = if (isBlueAppearance()) "TOOLS  /  VOICE  /  CONTROL" else "Your little garden of helpful tools"
                 textSize = 13f
                 gravity = Gravity.CENTER
                 setTextColor(if (isBlueAppearance()) Color.rgb(224, 238, 250) else Color.rgb(112, 61, 68))
@@ -4281,8 +4281,8 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(4), dp(12), dp(4), dp(24))
         }
-        content.addView(label("✿  Your helpful little toolkit  ✿", 19, Color.rgb(105, 53, 64)))
-        content.addView(label("Choose what you'd like to do.", 14, Color.rgb(112, 70, 65)).apply {
+        content.addView(label(if (isBlueAppearance()) "◆  YOUR COMMAND CENTER  ◆" else "✿  Your helpful little garden  ✿", 19, if (isBlueAppearance()) Color.rgb(220, 236, 255) else Color.rgb(117, 51, 104)))
+        content.addView(label("Choose what you'd like to do.", 14, if (isBlueAppearance()) Color.rgb(172, 208, 240) else Color.rgb(148, 76, 123)).apply {
             setPadding(0, dp(3), 0, dp(17))
         })
         content.addView(menuButton("💬  Text Message Assistant", "Tell I.R.A.I what you want to say and let her draft a text") {
@@ -4816,7 +4816,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(4, 20, 4, 18)
         }
-        content.addView(label("Manage your I.R.A.I Tec experience.", 14, Color.rgb(112, 70, 65)).apply {
+        content.addView(label(if (isBlueAppearance()) "Configure your I.R.A.I control center." else "Make your I.R.A.I space your own.", 14, if (isBlueAppearance()) Color.rgb(175, 209, 243) else Color.rgb(146, 71, 118)).apply {
             gravity = Gravity.START
             setPadding(4, 0, 4, 18)
         })
@@ -4831,10 +4831,10 @@ class MainActivity : Activity() {
                 openOverlayPermissionSettings()
             }
         })
-        content.addView(menuButton(if (isBlueAppearance()) "Appearance: Blue Theme" else "Appearance: Sunrise Colors", "Choose the blue masculine look or the original sunrise colors") {
+        content.addView(menuButton(if (isBlueAppearance()) "Appearance: Midnight Steel" else "Appearance: Rose Garden", "Choose your preferred look at any time") {
             AlertDialog.Builder(this)
                 .setTitle("Choose appearance")
-                .setItems(arrayOf("Blue theme", "Sunrise colors")) { _, which -> applyAppearanceChoice(which == 0); showSettings() }
+                .setItems(arrayOf("Midnight Steel (blue)", "Rose Garden (pink)")) { _, which -> applyAppearanceChoice(which == 0); showSettings() }
                 .show()
         })
         content.addView(menuButton(
