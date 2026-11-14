@@ -10,3 +10,16 @@ __pycache__/
 /irai-android/.gradle/
 *.before_ai
 *.pre_ollama
+
+# Google Play release signing - NEVER commit these
+/irai-android/*.jks
+/irai-android/*.keystore
+/irai-android/keystore.properties
+/irai-android/upload-keystore*
+/irai-android/key.properties
+
+# Local downloads and temporary editor/backup files
+/irai-android/downloads/
+*.swp
+*.before-*
+IraiTec.apk
