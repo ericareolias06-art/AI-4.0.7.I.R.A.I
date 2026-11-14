@@ -57,3 +57,14 @@ Debug APK is from the successful run: https://github.com/ericareolias06-art/AI-4
 GitHub Actions successfully built the first debug APK, but a build does not validate model behavior or response latency. The app **does not contain any model weights** and cannot run local AI until the user installs a compatible model separately. It does **not** provide offline cloud features, account login, online facts, or guaranteed offline speech recognition. An Android phone test is required. Debug builds may use a different signing certificate than current installed Irai; backing up app data is essential before replacing an installation.
 
 The local personality prompt now mirrors the cloud identity, response tone and accuracy guidance. Cloud behavior remains unchanged. The existing history is in-memory recent history and is not a new long-term encrypted memory store. Never claim full memory persistence from this change.
+
+## Local-only policy (November 14, 2026)
+
+This branch intentionally supersedes earlier hybrid fallback descriptions in this README:
+- **All Android AI generation is local only** through `IraiLocalInference`; there is no `/api/ai/chat` invocation in `MainActivity.kt` and no user-facing cloud mode selector.
+- Missing local models show a one-time installation prompt after sign-in; conversations require the model. "Not now" defers installation, but cannot switch to cloud AI.
+- The install screen downloads a pinned 736 MB `_int4_gpu` model with SHA-256 verification, resumable transfer and user approval. GPU is attempted on supported phones, with CPU as an on-device fallback.
+- A local-only test in Settings verifies AI availability; unrelated account login, billing, online pages, and license services still use the network.
+- Hardware-dependent performance, native initialization, real model replies, TTS behavior, memory and the actual phone install remain unverified until device testing.
+- The Python backend `app.py` retains its AI endpoint for existing production/legacy clients, but this branch's Android app no longer calls it. Do not delete backend routes while older releases rely on them.
+- Do not ship the debug-signed APK as an in-place upgrade over a release-signed installation without a data migration/backup.
