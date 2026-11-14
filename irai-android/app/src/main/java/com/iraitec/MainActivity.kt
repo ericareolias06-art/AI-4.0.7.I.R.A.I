@@ -4040,14 +4040,14 @@ class MainActivity : Activity() {
                     text = "I.R.A.I TEC"
                     textSize = 20f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(if (isBlueAppearance()) Color.rgb(235, 245, 255) else Color.rgb(79, 48, 45))
+                    setTextColor(if (isDarkAppearance()) Color.rgb(235, 245, 255) else Color.rgb(79, 48, 45))
                     letterSpacing = 0.12f
                 }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 topBar.addView(Button(this).apply {
                     text = "⚙"
                     textSize = 23f
                     contentDescription = "Settings"
-                    setTextColor(if (isBlueAppearance()) Color.rgb(216, 234, 255) else Color.rgb(116, 62, 96))
+                    setTextColor(if (isDarkAppearance()) Color.rgb(216, 234, 255) else Color.rgb(116, 62, 96))
                     setBackgroundColor(Color.TRANSPARENT)
                     setOnClickListener { showSettings() }
                 }, LinearLayout.LayoutParams((58 * resources.displayMetrics.density).toInt(), (52 * resources.displayMetrics.density).toInt()))
@@ -4060,15 +4060,25 @@ class MainActivity : Activity() {
                     setPadding(4, 18, 4, 18)
                 }
 
-                content.addView(label(if (isBlueAppearance()) "◆" else "✿", 66, if (isBlueAppearance()) Color.rgb(80, 177, 255) else Color.rgb(202, 92, 149)))
-                content.addView(label("Hello, I'm I.R.A.I.", 27, if (isBlueAppearance()) Color.WHITE else Color.rgb(101, 45, 84)))
-                content.addView(label(if (isBlueAppearance()) "READY WHEN YOU ARE" else "A little magic in your day.", 15, if (isBlueAppearance()) Color.rgb(181, 212, 245) else Color.rgb(148, 73, 122)))
-                content.addView(label(if (premium) "Premium is active" else "Your personal assistant", 13, if (isBlueAppearance()) Color.rgb(180, 220, 248) else Color.rgb(155, 74, 62)).apply {
+                content.addView(label(when (currentTheme()) {
+                    IraiTheme.MIDNIGHT_STEEL -> "◆"
+                    IraiTheme.ROSE_GARDEN -> "✿"
+                    IraiTheme.COSMIC_VIOLET -> "🪐"
+                    IraiTheme.ARCTIC_TIDE -> "🌊"
+                }, 66, if (isDarkAppearance()) Color.rgb(140, 206, 255) else Color.rgb(202, 92, 149)))
+                content.addView(label("Hello, I'm I.R.A.I.", 27, if (isDarkAppearance()) Color.WHITE else Color.rgb(101, 45, 84)))
+                content.addView(label(when (currentTheme()) {
+                    IraiTheme.MIDNIGHT_STEEL -> "READY WHEN YOU ARE"
+                    IraiTheme.ROSE_GARDEN -> "A little magic in your day."
+                    IraiTheme.COSMIC_VIOLET -> "Your voice among the stars."
+                    IraiTheme.ARCTIC_TIDE -> "Calm waters, clear mind."
+                }, 15, if (isDarkAppearance()) Color.rgb(200, 220, 250) else Color.rgb(148, 73, 122)))
+                content.addView(label(if (premium) "Premium is active" else "Your personal assistant", 13, if (isDarkAppearance()) Color.rgb(180, 220, 248) else Color.rgb(155, 74, 62)).apply {
                     setPadding(0, 8, 0, 20)
                 })
 
                 content.addView(featuresEntryButton())
-                diagnosticText = label("", 12, if (isBlueAppearance())
+                diagnosticText = label("", 12, if (isDarkAppearance())
                     Color.rgb(215, 232, 245) else Color.rgb(105, 53, 64)).apply {
                     gravity = Gravity.CENTER
                     setPadding(dp(8), dp(14), dp(8), dp(6))
@@ -4097,35 +4107,54 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(17), dp(20), dp(17))
             background = GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                if (isBlueAppearance()) intArrayOf(Color.rgb(13, 45, 79), Color.rgb(18, 79, 130), Color.rgb(23, 109, 164))
-                else intArrayOf(Color.rgb(255, 221, 237), Color.rgb(247, 177, 212), Color.rgb(220, 143, 196))
+                when (currentTheme()) {
+                    IraiTheme.MIDNIGHT_STEEL -> intArrayOf(Color.rgb(13, 45, 79), Color.rgb(18, 79, 130), Color.rgb(23, 109, 164))
+                    IraiTheme.ROSE_GARDEN -> intArrayOf(Color.rgb(255, 221, 237), Color.rgb(247, 177, 212), Color.rgb(220, 143, 196))
+                    IraiTheme.COSMIC_VIOLET -> intArrayOf(Color.rgb(39, 20, 81), Color.rgb(97, 35, 131), Color.rgb(137, 44, 94))
+                    IraiTheme.ARCTIC_TIDE -> intArrayOf(Color.rgb(3, 68, 94), Color.rgb(5, 113, 146), Color.rgb(13, 156, 163))
+                }
             ).apply {
                 cornerRadius = dp(if (isBlueAppearance()) 12 else 27).toFloat()
-                setStroke(dp(2), if (isBlueAppearance()) Color.rgb(83, 165, 228) else Color.rgb(255, 245, 250))
+                setStroke(dp(2), if (isDarkAppearance()) Color.rgb(98, 181, 237) else Color.rgb(255, 245, 250))
             }
             elevation = 7 * density
             isClickable = true
             isFocusable = true
             contentDescription = "Features: Notes, Calculator, and Scan Forms"
             addView(TextView(this@MainActivity).apply {
-                text = if (isBlueAppearance()) "◆   COMMAND CENTER   ◆" else "✿   MY LITTLE GARDEN   ✿"
+                text = when (currentTheme()) {
+                    IraiTheme.MIDNIGHT_STEEL -> "◆   COMMAND CENTER   ◆"
+                    IraiTheme.ROSE_GARDEN -> "✿   MY LITTLE GARDEN   ✿"
+                    IraiTheme.COSMIC_VIOLET -> "✦   STELLAR HUB   ✦"
+                    IraiTheme.ARCTIC_TIDE -> "❄   TIDAL HUB   ❄"
+                }
                 textSize = 21f
                 typeface = Typeface.create("sans-serif", Typeface.BOLD)
                 letterSpacing = 0.08f
                 gravity = Gravity.CENTER
-                setTextColor(if (isBlueAppearance()) Color.WHITE else Color.rgb(105, 53, 64))
+                setTextColor(if (isDarkAppearance()) Color.WHITE else Color.rgb(105, 53, 64))
             })
             addView(TextView(this@MainActivity).apply {
-                text = if (isBlueAppearance()) "▰   ◈   ▰" else "🌷   🌼   🌸"
+                text = when (currentTheme()) {
+                    IraiTheme.MIDNIGHT_STEEL -> "▰   ◈   ▰"
+                    IraiTheme.ROSE_GARDEN -> "🌷   🌼   🌸"
+                    IraiTheme.COSMIC_VIOLET -> "🪐   ✧   🌙"
+                    IraiTheme.ARCTIC_TIDE -> "🐚   🌊   ❄"
+                }
                 textSize = 25f
                 gravity = Gravity.CENTER
                 setPadding(0, dp(5), 0, dp(4))
             })
             addView(TextView(this@MainActivity).apply {
-                text = if (isBlueAppearance()) "TOOLS  /  VOICE  /  CONTROL" else "Your little garden of helpful tools"
+                text = when (currentTheme()) {
+                    IraiTheme.MIDNIGHT_STEEL -> "TOOLS  /  VOICE  /  CONTROL"
+                    IraiTheme.ROSE_GARDEN -> "Your little garden of helpful tools"
+                    IraiTheme.COSMIC_VIOLET -> "Explore your universe of possibilities"
+                    IraiTheme.ARCTIC_TIDE -> "Flow through your tools with ease"
+                }
                 textSize = 13f
                 gravity = Gravity.CENTER
-                setTextColor(if (isBlueAppearance()) Color.rgb(224, 238, 250) else Color.rgb(112, 61, 68))
+                setTextColor(if (isDarkAppearance()) Color.rgb(224, 238, 250) else Color.rgb(112, 61, 68))
             })
             setOnClickListener { openFeaturesForFirstTimeIfNeeded() }
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
@@ -4323,8 +4352,13 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(4), dp(12), dp(4), dp(24))
         }
-        content.addView(label(if (isBlueAppearance()) "◆  YOUR COMMAND CENTER  ◆" else "✿  Your helpful little garden  ✿", 19, if (isBlueAppearance()) Color.rgb(220, 236, 255) else Color.rgb(117, 51, 104)))
-        content.addView(label("Choose what you'd like to do.", 14, if (isBlueAppearance()) Color.rgb(172, 208, 240) else Color.rgb(148, 76, 123)).apply {
+        content.addView(label(when (currentTheme()) {
+            IraiTheme.MIDNIGHT_STEEL -> "◆  YOUR COMMAND CENTER  ◆"
+            IraiTheme.ROSE_GARDEN -> "✿  Your helpful little garden  ✿"
+            IraiTheme.COSMIC_VIOLET -> "✦  THE STELLAR HUB  ✦"
+            IraiTheme.ARCTIC_TIDE -> "🌊  THE TIDAL HUB  🌊"
+        }, 19, if (isDarkAppearance()) Color.rgb(220, 236, 255) else Color.rgb(117, 51, 104)))
+        content.addView(label("Choose what you'd like to do.", 14, if (isDarkAppearance()) Color.rgb(172, 208, 240) else Color.rgb(148, 76, 123)).apply {
             setPadding(0, dp(3), 0, dp(17))
         })
         content.addView(menuButton("💬  Text Message Assistant", "Tell I.R.A.I what you want to say and let her draft a text") {
@@ -4858,7 +4892,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(4, 20, 4, 18)
         }
-        content.addView(label(if (isBlueAppearance()) "Configure your I.R.A.I control center." else "Make your I.R.A.I space your own.", 14, if (isBlueAppearance()) Color.rgb(175, 209, 243) else Color.rgb(146, 71, 118)).apply {
+        content.addView(label(if (isBlueAppearance()) "Configure your I.R.A.I control center." else "Make your I.R.A.I space your own.", 14, if (isDarkAppearance()) Color.rgb(175, 209, 243) else Color.rgb(146, 71, 118)).apply {
             gravity = Gravity.START
             setPadding(4, 0, 4, 18)
         })
