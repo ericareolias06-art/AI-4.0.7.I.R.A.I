@@ -38,8 +38,9 @@ class IraiModelDownloader(private val context: Context, private val local: IraiL
         val partial = File(context.filesDir, "irai-model-download.part")
         try {
             val free = StatFs(context.filesDir.absolutePath).availableBytes
-            if (free < APPROX_BYTES + 240_000_000L && !partial.exists()) {
-                return Result(false, "Free at least 1 GB of phone storage and retry.")
+            val remainingEstimate = (APPROX_BYTES - partial.length()).coerceAtLeast(0L)
+            if (free < remainingEstimate + 150_000_000L) {
+                return Result(false, "Free more phone storage and retry. About 1 GB total is recommended.")
             }
             var offset = if (partial.exists()) partial.length() else 0L
             if (offset > MAX_BYTES) {
@@ -58,7 +59,13 @@ class IraiModelDownloader(private val context: Context, private val local: IraiL
                 if (status !in 200..299) {
                     return Result(false, "Model download server returned HTTP $status. Check internet and retry.")
                 }
-                val resumed = status == HttpURLConnection.HTTP_PARTIAL && offset > 0L
+                val rangeStart = connection.getHeaderField("Content-Range")
+                    ?.substringAfter("bytes ")?.substringBefore('-')?.toLongOrNull()
+                val resumed = status == HttpURLConnection.HTTP_PARTIAL &&
+                    offset > 0L && rangeStart == offset
+                if (status == HttpURLConnection.HTTP_PARTIAL && !resumed) {
+                    return Result(false, "The model server sent an invalid resume range. Retry.")
+                }
                 if (offset > 0L && !resumed) {
                     partial.delete()
                     offset = 0L
