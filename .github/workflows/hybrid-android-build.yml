@@ -1,0 +1,40 @@
+name: Irai Android hybrid build
+
+on:
+  pull_request:
+    paths:
+      - 'irai-android/**'
+      - '.github/workflows/hybrid-android-build.yml'
+  workflow_dispatch:
+
+jobs:
+  debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android SDK 36
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Build debug APK
+        working-directory: irai-android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon assembleDebug
+      - name: Upload test APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: IraiTec-hybrid-debug
+          path: irai-android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
