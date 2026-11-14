@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
@@ -44,8 +45,21 @@ class IraiListeningService : Service() {
     private var retryCount = 0
     private val retryRunnable = Runnable { startListeningIfNeeded() }
 
+    private fun isCallUsingMicrophone(): Boolean {
+        val mode = (getSystemService(Context.AUDIO_SERVICE) as AudioManager).mode
+        return mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION
+    }
+
     private fun startListeningIfNeeded() {
         if (destroyed || waitingForCommand || running.get()) return
+        // Ordinary applications are muted during phone/VoIP calls on Android.
+        // Avoid consuming a silent audio stream, then retry after the call.
+        if (isCallUsingMicrophone()) {
+            updateNotification("Paused during call; will resume afterward")
+            mainHandler.removeCallbacks(retryRunnable)
+            mainHandler.postDelayed(retryRunnable, 3_000L)
+            return
+        }
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED) {
             reportStatus("ERROR: Microphone permission is not granted")
@@ -60,6 +74,12 @@ class IraiListeningService : Service() {
 
     private fun retryListening() {
         if (destroyed || waitingForCommand) return
+        if (isCallUsingMicrophone()) {
+            updateNotification("Paused during call; will resume afterward")
+            mainHandler.removeCallbacks(retryRunnable)
+            mainHandler.postDelayed(retryRunnable, 3_000L)
+            return
+        }
         val delayMs = minOf(30_000L, 2_000L shl minOf(retryCount++, 4))
         updateNotification("Reconnecting microphone…")
         reportStatus("Microphone interrupted; retrying wake-word listening")
@@ -169,6 +189,10 @@ class IraiListeningService : Service() {
             var totalSamples = 0L
 
             while (running.get()) {
+                if (isCallUsingMicrophone()) {
+                    reportStatus("CALL_ACTIVE: Pausing wake-word detection until call ends")
+                    break
+                }
                 val count = localRecorder.read(
                     shorts,
                     0,
