@@ -95,6 +95,8 @@ class MainActivity : Activity() {
     private var stickyWindowParams: WindowManager.LayoutParams? = null
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private val localInference by lazy { IraiLocalInference(this) }
+    private val recentChatMemory by lazy { IraiRecentMemory(this) }
+    private var loadedHistoryAccount: String? = null
     private val localAiPrefs by lazy { getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE) }
     private val localModelPickerCode = 2417
     private var latestDiagnostic = "Waiting for listening service..."
@@ -2996,6 +2998,8 @@ class MainActivity : Activity() {
                     while (aiConversationHistory.isNotEmpty() && count > 7500) {
                         count -= aiConversationHistory.removeAt(0).optString("content").length
                     }
+                    try { recentChatMemory.save(currentEmail, aiConversationHistory) }
+                    catch (error: Exception) { android.util.Log.w("IRAI_MEMORY", "Could not store encrypted chat", error) }
                 }
                 if (onReply != null) {
                     onReply.invoke(if (completed && reply.isNotEmpty()) reply
@@ -3937,6 +3941,12 @@ class MainActivity : Activity() {
     }
 
     private fun showHome(email: String) {
+        if (loadedHistoryAccount != email && email.isNotBlank()) {
+            aiConversationHistory.clear()
+            try { aiConversationHistory.addAll(recentChatMemory.load(email)) }
+            catch (_: Exception) { /* Continue without stored history */ }
+            loadedHistoryAccount = email
+        }
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         applySunriseSystemBars()
         thread {
@@ -4823,6 +4833,20 @@ class MainActivity : Activity() {
             if (localInference.modelInstalled()) "Replace On-Device AI Model" else "Install On-Device AI Model",
             "Choose a compatible .litertlm file downloaded to your phone. Large models may be slow."
         ) { chooseLocalModel() })
+        content.addView(menuButton(
+            "Clear Irai's Recent Chat Memory",
+            "Delete your saved recent conversations on this phone only."
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("Clear saved conversations?")
+                .setMessage("This deletes the recent conversation history stored on this device for the signed-in account.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Clear") { _, _ ->
+                    try { recentChatMemory.clear(currentEmail) } catch (_: Exception) {}
+                    aiConversationHistory.clear()
+                    Toast.makeText(this, "Recent chat memory cleared.", Toast.LENGTH_SHORT).show()
+                }.show()
+        })
         content.addView(menuButton("Choose Home Background Photo", "Select a photo from your phone for the I.R.A.I home screen") { chooseHomeBackground() })
         content.addView(menuButton("Remove Home Background Photo", "Restore the original sunrise background") { clearHomeBackground() })
         content.addView(menuButton("Personal Vault", "Encrypted personal details and saved account passwords stored only on this phone") {
@@ -5402,6 +5426,9 @@ class MainActivity : Activity() {
                     runOnUiThread {
                         Toast.makeText(this, responseMessage, Toast.LENGTH_LONG).show()
                         if (success) {
+                            try { recentChatMemory.clear(currentEmail) } catch (_: Exception) {}
+                            aiConversationHistory.clear()
+                            loadedHistoryAccount = null
                             loggedIn = false
                             awaitingCommand = false
                             listeningForCommand = false
@@ -5425,6 +5452,7 @@ class MainActivity : Activity() {
         awaitingCommand = false
         listeningForCommand = false
         aiConversationHistory.clear()
+        loadedHistoryAccount = null
         guidedSessionPackage = null
         guidedSessionStep = 0
         formFillPackage = null
