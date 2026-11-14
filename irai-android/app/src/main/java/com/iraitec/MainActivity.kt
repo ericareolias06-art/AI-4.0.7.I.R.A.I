@@ -4933,7 +4933,16 @@ class MainActivity : Activity() {
             if (localInference.modelInstalled()) "Irai's AI Brain" else "Set Up Irai's AI Brain",
             if (localInference.modelInstalled()) "Ready for conversations on this device"
             else "Download the AI needed for conversations"
-        ) { showRequiredModelSetup() })
+        ) {
+            if (localInference.modelInstalled()) {
+                AlertDialog.Builder(this)
+                    .setTitle("Irai's AI Brain")
+                    .setMessage("Irai's on-device AI is ready. Conversations stay on this phone.")
+                    .setNegativeButton("Close", null)
+                    .setPositiveButton("Replace AI Model") { _, _ -> chooseLocalModel() }
+                    .show()
+            } else showRequiredModelSetup()
+        })
         content.addView(menuButton("Screen Brightness", "Let Irai adjust brightness by voice") {
             if (IraiBrightnessControl.canControl(this)) {
                 Toast.makeText(this, "Try: Irai, set brightness to 50 percent.", Toast.LENGTH_LONG).show()
