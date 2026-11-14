@@ -34,15 +34,22 @@ jobs:
             echo "Cloud AI endpoint was referenced in Android source" >&2
             exit 1
           fi
-      - name: Build debug APK
+      - name: Build debug APK and AAB
         working-directory: irai-android
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon assembleDebug
+          ./gradlew --no-daemon assembleDebug bundleDebug
       - name: Upload test APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: IraiTec-hybrid-debug
           path: irai-android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+      - name: Upload test AAB
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: IraiTec-debug-AAB
+          path: irai-android/app/build/outputs/bundle/debug/*.aab
           retention-days: 7
