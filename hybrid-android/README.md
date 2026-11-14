@@ -43,3 +43,11 @@ Debug APK: `irai-android/app/build/outputs/apk/debug/app-debug.apk` after a **su
 For production, deploy this behind a feature flag, measure cold start, tokens per second, time to first token, memory peaks, crashes, fallback rates, and RunPod costs.
 
 Reference: https://developers.google.com/edge/litert-lm/android
+
+## Candidate model for LiteRT-LM 0.16.1
+
+The current Android build uses LiteRT-LM **0.16.1**, because Android Gradle Plugin 9.0.1 embeds a Kotlin 2.2 compiler. Recent LiteRT-LM 0.18/0.19 releases require newer Kotlin metadata, and their latest Qwen3 model exports are **not** appropriate for this runtime.
+
+For manual testing, the publisher reports LiteRT-LM 0.16.1 Android compatibility for [LFM2.5-1.2B-Instruct](https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct). Consider the CPU-compatible `LFM2.5-1.2B-Instruct_int4.litertlm` (about 736 MB) and review its **LFM Open License v1.0** before distribution. This is a candidate, not a tested recommendation for Irai's specific phone. It may run poorly on 4 GB RAM devices. Download the model file on the phone, then import via Irai Settings.
+
+Debug APK is from the successful run: https://github.com/ericareolias06-art/AI-4.0.7.I.R.A.I/actions/runs/43614379414 (Artifacts > IraiTec-hybrid-debug). Because debug APK signing may differ from existing installs, test on a spare device or back up data before replacing an installed version.
