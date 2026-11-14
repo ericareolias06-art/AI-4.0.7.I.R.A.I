@@ -2002,6 +2002,11 @@ class MainActivity : Activity() {
             return
         }
 
+        if (IraiBrightnessControl.isCommand(text)) {
+            speakResponse(IraiBrightnessControl.execute(this, text))
+            return
+        }
+
         if (text == "call" || text == "make a call" || text == "phone someone" || text.startsWith("call ")) {
             startCallFlow(text.removePrefix("call ").trim())
             return
@@ -3493,9 +3498,19 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding((18 * density).toInt(), (15 * density).toInt(), (18 * density).toInt(), (15 * density).toInt())
             background = GradientDrawable().apply {
-                setColor(if (isBlueAppearance()) Color.rgb(20, 41, 66) else Color.rgb(255, 248, 252))
+                setColor(when (currentTheme()) {
+                    IraiTheme.MIDNIGHT_STEEL -> Color.rgb(20, 41, 66)
+                    IraiTheme.ROSE_GARDEN -> Color.rgb(255, 248, 252)
+                    IraiTheme.COSMIC_VIOLET -> Color.rgb(39, 21, 76)
+                    IraiTheme.ARCTIC_TIDE -> Color.rgb(8, 55, 76)
+                })
                 cornerRadius = (if (isBlueAppearance()) 10 else 23) * density
-                setStroke((1 * density).toInt(), if (isBlueAppearance()) Color.rgb(62, 130, 190) else Color.rgb(228, 148, 193))
+                setStroke((1 * density).toInt(), when (currentTheme()) {
+                    IraiTheme.COSMIC_VIOLET -> Color.rgb(171, 91, 224)
+                    IraiTheme.ARCTIC_TIDE -> Color.rgb(68, 203, 222)
+                    IraiTheme.MIDNIGHT_STEEL -> Color.rgb(62, 130, 190)
+                    IraiTheme.ROSE_GARDEN -> Color.rgb(228, 148, 193)
+                })
             }
             isClickable = true
             isFocusable = true
@@ -3503,13 +3518,13 @@ class MainActivity : Activity() {
             addView(TextView(this@MainActivity).apply {
                 text = title
                 textSize = 17f
-                setTextColor(if (isBlueAppearance()) Color.rgb(233, 243, 255) else Color.rgb(106, 48, 90))
+                setTextColor(if (isDarkAppearance()) Color.rgb(233, 243, 255) else Color.rgb(106, 48, 90))
                 typeface = Typeface.DEFAULT_BOLD
             })
             addView(TextView(this@MainActivity).apply {
                 text = subtitle
                 textSize = 13f
-                setTextColor(if (isBlueAppearance()) Color.rgb(158, 194, 228) else Color.rgb(152, 90, 133))
+                setTextColor(if (isDarkAppearance()) Color.rgb(170, 204, 234) else Color.rgb(152, 90, 133))
                 setPadding(0, (4 * density).toInt(), 0, 0)
             })
             setOnClickListener { onClick() }
@@ -3533,7 +3548,7 @@ class MainActivity : Activity() {
         header.addView(Button(this).apply {
             text = "‹"
             textSize = 25f
-            setTextColor(if (isBlueAppearance()) Color.rgb(225, 239, 255) else if (lightBackground) Color.rgb(106, 48, 90) else white)
+            setTextColor(if (isDarkAppearance()) Color.rgb(225, 239, 255) else if (lightBackground) Color.rgb(106, 48, 90) else white)
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { onBack() }
         }, LinearLayout.LayoutParams((56 * resources.displayMetrics.density).toInt(), (60 * resources.displayMetrics.density).toInt()))
@@ -3541,7 +3556,7 @@ class MainActivity : Activity() {
             text = title
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(if (isBlueAppearance()) Color.rgb(225, 239, 255) else if (lightBackground) Color.rgb(106, 48, 90) else white)
+            setTextColor(if (isDarkAppearance()) Color.rgb(225, 239, 255) else if (lightBackground) Color.rgb(106, 48, 90) else white)
         })
         return header
     }
@@ -4015,7 +4030,7 @@ class MainActivity : Activity() {
                 root.gravity = Gravity.TOP
                 // Give the home header a little more breathing room from the top edge.
                 root.setPadding(20, 28, 20, 18)
-                root.background = homeBackground(appearanceGradient())
+                root.background = homeBackground(themeBackground())
 
                 val topBar = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -4300,7 +4315,7 @@ class MainActivity : Activity() {
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.TOP
         root.setPadding(dp(20), dp(28), dp(20), dp(18))
-        root.background = appearanceGradient()
+        root.background = themeBackground()
         root.addView(screenHeader("Features", true) { showHome(currentEmail) })
         val scroll = ScrollView(this).apply { isFillViewport = true }
         val content = LinearLayout(this).apply {
@@ -4830,7 +4845,7 @@ class MainActivity : Activity() {
         root.orientation = LinearLayout.VERTICAL
         root.gravity = Gravity.TOP
         root.setPadding(20, 28, 20, 20)
-        root.background = appearanceGradient()
+        root.background = themeBackground()
         // Keep the Settings title visible while allowing every option below it
         // (including Privacy Policy and Log Out) to scroll on shorter screens.
         root.addView(screenHeader("Settings", true) { showHome(currentEmail) })
@@ -4858,11 +4873,28 @@ class MainActivity : Activity() {
                 openOverlayPermissionSettings()
             }
         })
-        content.addView(menuButton(if (isBlueAppearance()) "Appearance: Midnight Steel" else "Appearance: Rose Garden", "Choose your preferred look at any time") {
+        content.addView(menuButton("Appearance: " + themeName(), "Midnight Steel, Rose Garden, Cosmic Violet, Arctic Tide") {
             AlertDialog.Builder(this)
                 .setTitle("Choose appearance")
-                .setItems(arrayOf("Midnight Steel (blue)", "Rose Garden (pink)")) { _, which -> applyAppearanceChoice(which == 0); showSettings() }
+                .setItems(arrayOf("Midnight Steel", "Rose Garden", "Cosmic Violet", "Arctic Tide")) { _, which ->
+                    applyAppearanceChoice(IraiTheme.entries[which])
+                    showSettings()
+                }
                 .show()
+        })
+        content.addView(menuButton("Screen Brightness", "Let Irai change brightness by voice, including exact percentages") {
+            if (IraiBrightnessControl.canControl(this)) {
+                Toast.makeText(this, "Try saying: Irai, set brightness to 50 percent.", Toast.LENGTH_LONG).show()
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("Allow brightness control?")
+                    .setMessage("Irai needs Modify system settings permission to change your phone brightness. You can turn it off in Android settings anytime.")
+                    .setNegativeButton("Not now", null)
+                    .setPositiveButton("Open permission settings") { _, _ ->
+                        IraiBrightnessControl.requestPermission(this)
+                    }
+                    .show()
+            }
         })
         content.addView(menuButton(
             "Review App Permissions",
