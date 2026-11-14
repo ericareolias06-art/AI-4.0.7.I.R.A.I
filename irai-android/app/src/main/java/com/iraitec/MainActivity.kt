@@ -4288,8 +4288,8 @@ class MainActivity : Activity() {
         content.addView(menuButton("💬  Text Message Assistant", "Tell I.R.A.I what you want to say and let her draft a text") {
             startTextMessageFlow()
         })
-        content.addView(menuButton("📞  Phone Call Assistant", "Call a contact or phone number after you confirm") {
-            startCallFlow("")
+        content.addView(menuButton("📞  Phone Call Assistant", "Call using your existing number or check free call-assistance features") {
+            showCallAssistantOptions()
         })
         content.addView(menuButton("✉️  Email Assistant", "Transcribe an email, review the subject and message, then send using your email app") {
             startEmailFlow()
@@ -4321,6 +4321,28 @@ class MainActivity : Activity() {
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
+    }
+
+    private fun showCallAssistantOptions() {
+        val info = IraiCallCapabilities.detect(this)
+        val message = buildString {
+            append("Device: ").append(info.device).append("\\n\\n")
+            append(if (info.hasCellularCalling) "Cellular calling detected. Calls use your existing carrier plan and number." else "No cellular calling capability detected.")
+            append("\\n\\nSpoken replies: ").append(info.nativeSpokenRepliesHint)
+            append("\\n\\nRTT: ").append(info.rttHint)
+            append("\\n\\nIrai cannot automatically read the other side of a cellular call or inject her own voice into call audio.")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Irai Call Assistant")
+            .setMessage(message)
+            .setPositiveButton("Call a number") { _, _ -> startCallFlow("") }
+            .setNeutralButton("Copy call guidance") { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Irai call guidance", message))
+                Toast.makeText(this, "Call guidance copied.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     private fun showCalculator() {
