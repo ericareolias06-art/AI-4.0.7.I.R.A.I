@@ -28,6 +28,12 @@ jobs:
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses > /dev/null || true
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Enforce local-only Android AI
+        run: |
+          if grep -R --include='*.kt' -n '/api/ai/chat' irai-android/app/src/main/java; then
+            echo "Cloud AI endpoint was referenced in Android source" >&2
+            exit 1
+          fi
       - name: Build debug APK
         working-directory: irai-android
         run: |
