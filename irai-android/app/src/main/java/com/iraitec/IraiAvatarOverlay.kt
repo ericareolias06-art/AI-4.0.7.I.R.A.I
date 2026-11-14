@@ -32,6 +32,7 @@ object IraiAvatarOverlay {
     private var idleAnimation: AnimatorSet? = null
     private var speakingAnimation: AnimatorSet? = null
     private var reactionAnimation: AnimatorSet? = null
+    private var welcomeWave: IraiWelcomeWave? = null
     private var currentMood = ""
     private var reducedMotion = false
     private var avatarLayoutParams: WindowManager.LayoutParams? = null
@@ -188,16 +189,40 @@ object IraiAvatarOverlay {
         }
         statusLabel?.post {
             statusLabel?.text = value
-            if (mood == currentMood) return@post
+            if (mood == currentMood && welcomeWave == null) return@post
             currentMood = mood
+            if (welcomeWave != null) return@post
+            switchToMood(mood)
+        }
+    }
+
+    /** Trigger on the wake word, not on ordinary app startup. */
+    fun playWakeWave() {
+        val view = avatarImage ?: return
+        view.post {
+            if (reducedMotion || welcomeWave != null || avatarImage !== view) return@post
+            val context = appContext ?: return@post
+            val gif = IraiWelcomeWave.loaded(context) {
+                if (avatarImage === view) {
+                    welcomeWave = null
+                    view.setImageResource(R.drawable.irai_avatar)
+                    switchToMood(currentMood.ifBlank { "idle" })
+                }
+            } ?: return@post
             stopAllAnimations()
-            if (reducedMotion) return@post
-            when (mood) {
-                "speaking" -> startSpeakingAnimation()
-                "listening" -> startListeningAnimation()
-                "thinking" -> startThinkingAnimation()
-                else -> startIdleAnimation()
-            }
+            welcomeWave = gif
+            view.setImageDrawable(gif)
+        }
+    }
+
+    private fun switchToMood(mood: String) {
+        stopAllAnimations()
+        if (reducedMotion) return
+        when (mood) {
+            "speaking" -> startSpeakingAnimation()
+            "listening" -> startListeningAnimation()
+            "thinking" -> startThinkingAnimation()
+            else -> startIdleAnimation()
         }
     }
 
@@ -348,6 +373,8 @@ object IraiAvatarOverlay {
     }
 
     private fun removeAvatar() {
+        welcomeWave?.stop()
+        welcomeWave = null
         stopAllAnimations()
         currentMood = ""
         avatarImage = null
