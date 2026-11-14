@@ -31,6 +31,32 @@ class IraiLocalInference(context: Context) {
     private var engine: Engine? = null
     private var initializedModelSize = -1L
 
+    /** Serialize model replacement with inference so active native readers finish. */
+    fun installModel(staging: File): Boolean {
+        val task = executor.submit<Boolean> {
+            val backup = File(appContext.filesDir, "irai-local.litertlm.backup")
+            if (!staging.isFile || staging.length() <= 100_000_000L) return@submit false
+            try {
+                engine?.close()
+                engine = null
+                initializedModelSize = -1L
+                backup.delete()
+                if (modelFile.exists() && !modelFile.renameTo(backup)) return@submit false
+                if (!staging.renameTo(modelFile)) {
+                    if (backup.exists()) backup.renameTo(modelFile)
+                    return@submit false
+                }
+                backup.delete()
+                true
+            } catch (error: Exception) {
+                android.util.Log.e("IRAI_LOCAL", "Could not replace AI model", error)
+                if (!modelFile.exists() && backup.exists()) backup.renameTo(modelFile)
+                false
+            }
+        }
+        return try { task.get() } catch (_: Exception) { false }
+    }
+
     fun modelInstalled(): Boolean = modelFile.isFile && modelFile.length() > 100_000_000L
 
     fun generate(prompt: String, onText: (String) -> Unit): Result {
@@ -81,6 +107,7 @@ class IraiLocalInference(context: Context) {
     }
 
     fun closeAsync() {
+        if (executor.isShutdown) return
         executor.execute {
             try {
                 engine?.close()
