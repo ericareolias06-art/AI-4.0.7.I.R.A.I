@@ -99,6 +99,7 @@ class MainActivity : Activity() {
     private var loadedHistoryAccount: String? = null
     private val localAiPrefs by lazy { getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE) }
     private val localModelPickerCode = 2417
+    private val wakeWavePickerCode = 2418
     private val aiModelDownloader by lazy { IraiModelDownloader(this, localInference) }
     private var setupPromptVisible = false
     private var setupPromptOffered = false
@@ -210,6 +211,7 @@ class MainActivity : Activity() {
                     // A fresh wake word restores the companion after "go away".
                     avatarHiddenUntilWake = false
                     showAvatarOverlay()
+                    IraiAvatarOverlay.playWakeWave()
                     IraiAvatarOverlay.setStatus("Listening...")
                     startVoiceCommand()
                 }
@@ -1533,6 +1535,12 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == wakeWavePickerCode) {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                importWakeWave(data.data!!)
+            }
+            return
+        }
         if (requestCode == localModelPickerCode) {
             if (resultCode == RESULT_OK && data?.data != null) {
                 installLocalModel(data.data!!)
@@ -3030,6 +3038,64 @@ class MainActivity : Activity() {
                         .setNegativeButton("Close") { _, _ -> }
                         .show()
                 }
+            }
+        }
+    }
+
+    private fun importWakeWave(uri: Uri) {
+        thread {
+            val dest = IraiWelcomeWave.gifFile(this)
+            val temp = java.io.File(filesDir, "irai_welcome_wave.gif.part")
+            var ok = false
+            var error = "Could not import the waving animation."
+            try {
+                var length = 0L
+                contentResolver.openInputStream(uri).use { source ->
+                    requireNotNull(source) { "Could not open the selected file." }
+                    temp.outputStream().buffered().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val count = source.read(buffer)
+                            if (count < 0) break
+                            length += count
+                            require(length <= 8_000_000) { "GIF must be smaller than 8 MB." }
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                }
+                require(length > 1_000L) { "GIF appears incomplete." }
+                val magic = ByteArray(6)
+                temp.inputStream().use { input ->
+                    require(input.read(magic) == 6) { "Could not read GIF header." }
+                }
+                require(String(magic, Charsets.US_ASCII) in listOf("GIF87a", "GIF89a")) {
+                    "Please select an actual animated GIF."
+                }
+                require(android.graphics.Movie.decodeFile(temp.absolutePath) != null) {
+                    "This Android phone could not decode the GIF."
+                }
+                // Never remove the previous version until a new GIF has been validated.
+                val old = java.io.File(filesDir, "irai_welcome_wave.previous.gif")
+                old.delete()
+                if (dest.exists()) require(dest.renameTo(old)) { "Could not back up current wave." }
+                if (temp.renameTo(dest)) {
+                    old.delete()
+                    ok = true
+                } else {
+                    if (old.exists()) old.renameTo(dest)
+                    error = "Could not save animation."
+                }
+            } catch (failure: Exception) {
+                error = failure.message ?: error
+            } finally {
+                temp.delete()
+            }
+            runOnUiThread {
+                Toast.makeText(this,
+                    if (ok) "Wave installed! Say Irai to see her greet you." else error,
+                    Toast.LENGTH_LONG
+                ).show()
+                showSettings()
             }
         }
     }
@@ -4792,6 +4858,26 @@ class MainActivity : Activity() {
             } else {
                 openOverlayPermissionSettings()
             }
+        })
+        content.addView(menuButton(
+            if (IraiWelcomeWave.gifFile(this).isFile) "Welcome Wave: Installed" else "Install Welcome Wave GIF",
+            "Play Irai's exact waving animation at normal avatar size each time she hears her name."
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("Irai's Welcome Wave")
+                .setItems(arrayOf("Import waving GIF", "Preview on floating Irai")) { _, which ->
+                    if (which == 0) {
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "image/gif"
+                        }
+                        startActivityForResult(intent, wakeWavePickerCode)
+                    } else {
+                        showAvatarOverlay()
+                        IraiAvatarOverlay.playWakeWave()
+                    }
+                }
+                .show()
         })
         content.addView(menuButton(if (isBlueAppearance()) "Appearance: Blue Theme" else "Appearance: Sunrise Colors", "Choose the blue masculine look or the original sunrise colors") {
             AlertDialog.Builder(this)
