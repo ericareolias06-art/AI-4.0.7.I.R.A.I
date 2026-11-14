@@ -69,11 +69,19 @@ class IraiWelcomeWave(
 
         fun gifFile(context: Context) = File(context.filesDir, FILE_NAME)
 
+        /** Bundled asset is preferred: no user import or setup required. */
         fun loaded(context: Context, whenFinished: () -> Unit): IraiWelcomeWave? {
-            val file = gifFile(context)
-            if (!file.isFile || file.length() !in 1_000L..8_000_000L) return null
+            val bundled = try {
+                context.assets.open("irai_welcome_wave.gif").use { stream ->
+                    Movie.decodeStream(stream)
+                }
+            } catch (_: Exception) { null }
+            if (bundled != null) return IraiWelcomeWave(bundled, whenFinished)
+            // Compatibility with users who imported a GIF in an older build.
+            val legacy = gifFile(context)
+            if (!legacy.isFile || legacy.length() !in 1_000L..8_000_000L) return null
             return try {
-                Movie.decodeFile(file.absolutePath)?.let { IraiWelcomeWave(it, whenFinished) }
+                Movie.decodeFile(legacy.absolutePath)?.let { IraiWelcomeWave(it, whenFinished) }
             } catch (_: Exception) { null }
         }
     }
