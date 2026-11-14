@@ -68,3 +68,7 @@ This branch intentionally supersedes earlier hybrid fallback descriptions in thi
 - Hardware-dependent performance, native initialization, real model replies, TTS behavior, memory and the actual phone install remain unverified until device testing.
 - The Python backend `app.py` retains its AI endpoint for existing production/legacy clients, but this branch's Android app no longer calls it. Do not delete backend routes while older releases rely on them.
 - Do not ship the debug-signed APK as an in-place upgrade over a release-signed installation without a data migration/backup.
+
+## Mandatory greeting (2026-11-14)
+
+The welcome motion is now automatically triggered whenever the floating avatar is newly shown (including restoration from minimized), and never restarted on a wake word while already visible. There is no welcome-wave installation UI. The wave is rendered within the normal 132 dp x 198 dp avatar ImageView and returns to normal status animation at the end. The app first looks for a bundled `assets/irai_welcome_wave.gif`, then a legacy imported GIF, then plays a short built-in whole-avatar greeting motion. **The exact user-supplied GIF has not yet been committed to Android assets**, so fresh installs currently use the built-in greeting motion rather than the original video. To guarantee the exact custom artwork, commit `irai-android/app/src/main/assets/irai_welcome_wave.gif` before shipping. Hardware / real-device testing remains required.
