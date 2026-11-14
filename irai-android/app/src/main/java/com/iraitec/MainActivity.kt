@@ -4078,13 +4078,8 @@ class MainActivity : Activity() {
                 })
 
                 content.addView(featuresEntryButton())
-                diagnosticText = label("", 12, if (isDarkAppearance())
-                    Color.rgb(215, 232, 245) else Color.rgb(105, 53, 64)).apply {
-                    gravity = Gravity.CENTER
-                    setPadding(dp(8), dp(14), dp(8), dp(6))
-                }
-                content.addView(diagnosticText)
-                refreshDiagnostic()
+                // Preserve diagnostics internally, but don't expose developer logs
+                // or wake-word traces on the customer-facing home screen.
 
                 scroll.addView(content)
                 root.addView(scroll, LinearLayout.LayoutParams(
@@ -4880,8 +4875,8 @@ class MainActivity : Activity() {
         root.gravity = Gravity.TOP
         root.setPadding(20, 28, 20, 20)
         root.background = themeBackground()
-        // Keep the Settings title visible while allowing every option below it
-        // (including Privacy Policy and Log Out) to scroll on shorter screens.
+
+        // The header stays visible. Everyday settings are grouped in a scrollable list.
         root.addView(screenHeader("Settings", true) { showHome(currentEmail) })
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -4890,126 +4885,107 @@ class MainActivity : Activity() {
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(4, 20, 4, 18)
+            setPadding(4, 12, 4, 22)
         }
-        content.addView(label(if (isBlueAppearance()) "Configure your I.R.A.I control center." else "Make your I.R.A.I space your own.", 14, if (isDarkAppearance()) Color.rgb(175, 209, 243) else Color.rgb(146, 71, 118)).apply {
-            gravity = Gravity.START
-            setPadding(4, 0, 4, 18)
-        })
-        content.addView(menuButton(
-            if (IraiAvatarOverlay.hasPermission(this)) "Floating I.R.A.I: Enabled" else "Set Up Floating I.R.A.I",
-            "Follow the guided steps to let the avatar appear over other apps."
-        ) {
-            if (IraiAvatarOverlay.hasPermission(this)) {
-                showAvatarOverlay()
-                Toast.makeText(this, "Floating I.R.A.I is enabled.", Toast.LENGTH_SHORT).show()
-            } else {
-                openOverlayPermissionSettings()
-            }
-        })
-        content.addView(menuButton("Appearance: " + themeName(), "Midnight Steel, Rose Garden, Cosmic Violet, Arctic Tide") {
+        fun section(title: String) {
+            content.addView(label(title, 16,
+                if (isDarkAppearance()) Color.rgb(219, 231, 255)
+                else Color.rgb(112, 49, 93)).apply {
+                gravity = Gravity.START
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dp(6), dp(22), 0, dp(6))
+            })
+        }
+
+        section("Appearance")
+        content.addView(menuButton("App Theme", themeName()) {
             AlertDialog.Builder(this)
-                .setTitle("Choose appearance")
+                .setTitle("Choose your theme")
                 .setItems(arrayOf("Midnight Steel", "Rose Garden", "Cosmic Violet", "Arctic Tide")) { _, which ->
                     applyAppearanceChoice(IraiTheme.entries[which])
                     showSettings()
                 }
                 .show()
         })
-        content.addView(menuButton("Screen Brightness", "Let Irai change brightness by voice, including exact percentages") {
+        content.addView(menuButton("Home Background", "Choose a photo from your phone") {
+            chooseHomeBackground()
+        })
+        // Keep the remove option available only when a custom photo exists.
+        if (getSharedPreferences("irai_appearance", Context.MODE_PRIVATE)
+                .getString("home_background_uri", null) != null) {
+            content.addView(menuButton("Restore Theme Background", "Remove your custom home photo") {
+                clearHomeBackground()
+            })
+        }
+
+        section("Irai & Voice")
+        content.addView(menuButton(
+            if (IraiAvatarOverlay.hasPermission(this)) "Floating Irai" else "Enable Floating Irai",
+            if (IraiAvatarOverlay.hasPermission(this)) "Show Irai over your other apps"
+            else "Allow Irai to appear over other apps"
+        ) {
+            if (IraiAvatarOverlay.hasPermission(this)) {
+                showAvatarOverlay()
+                Toast.makeText(this, "Floating Irai is enabled.", Toast.LENGTH_SHORT).show()
+            } else openOverlayPermissionSettings()
+        })
+        content.addView(menuButton(
+            if (localInference.modelInstalled()) "Irai's AI Brain" else "Set Up Irai's AI Brain",
+            if (localInference.modelInstalled()) "Ready for conversations on this device"
+            else "Download the AI needed for conversations"
+        ) { showRequiredModelSetup() })
+        content.addView(menuButton("Screen Brightness", "Let Irai adjust brightness by voice") {
             if (IraiBrightnessControl.canControl(this)) {
-                Toast.makeText(this, "Try saying: Irai, set brightness to 50 percent.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Try: Irai, set brightness to 50 percent.", Toast.LENGTH_LONG).show()
             } else {
                 AlertDialog.Builder(this)
                     .setTitle("Allow brightness control?")
-                    .setMessage("Irai needs Modify system settings permission to change your phone brightness. You can turn it off in Android settings anytime.")
+                    .setMessage("Irai needs permission to modify system settings before she can adjust your screen brightness.")
                     .setNegativeButton("Not now", null)
-                    .setPositiveButton("Open permission settings") { _, _ ->
-                        IraiBrightnessControl.requestPermission(this)
-                    }
+                    .setPositiveButton("Open Settings") { _, _ -> IraiBrightnessControl.requestPermission(this) }
                     .show()
             }
         })
-        content.addView(menuButton(
-            "Review App Permissions",
-            "Set up microphone, notifications, floating Irai, screen reading, and contacts."
-        ) { startPermissionSetupWizard() })
-        content.addView(menuButton(
-            "Test On-Device AI",
-            "Generate a greeting on this phone without contacting cloud AI."
-        ) {
-            if (!localInference.modelInstalled()) {
-                showRequiredModelSetup()
-            } else {
-                Toast.makeText(this, "Testing Irai's local brain...", Toast.LENGTH_LONG).show()
-                sendMessageToIrai("Please reply with a short greeting for an offline AI test.") { reply ->
-                    AlertDialog.Builder(this)
-                        .setTitle("On-device AI test")
-                        .setMessage(reply)
-                        .setPositiveButton("OK", null)
-                        .show()
-                }
-            }
+
+        section("Privacy & Permissions")
+        content.addView(menuButton("App Permissions", "Microphone, notifications, screen access and contacts") {
+            startPermissionSetupWizard()
         })
         content.addView(menuButton(
-            if (localInference.modelInstalled()) "Irai's AI Brain: Installed" else "Install Irai's AI Brain",
-            "Install or repair the on-device AI. A model is required for local conversations."
-        ) { showRequiredModelSetup() })
-        content.addView(menuButton(
-            if (localAiPrefs.getBoolean("prefer_gpu", true)) "GPU Acceleration: Enabled" else "GPU Acceleration: Disabled",
-            "Try the device GPU with compatible _gpu models; automatically use CPU if initialization fails"
-        ) {
-            localAiPrefs.edit().putBoolean("prefer_gpu", !localAiPrefs.getBoolean("prefer_gpu", true)).apply()
-            showSettings()
-        })
-        content.addView(menuButton(
-            if (localInference.modelInstalled()) "Replace On-Device AI Model" else "Install On-Device AI Model",
-            "Choose a compatible .litertlm file downloaded to your phone. Large models may be slow."
-        ) { chooseLocalModel() })
-        content.addView(menuButton(
-            "Clear Irai's Recent Chat Memory",
-            "Delete your saved recent conversations on this phone only."
-        ) {
-            AlertDialog.Builder(this)
-                .setTitle("Clear saved conversations?")
-                .setMessage("This deletes the recent conversation history stored on this device for the signed-in account.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Clear") { _, _ ->
-                    try { recentChatMemory.clear(currentEmail) } catch (_: Exception) {}
-                    aiConversationHistory.clear()
-                    Toast.makeText(this, "Recent chat memory cleared.", Toast.LENGTH_SHORT).show()
-                }.show()
-        })
-        content.addView(menuButton("Choose Home Background Photo", "Select a photo from your phone for the I.R.A.I home screen") { chooseHomeBackground() })
-        content.addView(menuButton("Remove Home Background Photo", "Restore the original sunrise background") { clearHomeBackground() })
-        content.addView(menuButton("Personal Vault", "Encrypted personal details and saved account passwords stored only on this phone") {
+            if (isGuidedAssistanceReady()) "Guided Assistance" else "Set Up Guided Assistance",
+            "Help with visible screens and forms, only when you ask"
+        ) { requestGuidedAssistanceEnablement() })
+        content.addView(menuButton("Personal Vault", "Manage securely stored personal information") {
             showPersonalVault()
         })
-        content.addView(menuButton(
-            if (isGuidedAssistanceReady()) "Guided Assistance: Enabled" else "Enable Guided Assistance",
-            "Let Irai read visible screen text, tap controls, enter text, and navigate apps when you ask."
-        ) {
-            requestGuidedAssistanceEnablement()
+        content.addView(menuButton("Clear Conversation History", "Remove recent chats stored on this phone") {
+            AlertDialog.Builder(this)
+                .setTitle("Delete recent conversations?")
+                .setMessage("This permanently clears recent conversations stored on this device for your signed-in account.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete") { _, _ ->
+                    try { recentChatMemory.clear(currentEmail) } catch (_: Exception) {}
+                    aiConversationHistory.clear()
+                    Toast.makeText(this, "Recent conversations cleared.", Toast.LENGTH_SHORT).show()
+                }.show()
         })
-        content.addView(menuButton("Account Information", "Email address, phone number, and account deletion") {
+
+        section("Account")
+        content.addView(menuButton("Account Information", "Email, phone number and account deletion") {
             showAccountInfo()
         })
-        content.addView(menuButton("Billing & Payments", "Premium plan, payment methods, and subscription") {
+        content.addView(menuButton("Billing & Payments", "Premium plan and subscription") {
             showBilling()
         })
-        content.addView(menuButton("Privacy Policy", "Read how Irai Tec handles your information") {
+        content.addView(menuButton("Privacy Policy", "How Irai handles your information") {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://iraitec.dev/privacy.html")))
         })
         content.addView(menuButton("Log Out", "Sign out of this device") { logout() })
+
         scroll.addView(content)
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        )
+        root.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
     }
 
     private fun showAccountInfo() {
@@ -5359,15 +5335,9 @@ class MainActivity : Activity() {
     }
 
     private fun refreshDiagnostic() {
-        if (::diagnosticText.isInitialized) {
-            val heard = if (lastRecognizedPhrase.isBlank()) {
-                "Last heard: (waiting)"
-            } else {
-                "Last heard: $lastRecognizedPhrase"
-            }
-            diagnosticText.text =
-                "WAKE-WORD DIAGNOSTICS\n$heard\nStatus: $latestDiagnostic"
-        }
+        // Kept for internal logging and recovery calls. The home screen does
+        // not display microphone diagnostics or recognized speech text.
+        android.util.Log.d("IRAI_DIAGNOSTICS", latestDiagnostic)
     }
 
     private fun startCheckout(plan: String) {
