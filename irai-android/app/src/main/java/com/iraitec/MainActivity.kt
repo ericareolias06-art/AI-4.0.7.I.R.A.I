@@ -94,6 +94,9 @@ class MainActivity : Activity() {
     private var avatarHiddenUntilWake = false
     private var stickyWindowParams: WindowManager.LayoutParams? = null
     private val notesDb by lazy { IraiNotesDatabase(this) }
+    private val localInference by lazy { IraiLocalInference(this) }
+    private val localAiPrefs by lazy { getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE) }
+    private val localModelPickerCode = 2417
     private var latestDiagnostic = "Waiting for listening service..."
     private var lastRecognizedPhrase = ""
     private fun personalVault() = IraiPersonalVault(this, currentEmail)
@@ -1525,6 +1528,12 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == localModelPickerCode) {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                installLocalModel(data.data!!)
+            }
+            return
+        }
         if (requestCode == vaultUnlockRequestCode) {
             val accountName = pendingVaultAccount
             val field = pendingVaultPasswordField
@@ -2887,6 +2896,33 @@ class MainActivity : Activity() {
             var completed = false
             var gotChunks = false
             var connection: HttpURLConnection? = null
+            // Keep the current authenticated RunPod route untouched for fallback.
+            // Test/local inference happens off the main thread.
+            val localResult = if (onReply == null &&
+                localAiPrefs.getBoolean("local_first", false) &&
+                localInference.modelInstalled()) {
+                val historyForModel = historySnapshot.takeLast(10).joinToString("\\n") {
+                    it.optString("role") + ": " + it.optString("content").take(600)
+                }
+                val localPrompt = "You are Irai, a warm conversational assistant. " +
+                    "Never invent memories or facts. Be clear about uncertainty.\\n" +
+                    "Recent conversation:\\n" + historyForModel +
+                    "\\nUser: " + message + "\\nIrai:"
+                localInference.generate(localPrompt) { chunk ->
+                    gotChunks = true
+                    text.append(chunk)
+                    runOnUiThread {
+                        latestDiagnostic = "Irai is answering on this phone..."
+                        refreshDiagnostic()
+                        receiveStreamText(chunk)
+                    }
+                }
+            } else null
+            if (localResult?.completed == true) {
+                completed = true
+            } else if (localResult != null && localResult.output.isNotEmpty()) {
+                errorMessage = "The local AI stopped early. No cloud retry was made to avoid repeating speech."
+            } else {
             try {
                 connection = openApiConnection("/api/ai/chat")
                 connection.requestMethod = "POST"
@@ -2950,6 +2986,7 @@ class MainActivity : Activity() {
             } finally {
                 connection?.disconnect()
             }
+            }
             val reply = text.toString().trim()
             runOnUiThread {
                 if (completed && reply.isNotEmpty()) {
@@ -2973,6 +3010,85 @@ class MainActivity : Activity() {
                     streamActive = false
                     speakResponse(errorMessage ?: "I didn't receive an AI response.")
                 }
+            }
+        }
+    }
+
+    private fun chooseLocalModel() {
+        AlertDialog.Builder(this)
+            .setTitle("Install a local AI model")
+            .setMessage("Select a compatible .litertlm model downloaded on your phone. These can take hundreds of MB or more. Irai will still use the cloud if local AI is unavailable. Only install models from trusted sources.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Choose file") { _, _ ->
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                }
+                startActivityForResult(intent, localModelPickerCode)
+            }.show()
+    }
+
+    private fun installLocalModel(uri: Uri) {
+        thread {
+            val target = java.io.File(filesDir, "irai-local.litertlm")
+            val staging = java.io.File(filesDir, "irai-local.litertlm.part")
+            var successful = false
+            var reason = "The selected model could not be installed."
+            try {
+                val info = contentResolver.query(uri, arrayOf(
+                    android.provider.OpenableColumns.DISPLAY_NAME,
+                    android.provider.OpenableColumns.SIZE
+                ), null, null, null)
+                var displayName = ""
+                var declaredSize = -1L
+                info?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        displayName = cursor.getString(0).orEmpty()
+                        if (!cursor.isNull(1)) declaredSize = cursor.getLong(1)
+                    }
+                }
+                require(displayName.endsWith(".litertlm", ignoreCase = true)) {
+                    "Choose a .litertlm model file."
+                }
+                require(declaredSize != 0L && declaredSize <= 4_000_000_000L) {
+                    "Model file is too large for this installer."
+                }
+                val free = android.os.StatFs(filesDir.absolutePath).availableBytes
+                require(declaredSize < 0 || free > declaredSize + 150_000_000L) {
+                    "Not enough free phone storage for this model."
+                }
+                staging.delete()
+                var total = 0L
+                contentResolver.openInputStream(uri).use { input ->
+                    requireNotNull(input) { "Cannot open model file." }
+                    staging.outputStream().buffered().use { out ->
+                        val buffer = ByteArray(131072)
+                        while (true) {
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            total += n
+                            require(total <= 4_000_000_000L) { "Model too large." }
+                            out.write(buffer, 0, n)
+                        }
+                    }
+                }
+                require(total > 100_000_000L) { "Model file appears incomplete." }
+                require(!target.exists() || target.delete()) { "Cannot replace existing model." }
+                require(staging.renameTo(target)) { "Could not save model to app storage." }
+                localAiPrefs.edit().putBoolean("local_first", true).apply()
+                successful = true
+            } catch (e: Exception) {
+                reason = e.message ?: reason
+                staging.delete()
+            }
+            runOnUiThread {
+                Toast.makeText(
+                    this,
+                    if (successful) "Model installed. Irai will try local AI first."
+                    else reason,
+                    Toast.LENGTH_LONG
+                ).show()
+                showSettings()
             }
         }
     }
@@ -4656,6 +4772,21 @@ class MainActivity : Activity() {
                 }
                 .show()
         })
+        content.addView(menuButton(
+            if (localAiPrefs.getBoolean("local_first", false)) "AI Mode: Local First" else "AI Mode: Cloud Only",
+            "Use on-device AI when installed, or use RunPod"
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("Irai AI mode")
+                .setItems(arrayOf("Local first (cloud fallback)", "Cloud only")) { _, which ->
+                    localAiPrefs.edit().putBoolean("local_first", which == 0).apply()
+                    showSettings()
+                }.show()
+        })
+        content.addView(menuButton(
+            if (localInference.modelInstalled()) "Replace On-Device AI Model" else "Install On-Device AI Model",
+            "Choose a compatible .litertlm file downloaded to your phone. Large models may be slow."
+        ) { chooseLocalModel() })
         content.addView(menuButton("Choose Home Background Photo", "Select a photo from your phone for the I.R.A.I home screen") { chooseHomeBackground() })
         content.addView(menuButton("Remove Home Background Photo", "Restore the original sunrise background") { clearHomeBackground() })
         content.addView(menuButton("Personal Vault", "Encrypted personal details and saved account passwords stored only on this phone") {
@@ -5372,6 +5503,7 @@ class MainActivity : Activity() {
         speechTts?.stop()
         speechTts?.shutdown()
         speechTts = null
+        localInference.closeAsync()
 
         super.onDestroy()
     }
