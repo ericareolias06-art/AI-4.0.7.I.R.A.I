@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
@@ -33,6 +35,7 @@ object IraiAvatarOverlay {
     private var speakingAnimation: AnimatorSet? = null
     private var reactionAnimation: AnimatorSet? = null
     private var welcomeWave: IraiWelcomeWave? = null
+    private var fallbackGreeting: AnimatorSet? = null
     private var currentMood = ""
     private var reducedMotion = false
     private var avatarLayoutParams: WindowManager.LayoutParams? = null
@@ -194,7 +197,7 @@ object IraiAvatarOverlay {
             statusLabel?.text = value
             if (mood == currentMood && welcomeWave == null) return@post
             currentMood = mood
-            if (welcomeWave != null) return@post
+            if (welcomeWave != null || fallbackGreeting != null) return@post
             switchToMood(mood)
         }
     }
@@ -211,11 +214,39 @@ object IraiAvatarOverlay {
                     view.setImageResource(R.drawable.irai_avatar)
                     switchToMood(currentMood.ifBlank { "idle" })
                 }
-            } ?: return@post
+            }
             stopAllAnimations()
-            welcomeWave = gif
-            view.setImageDrawable(gif)
+            if (gif != null) {
+                welcomeWave = gif
+                view.setImageDrawable(gif)
+            } else {
+                startBuiltinGreeting(view)
+            }
         }
+    }
+
+    /** Always available when a bundled or previously imported GIF is absent. */
+    private fun startBuiltinGreeting(view: ImageView) {
+        fallbackGreeting?.cancel()
+        val wave = ObjectAnimator.ofFloat(
+            view, View.ROTATION, 0f, -5f, 4f, -5f, 4f, -3f, 0f
+        ).apply { duration = 1600L }
+        val bounce = ObjectAnimator.ofFloat(
+            view, View.TRANSLATION_Y, 0f, -dp(4).toFloat(), 0f
+        ).apply { duration = 1600L }
+        val animation = AnimatorSet().apply {
+            playTogether(wave, bounce)
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (fallbackGreeting === animation && avatarImage === view) {
+                        fallbackGreeting = null
+                        switchToMood(currentMood.ifBlank { "idle" })
+                    }
+                }
+            })
+        }
+        fallbackGreeting = animation
+        animation.start()
     }
 
     private fun switchToMood(mood: String) {
@@ -378,6 +409,8 @@ object IraiAvatarOverlay {
     private fun removeAvatar() {
         welcomeWave?.stop()
         welcomeWave = null
+        fallbackGreeting?.cancel()
+        fallbackGreeting = null
         stopAllAnimations()
         currentMood = ""
         avatarImage = null
