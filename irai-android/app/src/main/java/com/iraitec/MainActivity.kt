@@ -5554,6 +5554,14 @@ class MainActivity : Activity() {
         if (loggedIn && IraiAvatarOverlay.hasPermission(this) && !avatarHiddenUntilWake) {
             showAvatarOverlay()
         }
+        // Returning from other apps or unlocking must refresh the existing
+        // foreground microphone service. Don't compete with an active
+        // speech-to-text turn or permission setup.
+        if (loggedIn && !permissionSetupActive && !guidedAssistanceSettingsPending &&
+            !awaitingCommand && !listeningForCommand && !notesMode &&
+            !formFillInProgress) {
+            handler.post { startIraiListeningService() }
+        }
     }
 
     override fun onDestroy() {
