@@ -99,6 +99,9 @@ class MainActivity : Activity() {
     private var loadedHistoryAccount: String? = null
     private val localAiPrefs by lazy { getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE) }
     private val localModelPickerCode = 2417
+    private val aiModelDownloader by lazy { IraiModelDownloader(this, localInference) }
+    private var setupPromptVisible = false
+    private var setupPromptOffered = false
     private var latestDiagnostic = "Waiting for listening service..."
     private var lastRecognizedPhrase = ""
     private fun personalVault() = IraiPersonalVault(this, currentEmail)
@@ -2900,9 +2903,7 @@ class MainActivity : Activity() {
             var connection: HttpURLConnection? = null
             // Keep the current authenticated RunPod route untouched for fallback.
             // Test/local inference happens off the main thread.
-            val localResult = if (onReply == null &&
-                localAiPrefs.getBoolean("local_first", false) &&
-                localInference.modelInstalled()) {
+            val localResult = if (onReply == null && localInference.modelInstalled()) {
                 val historyForModel = historySnapshot.takeLast(6).joinToString("\n") {
                     it.optString("role") + ": " + it.optString("content").take(600)
                 }
@@ -3017,10 +3018,91 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * Required model setup. No "Cloud Instead" decision is offered.
+     * Leaving setup does not remove other app features; next launch retries.
+     */
+    private fun showRequiredModelSetup() {
+        if (!loggedIn || localInference.modelInstalled() || setupPromptVisible) return
+        setupPromptVisible = true
+        AlertDialog.Builder(this)
+            .setTitle("Install Irai's AI brain")
+            .setMessage(
+                "Irai needs an on-device AI model to answer locally. " +
+                "This is a one-time download of about 736 MB and uses about 1 GB of storage. " +
+                "Wi-Fi is recommended. Do you want to install it now?"
+            )
+            .setCancelable(false)
+            .setPositiveButton("Install now") { _, _ ->
+                setupPromptVisible = false
+                downloadRequiredModel()
+            }
+            .setNegativeButton("Not now") { _, _ ->
+                // No cloud-only preference is stored or offered.
+                setupPromptVisible = false
+                Toast.makeText(
+                    this, "Irai's local AI is not ready. Install her AI brain from Settings.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            .show()
+    }
+
+    private fun downloadRequiredModel() {
+        if (aiModelDownloader.running) {
+            Toast.makeText(this, "Model download is already active.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            isIndeterminate = false
+        }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val space = dp(18)
+            setPadding(space, space, space, space)
+            addView(TextView(this@MainActivity).apply {
+                text = "Downloading and verifying Irai's local brain. Keep the app open."
+                textSize = 15f
+            })
+            addView(bar)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Installing Irai's AI")
+            .setView(layout)
+            .setNegativeButton("Pause download") { _, _ ->
+                aiModelDownloader.cancel()
+            }
+            .setCancelable(false)
+            .create()
+        dialog.show()
+        thread {
+            val result = aiModelDownloader.download { progress ->
+                runOnUiThread { if (dialog.isShowing) bar.progress = progress }
+            }
+            runOnUiThread {
+                if (dialog.isShowing) dialog.dismiss()
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (result.success) {
+                    Toast.makeText(this, "Irai's AI brain installed!", Toast.LENGTH_LONG).show()
+                    showSettings()
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("Irai's model needs attention")
+                        .setMessage(result.detail + "\n\nYou can retry or import a trusted compatible model manually.")
+                        .setPositiveButton("Retry") { _, _ -> downloadRequiredModel() }
+                        .setNegativeButton("Close") { _, _ -> }
+                        .show()
+                }
+            }
+        }
+    }
+
     private fun chooseLocalModel() {
         AlertDialog.Builder(this)
             .setTitle("Install a local AI model")
-            .setMessage("Select a compatible .litertlm model downloaded on your phone. These can take hundreds of MB or more. Irai will still use the cloud if local AI is unavailable. Only install models from trusted sources.")
+            .setMessage("Import a trusted compatible .litertlm model stored on your phone. You can also use the automatic installer in Settings.")
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Choose file") { _, _ ->
                 val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -3087,10 +3169,10 @@ class MainActivity : Activity() {
                 }
                 val actualDigest = sha.digest().joinToString("") { "%02x".format(it) }
                 val knownGpu = displayName.equals("LFM2.5-1.2B-Instruct_int4_gpu.litertlm", true)
-                val knownCpu = displayName.equals("LFM2.5-1.2B-Instruct_int4.litertlm", true)
+
                 val expected = when {
-                    knownGpu -> "36f7f0221bcc42c75291da1d7e3422901024a5b06b9bfa3c02d7feface04f70a"
-                    knownCpu -> "a28b5c59ac204e2e51c1f98d2d6db6982f0e12da59a268fe498edcb33237e906"
+                    knownGpu -> IraiModelDownloader.EXPECTED_SHA256
+                    knownCpu -> ""
                     else -> ""
                 }
                 require(expected.isEmpty() || expected == actualDigest) {
@@ -4021,6 +4103,10 @@ class MainActivity : Activity() {
                     LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
                 ))
                 setContentView(root)
+                if (!localInference.modelInstalled() && !setupPromptOffered) {
+                    setupPromptOffered = true
+                    handler.post { showRequiredModelSetup() }
+                }
             }
         }
     }
@@ -4804,24 +4890,9 @@ class MainActivity : Activity() {
                 .show()
         })
         content.addView(menuButton(
-            if (localAiPrefs.getBoolean("local_first", false)) "AI Mode: Local First" else "AI Mode: Cloud Only",
-            "Use on-device AI when installed, or use RunPod"
-        ) {
-            AlertDialog.Builder(this)
-                .setTitle("Irai AI mode")
-                .setItems(arrayOf("Local first (cloud fallback)", "Cloud only")) { _, which ->
-                    localAiPrefs.edit().putBoolean("local_first", which == 0).apply()
-                    showSettings()
-                }.show()
-        })
-        content.addView(menuButton(
-            "Get an optimized local AI model",
-            "Open the verified publisher's ~736 MB GPU-compatible model page. Then import the downloaded file."
-        ) {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(
-                "https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/tree/main"
-            )))
-        })
+            if (localInference.modelInstalled()) "Irai's AI Brain: Installed" else "Install Irai's AI Brain",
+            "Install or repair the on-device AI. A model is required for local conversations."
+        ) { showRequiredModelSetup() })
         content.addView(menuButton(
             if (localAiPrefs.getBoolean("prefer_gpu", true)) "GPU Acceleration: Enabled" else "GPU Acceleration: Disabled",
             "Try the device GPU with compatible _gpu models; automatically use CPU if initialization fails"
@@ -5564,6 +5635,7 @@ class MainActivity : Activity() {
         awaitingFormAnswerFor = null
         formFillInProgress = false
 
+        aiModelDownloader.cancel()
         speechTts?.stop()
         speechTts?.shutdown()
         speechTts = null
