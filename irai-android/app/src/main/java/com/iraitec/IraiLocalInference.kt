@@ -30,6 +30,8 @@ class IraiLocalInference(context: Context) {
     private val modelFile = File(appContext.filesDir, "irai-local.litertlm")
     private var engine: Engine? = null
     private var initializedModelSize = -1L
+    private val preferences = appContext.getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE)
+    private var loadedOnGpu = false
 
     /** Serialize model replacement with inference so active native readers finish. */
     fun installModel(staging: File): Boolean {
@@ -40,6 +42,7 @@ class IraiLocalInference(context: Context) {
                 engine?.close()
                 engine = null
                 initializedModelSize = -1L
+                loadedOnGpu = false
                 backup.delete()
                 if (modelFile.exists() && !modelFile.renameTo(backup)) return@submit false
                 if (!staging.renameTo(modelFile)) {
@@ -67,16 +70,43 @@ class IraiLocalInference(context: Context) {
                 if (engine == null || initializedModelSize != modelFile.length()) {
                     engine?.close()
                     engine = null
-                    val candidate = Engine(
-                        EngineConfig(
+                    loadedOnGpu = false
+                    val tryGpu = preferences.getBoolean("gpu_model", false) &&
+                        preferences.getBoolean("prefer_gpu", true) &&
+                        android.os.Build.VERSION.SDK_INT >= 31
+                    if (tryGpu) {
+                        try {
+                            val accelerated = Engine(EngineConfig(
+                                modelPath = modelFile.absolutePath,
+                                backend = Backend.GPU(),
+                                cacheDir = appContext.cacheDir.absolutePath
+                            ))
+                            try {
+                                accelerated.initialize()
+                                engine = accelerated
+                                loadedOnGpu = true
+                            } catch (error: Exception) {
+                                accelerated.close()
+                                android.util.Log.w("IRAI_LOCAL", "GPU unavailable, falling back to CPU", error)
+                            }
+                        } catch (error: Exception) {
+                            android.util.Log.w("IRAI_LOCAL", "Could not create GPU engine", error)
+                        }
+                    }
+                    if (engine == null) {
+                        val cpu = Engine(EngineConfig(
                             modelPath = modelFile.absolutePath,
                             backend = Backend.CPU(),
                             cacheDir = appContext.cacheDir.absolutePath
-                        )
-                    )
-                    // Don't close a candidate if initialize() fails.
-                    candidate.initialize()
-                    engine = candidate
+                        ))
+                        try {
+                            cpu.initialize()
+                            engine = cpu
+                        } catch (error: Exception) {
+                            cpu.close()
+                            throw error
+                        }
+                    }
                     initializedModelSize = modelFile.length()
                 }
                 val chat = checkNotNull(engine).createConversation()
