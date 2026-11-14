@@ -3918,44 +3918,71 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun isBlueAppearance(): Boolean =
-        getSharedPreferences("irai_appearance", Context.MODE_PRIVATE).getBoolean("blue_theme", false)
+    private enum class IraiTheme { MIDNIGHT_STEEL, ROSE_GARDEN, COSMIC_VIOLET, ARCTIC_TIDE }
 
-    private fun applyAppearanceChoice(blue: Boolean) {
-        getSharedPreferences("irai_appearance", Context.MODE_PRIVATE).edit().putBoolean("blue_theme", blue).apply()
+    private fun currentTheme(): IraiTheme {
+        val prefs = getSharedPreferences("irai_appearance", Context.MODE_PRIVATE)
+        val old = if (prefs.getBoolean("blue_theme", false)) IraiTheme.MIDNIGHT_STEEL else IraiTheme.ROSE_GARDEN
+        val saved = prefs.getString("theme_name", null)
+        return IraiTheme.entries.firstOrNull { it.name == saved } ?: old
+    }
+
+    private fun isBlueAppearance(): Boolean = currentTheme() == IraiTheme.MIDNIGHT_STEEL
+    private fun isDarkAppearance(): Boolean = currentTheme() != IraiTheme.ROSE_GARDEN
+
+    private fun themeName(): String = when (currentTheme()) {
+        IraiTheme.MIDNIGHT_STEEL -> "Midnight Steel"
+        IraiTheme.ROSE_GARDEN -> "Rose Garden"
+        IraiTheme.COSMIC_VIOLET -> "Cosmic Violet"
+        IraiTheme.ARCTIC_TIDE -> "Arctic Tide"
+    }
+
+    private fun applyAppearanceChoice(theme: IraiTheme) {
+        getSharedPreferences("irai_appearance", Context.MODE_PRIVATE).edit()
+            .putString("theme_name", theme.name)
+            .putBoolean("blue_theme", theme == IraiTheme.MIDNIGHT_STEEL)
+            .apply()
         if (loggedIn) showHome(currentEmail)
     }
 
     private fun offerInitialAppearanceChoice() {
         AlertDialog.Builder(this)
             .setTitle("Choose your I.R.A.I style")
-            .setMessage("Choose the look you'd like to start with. You can change this any time in Settings.")
-            .setNegativeButton("Rose Garden") { _, _ -> applyAppearanceChoice(false) }
-            .setPositiveButton("Midnight Steel") { _, _ -> applyAppearanceChoice(true) }
-            .setNeutralButton("Choose later", null)
+            .setItems(arrayOf("Midnight Steel", "Rose Garden", "Cosmic Violet", "Arctic Tide")) { _, which ->
+                applyAppearanceChoice(IraiTheme.entries[which])
+            }
+            .setNegativeButton("Choose later", null)
             .show()
     }
 
     private fun appearanceGradient(): GradientDrawable {
-        val colors = if (isBlueAppearance()) {
-            intArrayOf(Color.rgb(8, 16, 31), Color.rgb(14, 34, 60), Color.rgb(20, 57, 92))
-        } else {
-            intArrayOf(Color.rgb(255, 239, 245), Color.rgb(253, 213, 230), Color.rgb(230, 190, 234))
+        val colors = when (currentTheme()) {
+            IraiTheme.MIDNIGHT_STEEL -> intArrayOf(Color.rgb(8, 16, 31), Color.rgb(14, 34, 60), Color.rgb(20, 57, 92))
+            IraiTheme.ROSE_GARDEN -> intArrayOf(Color.rgb(255, 239, 245), Color.rgb(253, 213, 230), Color.rgb(230, 190, 234))
+            IraiTheme.COSMIC_VIOLET -> intArrayOf(Color.rgb(10, 6, 29), Color.rgb(40, 17, 83), Color.rgb(105, 30, 92))
+            IraiTheme.ARCTIC_TIDE -> intArrayOf(Color.rgb(2, 25, 44), Color.rgb(4, 88, 117), Color.rgb(6, 44, 65))
         }
         return GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, colors)
     }
 
+    private fun themeBackground(): android.graphics.drawable.Drawable = when (currentTheme()) {
+        IraiTheme.COSMIC_VIOLET -> IraiScenicBackground(false)
+        IraiTheme.ARCTIC_TIDE -> IraiScenicBackground(true)
+        else -> appearanceGradient()
+    }
+
     private fun applySunriseSystemBars() {
-        if (isBlueAppearance()) {
-            window.statusBarColor = Color.rgb(8, 16, 31)
-            window.navigationBarColor = Color.rgb(20, 57, 92)
-            window.decorView.systemUiVisibility = 0
-        } else {
-            window.statusBarColor = Color.rgb(255, 239, 245)
-            window.navigationBarColor = Color.rgb(230, 190, 234)
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
-                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR else 0)
+        val bars = when (currentTheme()) {
+            IraiTheme.MIDNIGHT_STEEL -> Pair(Color.rgb(8, 16, 31), Color.rgb(20, 57, 92))
+            IraiTheme.ROSE_GARDEN -> Pair(Color.rgb(255, 239, 245), Color.rgb(230, 190, 234))
+            IraiTheme.COSMIC_VIOLET -> Pair(Color.rgb(10, 6, 29), Color.rgb(37, 12, 65))
+            IraiTheme.ARCTIC_TIDE -> Pair(Color.rgb(2, 25, 44), Color.rgb(4, 72, 91))
         }
+        window.statusBarColor = bars.first
+        window.navigationBarColor = bars.second
+        window.decorView.systemUiVisibility = if (isDarkAppearance()) 0
+            else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR else 0)
     }
 
     private fun showHome(email: String) {
