@@ -65,24 +65,20 @@ class IraiWelcomeWave(
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     companion object {
-        private const val FILE_NAME = "irai_welcome_wave.gif"
-
-        fun gifFile(context: Context) = File(context.filesDir, FILE_NAME)
-
-        /** Bundled asset is preferred: no user import or setup required. */
+        /**
+         * The welcome GIF ships in src/main/assets/ with every APK.
+         * No user import, file chooser, or external storage access is needed.
+         */
         fun loaded(context: Context, whenFinished: () -> Unit): IraiWelcomeWave? {
-            val bundled = try {
-                context.assets.open("irai_welcome_wave.gif").use { stream ->
-                    Movie.decodeStream(stream)
-                }
-            } catch (_: Exception) { null }
-            if (bundled != null) return IraiWelcomeWave(bundled, whenFinished)
-            // Compatibility with users who imported a GIF in an older build.
-            val legacy = gifFile(context)
-            if (!legacy.isFile || legacy.length() !in 1_000L..8_000_000L) return null
             return try {
-                Movie.decodeFile(legacy.absolutePath)?.let { IraiWelcomeWave(it, whenFinished) }
-            } catch (_: Exception) { null }
+                context.assets.open("irai_welcome_wave.gif").use { stream ->
+                    val movie = Movie.decodeStream(stream) ?: return null
+                    IraiWelcomeWave(movie, whenFinished)
+                }
+            } catch (error: Exception) {
+                android.util.Log.e("IRAI_WAVE", "Bundled welcome GIF is missing or invalid", error)
+                null
+            }
         }
     }
 }
