@@ -211,7 +211,8 @@ class MainActivity : Activity() {
                     // A fresh wake word restores the companion after "go away".
                     avatarHiddenUntilWake = false
                     showAvatarOverlay()
-                    IraiAvatarOverlay.playWakeWave()
+                    // The welcome wave belongs to the avatar's show event.
+                    // Already-visible Irai should not replay it on wake.
                     IraiAvatarOverlay.setStatus("Listening...")
                     startVoiceCommand()
                 }
