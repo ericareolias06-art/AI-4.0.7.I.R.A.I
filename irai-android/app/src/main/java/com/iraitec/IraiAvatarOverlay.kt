@@ -168,6 +168,9 @@ object IraiAvatarOverlay {
             windowManager?.addView(panel, avatarLayoutParams)
             currentMood = "idle"
             if (!reducedMotion) startIdleAnimation()
+            // Greet exactly once when the companion appears. If already
+            // displayed, show() returns above without replaying the wave.
+            playWakeWave()
         } catch (_: Exception) {
             avatarWindow = null
         }
