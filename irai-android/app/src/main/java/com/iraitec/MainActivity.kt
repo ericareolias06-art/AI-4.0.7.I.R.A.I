@@ -4095,19 +4095,33 @@ class MainActivity : Activity() {
     private fun featureTutorialPrefs() =
         getSharedPreferences("irai_feature_tutorial", Context.MODE_PRIVATE)
 
-    private fun featureTutorialKey() =
-        "completed_" + currentEmail.trim().lowercase(Locale.US)
+    // This flag survives app restarts and sign-ins on this device.
+    // Clearing app data or reinstalling resets it.
+    private val gardenTutorialSeenKey = "garden_tutorial_seen_on_device"
 
     private fun openFeaturesForFirstTimeIfNeeded() {
-        if (featureTutorialPrefs().getBoolean(featureTutorialKey(), false)) showFeatures()
-        else showFeaturesTutorial()
+        val prefs = featureTutorialPrefs()
+        val legacyKey = "completed_" + currentEmail.trim().lowercase(Locale.US)
+        if (prefs.getBoolean(gardenTutorialSeenKey, false) ||
+            prefs.getBoolean(legacyKey, false)) {
+            // Existing users who finished the old account-based tour keep their progress.
+            if (!prefs.getBoolean(gardenTutorialSeenKey, false)) {
+                prefs.edit().putBoolean(gardenTutorialSeenKey, true).apply()
+            }
+            showFeatures()
+        } else {
+            // Mark as seen on first entry, so an interrupted tour does not replay.
+            prefs.edit().putBoolean(gardenTutorialSeenKey, true).apply()
+            showFeaturesTutorial()
+        }
     }
 
     // Convert density-independent pixels to physical pixels for native Android layouts.
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
 
     private fun completeFeaturesTutorial() {
-        featureTutorialPrefs().edit().putBoolean(featureTutorialKey(), true).apply()
+        featureTutorialPrefs().edit().putBoolean(gardenTutorialSeenKey, true).apply()
+        pendingFeaturesTutorial = false
         speechTts?.stop()
         showFeatures()
     }
