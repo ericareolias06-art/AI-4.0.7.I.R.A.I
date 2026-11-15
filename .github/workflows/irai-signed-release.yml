@@ -31,10 +31,9 @@ jobs:
           IRAI_UPLOAD_STORE_PASSWORD: ${{ secrets.IRAI_UPLOAD_STORE_PASSWORD }}
           IRAI_UPLOAD_KEY_ALIAS: ${{ secrets.IRAI_UPLOAD_KEY_ALIAS }}
           IRAI_UPLOAD_KEY_PASSWORD: ${{ secrets.IRAI_UPLOAD_KEY_PASSWORD }}
-          IRAI_EXPECTED_UPLOAD_SHA1: ${{ secrets.IRAI_EXPECTED_UPLOAD_SHA1 }}
         run: |
           set -euo pipefail
-          for variable in IRAI_UPLOAD_KEYSTORE_BASE64 IRAI_UPLOAD_STORE_PASSWORD IRAI_UPLOAD_KEY_ALIAS IRAI_UPLOAD_KEY_PASSWORD IRAI_EXPECTED_UPLOAD_SHA1; do
+          for variable in IRAI_UPLOAD_KEYSTORE_BASE64 IRAI_UPLOAD_STORE_PASSWORD IRAI_UPLOAD_KEY_ALIAS IRAI_UPLOAD_KEY_PASSWORD; do
             if [[ -z "${!variable}" ]]; then
               echo "::error::Missing required GitHub Actions secret: $variable"
               exit 1
@@ -46,7 +45,7 @@ jobs:
           echo "IRAI_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
           cert_info="$(keytool -list -v -keystore "$KEYSTORE" -alias "$IRAI_UPLOAD_KEY_ALIAS" -storepass "$IRAI_UPLOAD_STORE_PASSWORD" -keypass "$IRAI_UPLOAD_KEY_PASSWORD")"
           actual="$(printf '%s\n' "$cert_info" | sed -n 's/^[[:space:]]*SHA1:[[:space:]]*//p' | head -n 1 | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
-          expected="$(printf '%s' "$IRAI_EXPECTED_UPLOAD_SHA1" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
+          expected="64:F2:1C:73:69:A5:0E:57:E1:D7:13:B0:C4:F7:A1:79:2B:03:A2:29"
           if [[ -z "$actual" || "$actual" != "$expected" ]]; then
             echo "::error::Upload certificate SHA-1 does not match the expected certificate registered in Google Play. Verify the keystore or complete the upload-key reset."
             echo "Actual certificate fingerprint: $actual"
