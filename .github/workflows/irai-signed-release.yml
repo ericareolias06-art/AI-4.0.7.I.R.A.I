@@ -1,8 +1,14 @@
 name: Irai signed Play Store AAB
 
-# Intentionally manual: test/debug bundles are never Play Store uploads.
+# Manual release builds, plus a one-time signing-workflow update check on the development branch.
+# Ordinary app changes do not automatically publish Play Store bundles.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/irai-hybrid-ai
+    paths:
+      - '.github/workflows/irai-signed-release.yml'
 
 jobs:
   signed-release:
