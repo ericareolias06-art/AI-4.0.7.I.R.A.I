@@ -42,7 +42,6 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.ColorDrawable
 import android.widget.*
 import org.json.JSONObject
-import org.json.JSONArray
 import java.net.CookieHandler
 import java.net.CookieManager
 import java.net.CookiePolicy
@@ -68,7 +67,6 @@ class MainActivity : Activity() {
     private lateinit var passwordInput: EditText
     private lateinit var confirmInput: EditText
     private lateinit var message: TextView
-    private lateinit var diagnosticText: TextView
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -90,7 +88,6 @@ class MainActivity : Activity() {
     private var stickyNoteView: LinearLayout? = null
     private var stickyTitleView: TextView? = null
     private var stickyBodyView: TextView? = null
-    private var avatarPermissionPrompted = false
     private var avatarHiddenUntilWake = false
     private var stickyWindowParams: WindowManager.LayoutParams? = null
     private val notesDb by lazy { IraiNotesDatabase(this) }
@@ -103,7 +100,6 @@ class MainActivity : Activity() {
     private var setupPromptVisible = false
     private var setupPromptOffered = false
     private var latestDiagnostic = "Waiting for listening service..."
-    private var lastRecognizedPhrase = ""
     private fun personalVault() = IraiPersonalVault(this, currentEmail)
     private data class PendingFormField(val label: String, val profileKey: String?, val value: String?)
     private val pendingFormFields = mutableListOf<PendingFormField>()
@@ -174,7 +170,6 @@ class MainActivity : Activity() {
     private var pendingVaultAccount: String? = null
     private var pendingVaultPasswordField: String? = null
     private var pendingScanImageUri: Uri? = null
-    private var pendingScanPrompt = "Read this page and guide me through it"
     private val aiConversationHistory = mutableListOf<JSONObject>()
 
     private val restartListeningRunnable = Runnable {
@@ -965,19 +960,6 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun requestMicrophonePermission() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1002
-            )
-        } else {
-            requestMicrophonePermissionAfterNotifications()
-        }
-    }
-
     private fun requestMicrophonePermissionAfterNotifications() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
@@ -1030,20 +1012,6 @@ class MainActivity : Activity() {
                 }
             }
             .show()
-    }
-
-    private fun requestAvatarOverlayPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-            !Settings.canDrawOverlays(this) && !avatarPermissionPrompted
-        ) {
-            avatarPermissionPrompted = true
-            Toast.makeText(this, "Allow Display over other apps so Irai can appear over your other apps.", Toast.LENGTH_LONG).show()
-            try {
-                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-            } catch (_: Exception) {
-                Toast.makeText(this, "Enable Display over other apps for Irai Tec in Android Settings.", Toast.LENGTH_LONG).show()
-            }
-        }
     }
 
     private fun showAvatarOverlay() {
@@ -1275,7 +1243,6 @@ class MainActivity : Activity() {
                                 refreshDiagnostic()
                                 speakResponse("Sorry, I didn't catch that.")
                             } else {
-                                lastRecognizedPhrase = spokenText
                                 latestDiagnostic = "Routing recognized command..."
                                 refreshDiagnostic()
                                 handleVoiceCommand(spokenText)
@@ -2757,31 +2724,6 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun showEmailDraftConfirmation(draft: String) {
-        val subjectMatch = Regex("(?im)^SUBJECT:\\s*(.*)$").find(draft)
-        val bodyMatch = Regex("(?ims)^BODY:\\s*(.*)$").find(draft)
-        val subject = EditText(this).apply { setText(subjectMatch?.groupValues?.get(1)?.trim().orEmpty()); hint = "Subject" }
-        val body = EditText(this).apply { setText(bodyMatch?.groupValues?.get(1)?.trim().orEmpty().ifBlank { draft }); hint = "Email message"; minLines = 5; maxLines = 12 }
-        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), 0); addView(label("To: $pendingEmailName <$pendingEmailAddress>", 14, Color.DKGRAY)); addView(subject); addView(body) }
-        AlertDialog.Builder(this)
-            .setTitle("Review your email")
-            .setView(panel)
-            .setNegativeButton("Cancel") { _, _ -> pendingEmailAddress = ""; pendingEmailName = ""; speakResponse("Email cancelled. Nothing was sent.") }
-            .setPositiveButton("Open Email App") { _, _ ->
-                val recipient = pendingEmailAddress
-                val mail = Intent(Intent.ACTION_SENDTO).apply {
-                    data = Uri.parse("mailto:")
-                    putExtra(Intent.EXTRA_EMAIL, arrayOf(recipient))
-                    putExtra(Intent.EXTRA_SUBJECT, subject.text.toString())
-                    putExtra(Intent.EXTRA_TEXT, body.text.toString())
-                }
-                pendingEmailAddress = ""; pendingEmailName = ""
-                try { startActivity(mail); speakResponse("I opened your email app with the reviewed draft. Please check it and press Send when you are ready.") }
-                catch (_: Exception) { speakResponse("I could not open an email app. Nothing was sent.") }
-            }
-            .show()
-    }
-
     private fun clearPendingSms() {
         awaitingSmsMessage = false
         pendingSmsPhone = ""
@@ -2799,47 +2741,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun showSmsDraftConfirmation(draft: String) {
-        val editor = EditText(this).apply {
-            setText(draft)
-            minLines = 3
-            maxLines = 8
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Text to " + pendingSmsContactName)
-            .setMessage("Review or edit this draft. Nothing will be sent until you confirm in your messaging app.")
-            .setView(editor)
-            .setNegativeButton("Cancel") { _, _ ->
-                clearPendingSms()
-                speakResponse("I cancelled the message. Nothing was sent.")
-            }
-            .setNeutralButton("Try again") { _, _ ->
-                awaitingSmsMessage = true
-                speakResponse("Tell me how you would like the message changed.")
-            }
-            .setPositiveButton("Open Messages") { _, _ ->
-                val body = editor.text.toString().trim()
-                if (body.isBlank()) {
-                    clearPendingSms()
-                    speakResponse("The message was empty, so I cancelled it.")
-                } else {
-                    val smsIntent = Intent(Intent.ACTION_SENDTO).apply {
-                        data = Uri.fromParts("smsto", pendingSmsPhone, null)
-                        putExtra("sms_body", body)
-                    }
-                    try {
-                        startActivity(smsIntent)
-                        speakResponse("I opened your messaging app with the draft addressed to " + pendingSmsContactName + ". Please review it and tap Send when you are ready.")
-                    } catch (e: Exception) {
-                        speakResponse("I could not open your messaging app. Nothing was sent.")
-                    } finally {
-                        clearPendingSms()
-                    }
-                }
-            }
-            .show()
-    }
     private fun streamSpeechPieceDone() {
         if (!streamActive) return
         speechPieces = (speechPieces - 1).coerceAtLeast(0)
@@ -4020,16 +3921,6 @@ class MainActivity : Activity() {
             .putBoolean("blue_theme", theme == IraiTheme.MIDNIGHT_STEEL)
             .apply()
         if (loggedIn) showHome(currentEmail)
-    }
-
-    private fun offerInitialAppearanceChoice() {
-        AlertDialog.Builder(this)
-            .setTitle("Choose your I.R.A.I style")
-            .setItems(arrayOf("Midnight Steel", "Rose Garden", "Cosmic Violet", "Arctic Tide")) { _, which ->
-                applyAppearanceChoice(IraiTheme.entries[which])
-            }
-            .setNegativeButton("Choose later", null)
-            .show()
     }
 
     private fun appearanceGradient(): GradientDrawable {
@@ -5382,113 +5273,10 @@ class MainActivity : Activity() {
         })
     }
 
-    private fun openBillingPortal() {
-        thread {
-            var portalUrl = ""
-            var errorMessage = "Couldn't open billing management. Please try again."
-            try {
-                val connection = openApiConnection("/api/create-portal-session")
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 20000
-                connection.readTimeout = 20000
-                connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/json")
-                connection.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
-                val code = connection.responseCode
-                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
-                val json = JSONObject(result)
-                if (code in 200..299) portalUrl = json.optString("url")
-                else errorMessage = json.optString("message", errorMessage)
-                connection.disconnect()
-            } catch (_: Exception) {
-            }
-            runOnUiThread {
-                if (portalUrl.startsWith("https://")) {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(portalUrl)))
-                } else {
-                    Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
-
     private fun refreshDiagnostic() {
         // Kept for internal logging and recovery calls. The home screen does
         // not display microphone diagnostics or recognized speech text.
         android.util.Log.d("IRAI_DIAGNOSTICS", latestDiagnostic)
-    }
-
-    private fun startCheckout(plan: String) {
-        Toast.makeText(
-            this, "Preparing secure checkout...", Toast.LENGTH_SHORT
-        ).show()
-
-        thread {
-            var checkoutUrl = ""
-            var errorMessage = ""
-
-            try {
-                val body = JSONObject().put("plan", plan)
-                val connection =
-                    openApiConnection("/api/create-checkout-session")
-
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 20000
-                connection.readTimeout = 20000
-                connection.doOutput = true
-                connection.setRequestProperty(
-                    "Content-Type", "application/json"
-                )
-
-                connection.outputStream.use {
-                    it.write(body.toString().toByteArray(Charsets.UTF_8))
-                }
-
-                val code = connection.responseCode
-                val stream = if (code in 200..299) {
-                    connection.inputStream
-                } else {
-                    connection.errorStream
-                }
-
-                val result = stream?.bufferedReader()?.use { it.readText() } ?: ""
-                val json = try {
-                    JSONObject(result)
-                } catch (_: Exception) {
-                    JSONObject()
-                }
-
-                if (code in 200..299) {
-                    checkoutUrl = json.optString("url")
-                } else {
-                    errorMessage = json.optString(
-                        "error",
-                        json.optString("message", "Could not start checkout.")
-                    )
-                }
-
-                connection.disconnect()
-            } catch (_: Exception) {
-                errorMessage = "Could not connect to checkout. Please try again."
-            }
-
-            runOnUiThread {
-                if (checkoutUrl.startsWith("https://")) {
-                    startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse(checkoutUrl))
-                    )
-                } else {
-                    Toast.makeText(
-                        this,
-                        errorMessage.ifBlank {
-                            "Checkout link was not returned."
-                        },
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
     }
 
     private fun showPromoInput() {
