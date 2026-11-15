@@ -1,4 +1,4 @@
-name: Irai signed Play Store AAB
+name: Irai signed APK and Play Store AAB
 
 # Manual release builds, plus a one-time signing-workflow update check on the development branch.
 # Ordinary app changes do not automatically publish Play Store bundles.
@@ -58,7 +58,7 @@ jobs:
             exit 1
           fi
           echo "Upload signing certificate fingerprint verified."
-      - name: Build signed release bundle
+      - name: Build signed release APK and bundle
         working-directory: irai-android
         env:
           IRAI_UPLOAD_STORE_PASSWORD: ${{ secrets.IRAI_UPLOAD_STORE_PASSWORD }}
@@ -71,9 +71,17 @@ jobs:
           ORG_GRADLE_PROJECT_IRAI_UPLOAD_STORE_PASSWORD="$IRAI_UPLOAD_STORE_PASSWORD" \
           ORG_GRADLE_PROJECT_IRAI_UPLOAD_KEY_ALIAS="$IRAI_UPLOAD_KEY_ALIAS" \
           ORG_GRADLE_PROJECT_IRAI_UPLOAD_KEY_PASSWORD="$IRAI_UPLOAD_KEY_PASSWORD" \
-          ./gradlew --no-daemon bundleRelease
+          ./gradlew --no-daemon assembleRelease bundleRelease
+          test -s app/build/outputs/apk/release/app-release.apk
           test -s app/build/outputs/bundle/release/app-release.aab
           jarsigner -verify app/build/outputs/bundle/release/app-release.aab
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+      - name: Upload signed release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: IraiTec-signed-release-APK
+          path: irai-android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 7
       - name: Upload signed release AAB
         uses: actions/upload-artifact@v4
         with:
