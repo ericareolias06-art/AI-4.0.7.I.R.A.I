@@ -3488,52 +3488,114 @@ class MainActivity : Activity() {
         handler.postDelayed(restartListeningRunnable, 1800)
     }
 
+    // Reusable settings / features card: readable typography, clear tap target
+    // and a restrained accent matched to whichever appearance is active.
     private fun menuButton(
         title: String,
         subtitle: String,
         onClick: () -> Unit
     ): LinearLayout {
         val density = resources.displayMetrics.density
+        fun pixels(dp: Float): Int = (dp * density + 0.5f).toInt()
+
+        data class CardPalette(
+            val surface: Int,
+            val border: Int,
+            val headline: Int,
+            val secondary: Int,
+            val accent: Int,
+            val ripple: Int
+        )
+        val palette = when (currentTheme()) {
+            IraiTheme.MIDNIGHT_STEEL -> CardPalette(
+                Color.rgb(19, 37, 59), Color.rgb(55, 107, 155),
+                Color.rgb(240, 246, 255), Color.rgb(169, 197, 222),
+                Color.rgb(120, 190, 248), Color.argb(42, 132, 194, 250)
+            )
+            IraiTheme.ROSE_GARDEN -> CardPalette(
+                Color.rgb(255, 250, 253), Color.rgb(233, 179, 207),
+                Color.rgb(103, 48, 83), Color.rgb(150, 89, 126),
+                Color.rgb(188, 85, 148), Color.argb(42, 229, 133, 188)
+            )
+            IraiTheme.COSMIC_VIOLET -> CardPalette(
+                Color.rgb(35, 23, 65), Color.rgb(111, 79, 174),
+                Color.rgb(247, 240, 255), Color.rgb(196, 174, 224),
+                Color.rgb(205, 153, 255), Color.argb(46, 169, 100, 246)
+            )
+            IraiTheme.ARCTIC_TIDE -> CardPalette(
+                Color.rgb(9, 48, 66), Color.rgb(55, 147, 166),
+                Color.rgb(235, 250, 255), Color.rgb(166, 218, 226),
+                Color.rgb(115, 225, 232), Color.argb(46, 74, 203, 218)
+            )
+        }
+
+        val shape = GradientDrawable().apply {
+            setColor(palette.surface)
+            cornerRadius = pixels(16f).toFloat()
+            setStroke(pixels(1f).coerceAtLeast(1), palette.border)
+        }
+
         return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding((18 * density).toInt(), (15 * density).toInt(), (18 * density).toInt(), (15 * density).toInt())
-            background = GradientDrawable().apply {
-                setColor(when (currentTheme()) {
-                    IraiTheme.MIDNIGHT_STEEL -> Color.rgb(20, 41, 66)
-                    IraiTheme.ROSE_GARDEN -> Color.rgb(255, 248, 252)
-                    IraiTheme.COSMIC_VIOLET -> Color.rgb(39, 21, 76)
-                    IraiTheme.ARCTIC_TIDE -> Color.rgb(8, 55, 76)
-                })
-                cornerRadius = (if (isBlueAppearance()) 10 else 23) * density
-                setStroke((1 * density).toInt(), when (currentTheme()) {
-                    IraiTheme.COSMIC_VIOLET -> Color.rgb(171, 91, 224)
-                    IraiTheme.ARCTIC_TIDE -> Color.rgb(68, 203, 222)
-                    IraiTheme.MIDNIGHT_STEEL -> Color.rgb(62, 130, 190)
-                    IraiTheme.ROSE_GARDEN -> Color.rgb(228, 148, 193)
-                })
-            }
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = pixels(74f)
+            setPadding(pixels(16f), pixels(14f), pixels(14f), pixels(14f))
+            background = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(palette.ripple),
+                shape, null
+            )
+            elevation = pixels(2f).toFloat()
             isClickable = true
             isFocusable = true
-            elevation = 3 * density
-            addView(TextView(this@MainActivity).apply {
-                text = title
-                textSize = 17f
-                setTextColor(if (isDarkAppearance()) Color.rgb(233, 243, 255) else Color.rgb(106, 48, 90))
-                typeface = Typeface.DEFAULT_BOLD
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = subtitle
-                textSize = 13f
-                setTextColor(if (isDarkAppearance()) Color.rgb(170, 204, 234) else Color.rgb(152, 90, 133))
-                setPadding(0, (4 * density).toInt(), 0, 0)
-            })
+            contentDescription = "$title. $subtitle"
             setOnClickListener { onClick() }
-        }.also {
-            it.layoutParams = LinearLayout.LayoutParams(
+
+            // Small side marker, rather than oversized decorative icons.
+            addView(View(this@MainActivity).apply {
+                background = GradientDrawable().apply {
+                    setColor(palette.accent)
+                    cornerRadius = pixels(2f).toFloat()
+                }
+            }, LinearLayout.LayoutParams(pixels(3f), pixels(32f)).apply {
+                marginEnd = pixels(13f)
+            })
+
+            val copy = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            copy.addView(TextView(this@MainActivity).apply {
+                text = title
+                textSize = 16f
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setTextColor(palette.headline)
+                setLineSpacing(0f, 1.04f)
+            })
+            if (subtitle.isNotBlank()) {
+                copy.addView(TextView(this@MainActivity).apply {
+                    text = subtitle
+                    textSize = 12.5f
+                    setTextColor(palette.secondary)
+                    setLineSpacing(0f, 1.05f)
+                    setPadding(0, pixels(4f), 0, 0)
+                })
+            }
+            addView(copy, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+            addView(TextView(this@MainActivity).apply {
+                text = "›"
+                textSize = 26f
+                gravity = Gravity.CENTER
+                setTextColor(palette.accent)
+            }, LinearLayout.LayoutParams(pixels(28f), pixels(40f)).apply {
+                marginStart = pixels(10f)
+            })
+        }.also { card ->
+            card.layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                setMargins(0, (7 * density).toInt(), 0, (7 * density).toInt())
+                setMargins(0, pixels(4f), 0, pixels(7f))
             }
         }
     }
@@ -4888,12 +4950,20 @@ class MainActivity : Activity() {
             setPadding(4, 12, 4, 22)
         }
         fun section(title: String) {
-            content.addView(label(title, 16,
-                if (isDarkAppearance()) Color.rgb(219, 231, 255)
-                else Color.rgb(112, 49, 93)).apply {
+            val accent = when (currentTheme()) {
+                IraiTheme.MIDNIGHT_STEEL -> Color.rgb(148, 205, 251)
+                IraiTheme.ROSE_GARDEN -> Color.rgb(142, 60, 106)
+                IraiTheme.COSMIC_VIOLET -> Color.rgb(220, 182, 255)
+                IraiTheme.ARCTIC_TIDE -> Color.rgb(155, 236, 241)
+            }
+            content.addView(TextView(this).apply {
+                text = title
+                textSize = 14f
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                letterSpacing = 0.035f
+                setTextColor(accent)
                 gravity = Gravity.START
-                typeface = Typeface.DEFAULT_BOLD
-                setPadding(dp(6), dp(22), 0, dp(6))
+                setPadding(dp(5), dp(22), dp(5), dp(7))
             })
         }
 
