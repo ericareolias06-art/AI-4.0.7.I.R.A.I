@@ -1,7 +1,7 @@
 name: Irai signed APK and Play Store AAB
 
-# Manual release builds, plus a one-time signing-workflow update check on the development branch.
-# Ordinary app changes do not automatically publish Play Store bundles.
+# Build signed APK and AAB on Android source changes or explicit manual request.
+# Generated artifacts require a separate, deliberate upload to Google Play.
 on:
   workflow_dispatch:
   push:
@@ -9,6 +9,8 @@ on:
       - feature/irai-hybrid-ai
     paths:
       - '.github/workflows/irai-signed-release.yml'
+      - 'irai-android/app/src/main/**'
+      - 'irai-android/app/build.gradle.kts'
 
 jobs:
   signed-release:
