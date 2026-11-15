@@ -2420,6 +2420,14 @@ class MainActivity : Activity() {
                 speakResponse("Today is $date.")
             }
 
+            text in listOf(
+                "how are you today", "how are you doing today", "how are you",
+                "how are you doing", "how have you been", "how s it going",
+                "how is it going", "how are things", "you doing okay"
+            ) -> speakResponse(
+                "I'm doing well, thanks for asking! It's always nice to chat with you. How are you doing?"
+            )
+
             "hello" in text || text == "hi" ->
                 speakResponse("Hello! I'm Irai. How can I help?")
 
