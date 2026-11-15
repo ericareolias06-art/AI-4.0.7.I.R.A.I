@@ -2057,6 +2057,14 @@ class MainActivity : Activity() {
         val requestsNotes = requestsNewNote || (mentionsNotes && (
             asksForNotes || text == "notes" || text == "my notes" || text == "notepad"
         ))
+        if (!notesMode && text in listOf(
+                "browse notes", "browse my notes", "show my notes", "show saved notes",
+                "view notes", "view my notes", "view saved notes", "saved notes",
+                "my saved notes", "notes library", "notes list"
+            )) {
+            showSavedNotesLibrary()
+            return
+        }
         if (!notesMode && requestsNotes) {
             startNotesMode()
             return
@@ -2367,12 +2375,15 @@ class MainActivity : Activity() {
             text.startsWith("delete note ") ->
                 requestNoteDeletion(routedCommand.substringAfter("delete note ").trim())
 
-            "time" in text -> {
+            text in listOf("what time is it", "what is the time", "tell me the time",
+                "current time", "time", "time please") -> {
                 val time = SimpleDateFormat("h:mm a", Locale.US).format(Date())
                 speakResponse("The time is $time.")
             }
 
-            "date" in text || "today" in text -> {
+            text in listOf("what is the date", "what date is it", "what is today's date",
+                "what is today s date", "today's date", "today s date",
+                "what day is it", "what day is today", "tell me the date", "date") -> {
                 val date = SimpleDateFormat("EEEE, MMMM d", Locale.US).format(Date())
                 speakResponse("Today is $date.")
             }
@@ -3303,12 +3314,97 @@ class MainActivity : Activity() {
         speakResponse("Okay, I'm closing Notes.")
     }
 
+    /**
+     * A visual, on-device library for notes the user has already saved.
+     * Existing rows are never migrated or rewritten just to display them.
+     */
+    private fun showSavedNotesLibrary() {
+        speechTts?.stop()
+        applySunriseSystemBars()
+        root.removeAllViews()
+        root.orientation = LinearLayout.VERTICAL
+        root.gravity = Gravity.TOP
+        root.setPadding(dp(20), dp(28), dp(20), dp(18))
+        root.background = themeBackground()
+        root.addView(screenHeader("Saved Notes", true) { showFeatures() })
+
+        val scroll = ScrollView(this).apply { isFillViewport = true }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(8), dp(4), dp(24))
+        }
+        content.addView(menuButton("＋  Create New Note", "Start a fresh voice note") {
+            startNotesMode()
+        })
+        val allNotes = try { notesDb.getNotes() } catch (error: Exception) {
+            android.util.Log.e("IRAI_NOTES", "Unable to load notes", error)
+            Toast.makeText(this, "Could not load your saved notes.", Toast.LENGTH_LONG).show()
+            emptyList()
+        }
+        content.addView(label(
+            if (allNotes.isEmpty()) "No saved notes yet. Create one to see it here."
+            else "${allNotes.size} saved note${if (allNotes.size == 1) "" else "s"} · newest first",
+            14, if (isDarkAppearance()) Color.rgb(210, 227, 245) else Color.rgb(116, 57, 91)
+        ).apply { setPadding(dp(8), dp(14), dp(8), dp(10)) })
+
+        for (note in allNotes) {
+            val preview = note.content.replace(Regex("\\s+"), " ").trim()
+                .take(105).ifBlank { "Empty note" }
+            val updated = SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.getDefault())
+                .format(Date(note.updatedAt))
+            content.addView(menuButton("📝  ${note.title}", "$updated\n$preview") {
+                showSavedNoteDetails(note)
+            })
+        }
+        scroll.addView(content)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(root)
+    }
+
+    private fun showSavedNoteDetails(note: IraiNote) {
+        val details = if (note.content.isBlank()) "(Empty note)" else note.content
+        AlertDialog.Builder(this)
+            .setTitle(note.title)
+            .setMessage(details.take(3500) +
+                if (details.length > 3500) "\n\n… Open the note for the rest." else "")
+            .setNegativeButton("Close", null)
+            .setNeutralButton("Delete") { _, _ ->
+                AlertDialog.Builder(this)
+                    .setTitle("Delete ${note.title}?")
+                    .setMessage("This will permanently delete this saved note.")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Delete") { _, _ ->
+                        if (notesDb.deleteNote(note.id)) {
+                            Toast.makeText(this, "Note deleted.", Toast.LENGTH_SHORT).show()
+                            showSavedNotesLibrary()
+                        } else Toast.makeText(this, "Couldn't delete the note.", Toast.LENGTH_LONG).show()
+                    }.show()
+            }
+            .setPositiveButton("Open Note") { _, _ ->
+                if (notesMode && noteHasChanges && currentNoteBody.isNotBlank()) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Unsaved note")
+                        .setMessage("Save your current note before switching?")
+                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton("Save and open") { _, _ ->
+                            saveCurrentNote()
+                            openSavedNoteItem(note)
+                        }.show()
+                } else openSavedNoteItem(note)
+            }
+            .show()
+    }
+
     private fun openSavedNote(title: String) {
         val note = notesDb.findNote(title)
         if (note == null) {
             speakResponse("I couldn't find a note named $title.")
             return
         }
+        openSavedNoteItem(note)
+    }
+
+    private fun openSavedNoteItem(note: IraiNote) {
         notesMode = true
         currentNoteId = note.id
         currentNoteTitle = note.title
@@ -4318,8 +4414,11 @@ class MainActivity : Activity() {
         content.addView(menuButton("✉️  Email Assistant", "Transcribe an email, review the subject and message, then send using your email app") {
             startEmailFlow()
         })
-        content.addView(menuButton("🌷  Notes", "Create, transcribe, save, and listen to notes") {
+        content.addView(menuButton("🌷  New Note", "Create a note using your voice") {
             startNotesMode()
+        })
+        content.addView(menuButton("📒  Saved Notes", "Browse, read, reopen, and delete your saved notes") {
+            showSavedNotesLibrary()
         })
         content.addView(menuButton("🌼  Calculator", "A simple calculator for everyday sums") {
             showCalculator()
