@@ -5,7 +5,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="ericareolias06-art/AI-4.0.7.I.R.A.I"
-RUN_ID="43760957501"
+WORKFLOW=".github/workflows/irai-signed-release.yml"
+BRANCH="feature/irai-hybrid-ai"
 PUBLIC_DIR="$ROOT/irai-android/public-builds"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
@@ -20,7 +21,15 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Checking Irai's signed APK/AAB workflow run $RUN_ID..."
+# Only serve artifacts built from this exact checkout. An older release is unsafe.
+CURRENT_SHA="$(git -C "$ROOT" rev-parse HEAD)"
+RUN_ID="$(gh run list --repo "$REPO" --workflow "$WORKFLOW" --branch "$BRANCH" --limit 30 --json databaseId,headSha --jq ".[] | select(.headSha == \"$CURRENT_SHA\") | .databaseId" | head -n 1)"
+if [[ -z "$RUN_ID" ]]; then
+  echo "No signed release run found for checkout $CURRENT_SHA." >&2
+  echo "Run git pull, then check GitHub Actions for the latest release build." >&2
+  exit 1
+fi
+echo "Checking signed release run $RUN_ID for commit $CURRENT_SHA..."
 STATUS="$(gh run view "$RUN_ID" --repo "$REPO" --json conclusion --jq '.conclusion')"
 if [[ "$STATUS" != "success" ]]; then
   echo "Signed build is not successful yet (conclusion: ${STATUS:-pending})." >&2
@@ -45,7 +54,7 @@ cp "$APK" "$PUBLIC_DIR/IraiTec.apk"
 cp "$AAB" "$PUBLIC_DIR/IraiTec.aab"
 
 echo
-echo "SIGNED version 1.6 (code 8) files ready on port 8765."
+echo "SIGNED release files for commit $CURRENT_SHA ready on port 8765."
 echo "Forward port 8765 in the Codespaces PORTS tab, then open:"
 echo "  /IraiTec.apk"
 echo "  /IraiTec.aab"
