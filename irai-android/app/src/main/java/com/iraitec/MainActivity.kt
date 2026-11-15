@@ -1974,6 +1974,38 @@ class MainActivity : Activity() {
             return
         }
 
+        // Local shopping-list commands never need to call the AI model.
+        val addShoppingMatch = Regex(
+            "^(?:please )?(?:add|put) (.+?) (?:to|on) (?:my |the )?shopping list$",
+            RegexOption.IGNORE_CASE
+        ).matchEntire(routedCommand)
+        if (addShoppingMatch != null) {
+            val item = addShoppingMatch.groupValues[1].trim()
+            val saved = shoppingList().add(item)
+            speakResponse(if (saved) "Added $item to your shopping list."
+                else if (shoppingList().items().any { it.equals(item, ignoreCase = true) })
+                    "$item is already on your shopping list."
+                else "I couldn't add that item. Please try again.")
+            return
+        }
+        val removeShoppingMatch = Regex(
+            "^(?:please )?(?:remove|delete|take) (.+?) (?:from|off) (?:my |the )?shopping list$",
+            RegexOption.IGNORE_CASE
+        ).matchEntire(routedCommand)
+        if (removeShoppingMatch != null) {
+            val item = removeShoppingMatch.groupValues[1].trim()
+            speakResponse(if (shoppingList().remove(item)) "Removed $item from your shopping list."
+                else "I couldn't find $item on your shopping list.")
+            return
+        }
+        if (text in listOf("shopping list", "my shopping list", "show shopping list",
+                "show my shopping list", "open shopping list", "open my shopping list",
+                "view shopping list", "what is on my shopping list",
+                "what s on my shopping list")) {
+            showShoppingList()
+            return
+        }
+
         if (text == "call" || text == "make a call" || text == "phone someone" || text.startsWith("call ")) {
             startCallFlow(text.removePrefix("call ").trim())
             return
@@ -4432,6 +4464,9 @@ class MainActivity : Activity() {
         content.addView(menuButton("🖥️  Help with This Screen", "Let I.R.A.I explain the app or webpage you are viewing") {
             helpWithCurrentScreen()
         })
+        content.addView(menuButton("🛒  Shopping List", "Add groceries by voice and manage your saved items") {
+            showShoppingList()
+        })
         content.addView(menuButton("🛍️  Shopping Help", "Compare products, understand listings, choose sizes, and review a cart") {
             showShoppingPaperworkHelp(true)
         })
@@ -4441,6 +4476,68 @@ class MainActivity : Activity() {
         content.addView(label("Your notes stay on this device. Scanned page text is sent to Irai AI when you ask for help.", 12, Color.rgb(112, 70, 65)).apply {
             setPadding(dp(8), dp(16), dp(8), dp(8))
         })
+        scroll.addView(content)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(root)
+    }
+
+    private fun shoppingList(): IraiShoppingList = IraiShoppingList(this)
+
+    private fun showShoppingList() {
+        speechTts?.stop()
+        applySunriseSystemBars()
+        root.removeAllViews()
+        root.orientation = LinearLayout.VERTICAL
+        root.gravity = Gravity.TOP
+        root.setPadding(dp(20), dp(28), dp(20), dp(18))
+        root.background = themeBackground()
+        root.addView(screenHeader("Shopping List", true) { showFeatures() })
+        val scroll = ScrollView(this).apply { isFillViewport = true }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(8), dp(4), dp(20))
+        }
+        content.addView(menuButton("＋  Add an Item", "Type an item to add to your list") {
+            val entry = EditText(this).apply {
+                hint = "e.g. Kool-Aid"
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                setSingleLine(true)
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Add to shopping list")
+                .setView(entry)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Add") { _, _ ->
+                    val item = entry.text.toString().trim()
+                    if (shoppingList().add(item)) {
+                        Toast.makeText(this, "$item added.", Toast.LENGTH_SHORT).show()
+                        showShoppingList()
+                    } else Toast.makeText(this,
+                        if (item.isBlank()) "Enter an item name."
+                        else "Item already added, or it couldn't be saved.",
+                        Toast.LENGTH_LONG).show()
+                }.show()
+        })
+        val items = shoppingList().items()
+        content.addView(label(
+            if (items.isEmpty()) "Your list is empty. Ask Irai to add something."
+            else "${items.size} item${if (items.size == 1) "" else "s"} on your shopping list",
+            14, if (isDarkAppearance()) Color.rgb(212, 229, 244)
+            else Color.rgb(112, 58, 88)
+        ).apply { setPadding(dp(8), dp(14), dp(8), dp(8)) })
+        for (item in items) {
+            content.addView(menuButton("🛒  $item", "Tap to remove from your shopping list") {
+                AlertDialog.Builder(this)
+                    .setTitle("Remove $item?")
+                    .setMessage("Take this item off your shopping list?")
+                    .setNegativeButton("Keep", null)
+                    .setPositiveButton("Remove") { _, _ ->
+                        shoppingList().remove(item)
+                        showShoppingList()
+                    }.show()
+            })
+        }
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
