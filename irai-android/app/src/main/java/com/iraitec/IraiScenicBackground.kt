@@ -1,7 +1,6 @@
 package com.iraitec
 
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
@@ -9,7 +8,6 @@ import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.graphics.PixelFormat
-import kotlin.math.max
 
 /**
  * Original locally rendered themed scenery. No copyrighted artwork, network
@@ -83,7 +81,7 @@ class IraiScenicBackground(private val ocean: Boolean) : Drawable() {
 
     private fun drawOcean(canvas: Canvas, h: Float) {
         // Underwater sunlight, layered current patterns and ocean depth.
-        val center = orbColor(0x9976E8FF.toInt())
+        val center = 0x9976E8FF.toInt()
         orb(canvas, 190f, -45f, 210f, center, 0x2557B8DE)
         brush.style = Paint.Style.STROKE
         for (i in 0..8) {
@@ -122,8 +120,6 @@ class IraiScenicBackground(private val ocean: Boolean) : Drawable() {
             canvas.drawPath(p, brush)
         }
     }
-
-    private fun orbColor(value: Int) = value
 
     override fun setAlpha(alpha: Int) {}
     override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {}
