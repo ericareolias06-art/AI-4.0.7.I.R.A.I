@@ -5097,6 +5097,20 @@ class MainActivity : Activity() {
                 }
                 .show()
         })
+        content.addView(menuButton("Avatar Motion", "Choose full animations or reduced motion") {
+            val prefs = getSharedPreferences("irai_appearance", Context.MODE_PRIVATE)
+            val reduced = prefs.getBoolean("reduce_avatar_motion", false)
+            AlertDialog.Builder(this)
+                .setTitle("Avatar Motion")
+                .setSingleChoiceItems(arrayOf("Full animations", "Reduced motion"), if (reduced) 1 else 0) { dialog, which ->
+                    val enabled = which == 1
+                    prefs.edit().putBoolean("reduce_avatar_motion", enabled).apply()
+                    IraiAvatarOverlay.setReducedMotion(enabled)
+                    dialog.dismiss()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        })
         content.addView(menuButton("Home Background", "Choose a photo from your phone") {
             chooseHomeBackground()
         })
