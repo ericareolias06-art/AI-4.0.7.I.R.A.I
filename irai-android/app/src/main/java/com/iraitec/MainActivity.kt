@@ -93,6 +93,8 @@ class MainActivity : Activity() {
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private val localInference by lazy { IraiLocalInference(this) }
     private val recentChatMemory by lazy { IraiRecentMemory(this) }
+    private val playUpdates by lazy { IraiPlayUpdates(this) }
+    private var playUpdatesStarted = false
     private var loadedHistoryAccount: String? = null
     private val localAiPrefs by lazy { getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE) }
     private val localModelPickerCode = 2417
@@ -327,6 +329,13 @@ class MainActivity : Activity() {
                 }
             }
         }
+
+        handler.postDelayed({
+            if (!isFinishing && !isDestroyed) {
+                playUpdatesStarted = true
+                playUpdates.check()
+            }
+        }, 4_000L)
 
         if (!handleVerificationIntent(intent)) {
             // Restore a valid existing session first; an old pending-signup marker
@@ -5184,13 +5193,9 @@ class MainActivity : Activity() {
         })
 
         section("Testing & Updates")
-        content.addView(menuButton("Check Google Play for Updates", "Open IraiTec's Play Store listing to install an approved update") {
-            val packageId = packageName
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageId")))
-            } catch (_: Exception) {
-                openWebPage("https://play.google.com/store/apps/details?id=$packageId")
-            }
+        content.addView(menuButton("Check for Updates", "Ask Google Play whether a newer IraiTec version is ready") {
+            playUpdatesStarted = true
+            playUpdates.check(manual = true)
         })
         content.addView(menuButton("Report an Issue", "Choose an email app and describe a bug; no chat history is attached") {
             val version = try {
@@ -5839,6 +5844,7 @@ Device: ${Build.MANUFACTURER} ${Build.MODEL}"""
         speechTts?.shutdown()
         speechTts = null
         localInference.closeAsync()
+        if (playUpdatesStarted) playUpdates.close()
 
         super.onDestroy()
     }
