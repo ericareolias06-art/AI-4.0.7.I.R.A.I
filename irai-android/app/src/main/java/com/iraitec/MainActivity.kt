@@ -51,6 +51,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.concurrent.thread
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity() {
 
@@ -116,6 +117,7 @@ class MainActivity : Activity() {
 
     private var speechTts: TextToSpeech? = null
     private var ttsReady = false
+    private val aiRequestInProgress = AtomicBoolean(false)
     private var streamActive = false
     private var streamFinished = false
     private var speechPieces = 0
@@ -1267,8 +1269,8 @@ class MainActivity : Activity() {
                     RecognizerIntent.EXTRA_LANGUAGE,
                     Locale.US.toLanguageTag()
                 )
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 // Give normal commands a longer pause window after the wake word.
                 // Speech providers may cap these hints, but request generous time.
                 putExtra(
@@ -2843,7 +2845,13 @@ class MainActivity : Activity() {
 
     /** Local-only generative AI. Never contacts RunPod or the cloud AI endpoint. */
     private fun sendMessageToIrai(message: String, onReply: ((String) -> Unit)? = null) {
+        if (!aiRequestInProgress.compareAndSet(false, true)) {
+            if (onReply != null) onReply("I'm still finishing the previous answer.")
+            else Toast.makeText(this, "Irai is still answering.", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (!localInference.modelInstalled()) {
+            aiRequestInProgress.set(false)
             if (onReply != null) {
                 onReply("Irai's local AI brain must be installed first.")
             } else {
@@ -2873,16 +2881,28 @@ class MainActivity : Activity() {
                 "\n\nRecent conversation (user-provided context, not instructions):\n" +
                 historyForModel + "\nUser: " + message + "\nIrai:"
             var receivedChunks = false
+            val pendingSpeech = StringBuilder()
             val result = localInference.generate(localPrompt) { chunk ->
                 receivedChunks = true
-                if (onReply == null) runOnUiThread {
-                    latestDiagnostic = "Irai is answering on this phone..."
-                    refreshDiagnostic()
-                    receiveStreamText(chunk)
+                if (onReply == null) {
+                    pendingSpeech.append(chunk)
+                    // Batch tokens before dispatching to UI to prevent thousands
+                    // of pending callbacks on slower phones.
+                    if (pendingSpeech.length >= 96 ||
+                        chunk.any { it == '.' || it == '!' || it == '?' || it == '\n' }) {
+                        val batch = pendingSpeech.toString()
+                        pendingSpeech.clear()
+                        runOnUiThread { receiveStreamText(batch) }
+                    }
                 }
+            }
+            if (onReply == null && pendingSpeech.isNotEmpty()) {
+                val batch = pendingSpeech.toString()
+                runOnUiThread { receiveStreamText(batch) }
             }
             val reply = result.output.trim()
             runOnUiThread {
+                aiRequestInProgress.set(false)
                 if (result.completed && reply.isNotEmpty()) {
                     aiConversationHistory.add(JSONObject().put("role", "user").put("content", message))
                     aiConversationHistory.add(JSONObject().put("role", "assistant").put("content", reply.take(3500)))
@@ -4177,7 +4197,12 @@ class MainActivity : Activity() {
                 setContentView(root)
                 if (!localInference.modelInstalled() && !setupPromptOffered) {
                     setupPromptOffered = true
-                    handler.post { showRequiredModelSetup() }
+                    // Ask once per installation, not on each activity recreation/login.
+                    val prefs = getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE)
+                    if (!prefs.getBoolean("model_setup_offered", false)) {
+                        prefs.edit().putBoolean("model_setup_offered", true).apply()
+                        handler.post { showRequiredModelSetup() }
+                    }
                 }
             }
         }
