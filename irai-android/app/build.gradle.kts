@@ -26,7 +26,7 @@ android {
         applicationId = "com.Iraitec"
         minSdk = 24
         targetSdk = 36
-        versionCode = 14
+        versionCode = 14 // Google Play upload: new release; do not reuse earlier codes
         versionName = "1.6.6"
     }
 
