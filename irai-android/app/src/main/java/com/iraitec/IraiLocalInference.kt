@@ -1,6 +1,7 @@
 package com.iraitec
 
 import android.content.Context
+import android.app.ActivityManager
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
@@ -32,6 +33,7 @@ class IraiLocalInference(context: Context) {
     private var initializedModelSize = -1L
     private val preferences = appContext.getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE)
     private var loadedOnGpu = false
+    private val lowRamDevice = (appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.isLowRamDevice == true
 
     /** Serialize model replacement with inference so active native readers finish. */
     fun installModel(staging: File): Boolean {
@@ -71,7 +73,7 @@ class IraiLocalInference(context: Context) {
                     engine?.close()
                     engine = null
                     loadedOnGpu = false
-                    val tryGpu = preferences.getBoolean("gpu_model", false) &&
+                    val tryGpu = !lowRamDevice && preferences.getBoolean("gpu_model", false) &&
                         preferences.getBoolean("prefer_gpu", true) &&
                         android.os.Build.VERSION.SDK_INT >= 31
                     if (tryGpu) {
@@ -126,7 +128,13 @@ class IraiLocalInference(context: Context) {
                 Result(output.isNotEmpty(), output.toString())
             } catch (e: Exception) {
                 android.util.Log.w("IRAI_LOCAL", "On-device inference unavailable", e)
-                Result(false, output.toString(), "Local model could not finish")
+                // A failed native session must not poison all future turns.
+                // Drop the engine on its owning worker thread so the next turn retries initialization.
+                try { engine?.close() } catch (_: Exception) {}
+                engine = null
+                initializedModelSize = -1L
+                loadedOnGpu = false
+                Result(false, output.toString(), "Local model could not finish. Try again.")
             }
         }
         return try {
