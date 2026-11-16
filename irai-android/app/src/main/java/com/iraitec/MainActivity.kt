@@ -1273,15 +1273,15 @@ class MainActivity : Activity() {
                 // Speech providers may cap these hints, but request generous time.
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    if (notesMode) 20_000L else 15_000L
+                    if (notesMode) 20_000L else 2_500L
                 )
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    if (notesMode) 15_000L else 10_000L
+                    if (notesMode) 15_000L else 1_400L
                 )
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
-                    if (notesMode) 3_000L else 2_000L
+                    if (notesMode) 3_000L else 500L
                 )
             }
 
@@ -1306,7 +1306,7 @@ class MainActivity : Activity() {
                 restartListeningAfterDelay()
             }
             speechRecognitionTimeout = timeout
-            handler.postDelayed(timeout, 30_000L)
+            handler.postDelayed(timeout, if (notesMode) 35_000L else 20_000L)
         } catch (e: Exception) {
             clearSpeechRecognitionTimeout()
             speechRecognitionSessionId++
@@ -2821,10 +2821,10 @@ class MainActivity : Activity() {
         while (speechRemainder.isNotEmpty()) {
             val mark = speechRemainder.indexOfFirst { it == '.' || it == '!' || it == '?' || it == '\n' }
             val end = when {
-                mark >= 0 && mark < 190 -> mark + 1
-                speechRemainder.length >= 140 -> {
-                    val blank = speechRemainder.lastIndexOf(' ', 140)
-                    if (blank > 40) blank + 1 else 140
+                mark >= 0 && mark < 150 -> mark + 1
+                speechRemainder.length >= 105 -> {
+                    val blank = speechRemainder.lastIndexOf(' ', 105)
+                    if (blank > 35) blank + 1 else 105
                 }
                 complete -> speechRemainder.length
                 else -> break
@@ -5167,6 +5167,47 @@ class MainActivity : Activity() {
                     aiConversationHistory.clear()
                     Toast.makeText(this, "Recent conversations cleared.", Toast.LENGTH_SHORT).show()
                 }.show()
+        })
+
+        section("Testing & Updates")
+        content.addView(menuButton("Check Google Play for Updates", "Open IraiTec's Play Store listing to install an approved update") {
+            val packageId = packageName
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageId")))
+            } catch (_: Exception) {
+                openWebPage("https://play.google.com/store/apps/details?id=$packageId")
+            }
+        })
+        content.addView(menuButton("Report an Issue", "Choose an email app and describe a bug; no chat history is attached") {
+            val version = try {
+                val info = packageManager.getPackageInfo(packageName, 0)
+                "${info.versionName ?: "unknown"} (${if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()})"
+            } catch (_: Exception) { "unknown" }
+            val draft = "What happened?\\n\\nHow can we reproduce it?\\n\\nExpected result?\\n\\n" +
+                "IraiTec version: $version\\nAndroid: ${Build.VERSION.RELEASE}\\nDevice: ${Build.MANUFACTURER} ${Build.MODEL}"
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, "IraiTec Alpha Feedback")
+                putExtra(Intent.EXTRA_TEXT, draft.replace("\\\\n", "\\n"))
+            }
+            try {
+                startActivity(Intent.createChooser(intent, "Send IraiTec feedback"))
+            } catch (_: Exception) {
+                Toast.makeText(this, "No sharing app available.", Toast.LENGTH_LONG).show()
+            }
+        })
+        content.addView(menuButton("Review Recent Conversation", "See the last encrypted chat messages kept on this device") {
+            val messages = try { recentChatMemory.load(currentEmail) } catch (_: Exception) { emptyList() }
+            val preview = if (messages.isEmpty()) "No recent messages saved."
+                else messages.joinToString("\\n\\n") {
+                    val role = if (it.optString("role") == "user") "You" else "Irai"
+                    "$role: ${it.optString("content").take(500)}"
+                }
+            AlertDialog.Builder(this)
+                .setTitle("Recent Chat on This Device")
+                .setMessage(preview)
+                .setPositiveButton("Close", null)
+                .show()
         })
 
         section("Account")
