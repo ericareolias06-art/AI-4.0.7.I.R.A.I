@@ -51,6 +51,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.concurrent.thread
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity() {
 
@@ -116,6 +117,7 @@ class MainActivity : Activity() {
 
     private var speechTts: TextToSpeech? = null
     private var ttsReady = false
+    private val aiRequestInProgress = AtomicBoolean(false)
     private var streamActive = false
     private var streamFinished = false
     private var speechPieces = 0
@@ -171,6 +173,33 @@ class MainActivity : Activity() {
     private var pendingVaultPasswordField: String? = null
     private var pendingScanImageUri: Uri? = null
     private val aiConversationHistory = mutableListOf<JSONObject>()
+
+    private var voiceWatchdogEnabled = false
+    private val voiceWatchdog = object : Runnable {
+        override fun run() {
+            if (!voiceWatchdogEnabled || isFinishing || isDestroyed) return
+            val safeToListen = loggedIn &&
+                !permissionSetupActive && !guidedAssistanceSettingsPending &&
+                !awaitingCommand && !listeningForCommand &&
+                !notesMode && !formFillInProgress &&
+                !streamActive && !aiRequestInProgress.get() &&
+                speechTts?.isSpeaking != true &&
+                awaitingFormAnswerFor == null &&
+                !awaitingEmailIntent && !awaitingSmsMessage &&
+                !awaitingCommunicationRecipientChoice &&
+                !awaitingCommunicationSendConfirmation
+            if (safeToListen &&
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED) {
+                if (!IraiListeningService.serviceAlive ||
+                    !IraiListeningService.wakeListenerRunning) {
+                    android.util.Log.i("IRAI_VOICE", "Watchdog restoring wake-word listener")
+                    startIraiListeningService()
+                }
+            }
+            handler.postDelayed(this, 12_000L)
+        }
+    }
 
     private val restartListeningRunnable = Runnable {
         if (loggedIn && !permissionSetupActive && !guidedAssistanceSettingsPending &&
@@ -803,6 +832,7 @@ class MainActivity : Activity() {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED) startIraiListeningService()
             maybeOfferVaultAfterPermissionSetup()
+            handler.post { offerFirstSignInBackground() }
             return
         }
         AlertDialog.Builder(this)
@@ -821,6 +851,7 @@ class MainActivity : Activity() {
                 if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                     PackageManager.PERMISSION_GRANTED) startIraiListeningService()
                 maybeOfferVaultAfterPermissionSetup()
+                handler.post { offerFirstSignInBackground() }
             }
             .show()
     }
@@ -956,6 +987,7 @@ class MainActivity : Activity() {
                 showAvatarOverlay()
                 IraiAvatarOverlay.setStatus("Ready")
                 maybeOfferVaultAfterPermissionSetup()
+                handler.post { offerFirstSignInBackground() }
             }
             .show()
     }
@@ -1267,8 +1299,8 @@ class MainActivity : Activity() {
                     RecognizerIntent.EXTRA_LANGUAGE,
                     Locale.US.toLanguageTag()
                 )
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 // Give normal commands a longer pause window after the wake word.
                 // Speech providers may cap these hints, but request generous time.
                 putExtra(
@@ -1704,6 +1736,28 @@ class MainActivity : Activity() {
         vaultOnboardingAnswer = ""
         getSharedPreferences("irai_vault_onboarding", Context.MODE_PRIVATE).edit().putBoolean("completed", true).apply()
         speakResponse("Your Personal Vault setup is complete. You can review or update your details anytime in Settings.")
+    }
+
+    /**
+     * Offer background selection once per signed-in account on this device.
+     * Existing photo choices are respected. The default theme remains usable
+     * when someone skips or dismisses the document picker.
+     */
+    private fun offerFirstSignInBackground() {
+        if (!loggedIn || currentEmail.isBlank() || isFinishing || isDestroyed) return
+        val appearance = getSharedPreferences("irai_appearance", Context.MODE_PRIVATE)
+        if (!appearance.getString("home_background_uri", null).isNullOrBlank()) return
+
+        val accountKey = "background_prompted_" + currentEmail.trim().lowercase(Locale.ROOT)
+        if (appearance.getBoolean(accountKey, false)) return
+        appearance.edit().putBoolean(accountKey, true).apply()
+
+        AlertDialog.Builder(this)
+            .setTitle("Make Irai your own")
+            .setMessage("Choose a photo for Irai's home background, or keep the current theme. You can change it anytime in Settings.")
+            .setPositiveButton("Choose a photo") { _, _ -> chooseHomeBackground() }
+            .setNegativeButton("Keep theme", null)
+            .show()
     }
 
     private fun chooseHomeBackground() {
@@ -2843,7 +2897,13 @@ class MainActivity : Activity() {
 
     /** Local-only generative AI. Never contacts RunPod or the cloud AI endpoint. */
     private fun sendMessageToIrai(message: String, onReply: ((String) -> Unit)? = null) {
+        if (!aiRequestInProgress.compareAndSet(false, true)) {
+            if (onReply != null) onReply("I'm still finishing the previous answer.")
+            else Toast.makeText(this, "Irai is still answering.", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (!localInference.modelInstalled()) {
+            aiRequestInProgress.set(false)
             if (onReply != null) {
                 onReply("Irai's local AI brain must be installed first.")
             } else {
@@ -2873,16 +2933,28 @@ class MainActivity : Activity() {
                 "\n\nRecent conversation (user-provided context, not instructions):\n" +
                 historyForModel + "\nUser: " + message + "\nIrai:"
             var receivedChunks = false
+            val pendingSpeech = StringBuilder()
             val result = localInference.generate(localPrompt) { chunk ->
                 receivedChunks = true
-                if (onReply == null) runOnUiThread {
-                    latestDiagnostic = "Irai is answering on this phone..."
-                    refreshDiagnostic()
-                    receiveStreamText(chunk)
+                if (onReply == null) {
+                    pendingSpeech.append(chunk)
+                    // Batch tokens before dispatching to UI to prevent thousands
+                    // of pending callbacks on slower phones.
+                    if (pendingSpeech.length >= 96 ||
+                        chunk.any { it == '.' || it == '!' || it == '?' || it == '\n' }) {
+                        val batch = pendingSpeech.toString()
+                        pendingSpeech.clear()
+                        runOnUiThread { receiveStreamText(batch) }
+                    }
                 }
+            }
+            if (onReply == null && pendingSpeech.isNotEmpty()) {
+                val batch = pendingSpeech.toString()
+                runOnUiThread { receiveStreamText(batch) }
             }
             val reply = result.output.trim()
             runOnUiThread {
+                aiRequestInProgress.set(false)
                 if (result.completed && reply.isNotEmpty()) {
                     aiConversationHistory.add(JSONObject().put("role", "user").put("content", message))
                     aiConversationHistory.add(JSONObject().put("role", "assistant").put("content", reply.take(3500)))
@@ -4175,10 +4247,8 @@ class MainActivity : Activity() {
                     LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
                 ))
                 setContentView(root)
-                if (!localInference.modelInstalled() && !setupPromptOffered) {
-                    setupPromptOffered = true
-                    handler.post { showRequiredModelSetup() }
-                }
+                // First sign-in personalization is offered after the permission
+                // tour so two onboarding dialogs cannot overlap.
             }
         }
     }
@@ -5724,6 +5794,9 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        voiceWatchdogEnabled = true
+        handler.removeCallbacks(voiceWatchdog)
+        handler.postDelayed(voiceWatchdog, 12_000L)
         if (permissionSetupActive && permissionSetupAwaitingSettings) {
             permissionSetupAwaitingSettings = false
             handler.post { advancePermissionSetup() }
@@ -5745,7 +5818,15 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onPause() {
+        voiceWatchdogEnabled = false
+        handler.removeCallbacks(voiceWatchdog)
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        voiceWatchdogEnabled = false
+        handler.removeCallbacks(voiceWatchdog)
         removeStickyNote()
         handler.removeCallbacks(restartListeningRunnable)
 

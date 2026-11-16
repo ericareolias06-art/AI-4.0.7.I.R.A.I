@@ -1,6 +1,7 @@
 package com.iraitec
 
 import android.content.Context
+import android.app.ActivityManager
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
@@ -32,6 +33,12 @@ class IraiLocalInference(context: Context) {
     private var initializedModelSize = -1L
     private val preferences = appContext.getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE)
     private var loadedOnGpu = false
+    private val deviceMemoryGb: Long by lazy {
+        val info = ActivityManager.MemoryInfo()
+        (appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
+            .getMemoryInfo(info)
+        info.totalMem / (1024L * 1024L * 1024L)
+    }
 
     /** Serialize model replacement with inference so active native readers finish. */
     fun installModel(staging: File): Boolean {
@@ -73,6 +80,7 @@ class IraiLocalInference(context: Context) {
                     loadedOnGpu = false
                     val tryGpu = preferences.getBoolean("gpu_model", false) &&
                         preferences.getBoolean("prefer_gpu", true) &&
+                        deviceMemoryGb >= 6L &&
                         android.os.Build.VERSION.SDK_INT >= 31
                     if (tryGpu) {
                         try {
@@ -126,6 +134,11 @@ class IraiLocalInference(context: Context) {
                 Result(output.isNotEmpty(), output.toString())
             } catch (e: Exception) {
                 android.util.Log.w("IRAI_LOCAL", "On-device inference unavailable", e)
+                // A failed native session may leave its engine unusable for the next turn.
+                try { engine?.close() } catch (_: Exception) {}
+                engine = null
+                initializedModelSize = -1L
+                loadedOnGpu = false
                 Result(false, output.toString(), "Local model could not finish")
             }
         }

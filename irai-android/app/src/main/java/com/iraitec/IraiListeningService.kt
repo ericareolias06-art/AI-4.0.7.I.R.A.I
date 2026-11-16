@@ -36,6 +36,10 @@ class IraiListeningService : Service() {
         // Resuming its receiver avoids Android's background service-start limits.
         @Volatile var serviceAlive: Boolean = false
             private set
+
+        // Activity watchdog uses this to notice an idle/stopped detector.
+        @Volatile var wakeListenerRunning: Boolean = false
+            private set
     }
 
     private val running = AtomicBoolean(false)
@@ -179,6 +183,7 @@ class IraiListeningService : Service() {
 
             recorder = localRecorder
             localRecorder.startRecording()
+            wakeListenerRunning = true
 
             updateNotification("Listening for “Irai”")
             reportStatus("LISTENING: Microphone recording at 16 kHz")
@@ -237,6 +242,7 @@ class IraiListeningService : Service() {
             updateNotification("Listening error — reopen Irai Tec")
             reportStatus(message)
         } finally {
+            wakeListenerRunning = false
             running.set(false)
 
             try {
@@ -311,6 +317,7 @@ class IraiListeningService : Service() {
     override fun onDestroy() {
         destroyed = true
         serviceAlive = false
+        wakeListenerRunning = false
         mainHandler.removeCallbacks(retryRunnable)
         running.set(false)
 
