@@ -7,11 +7,13 @@
     <link rel="stylesheet" href="styles.css">
     <script src="script.js" defer></script>
     <script defer>
+      document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.password-visibility').forEach(toggle => {
         toggle.addEventListener('change', () => {
           const field = document.getElementById(toggle.dataset.target);
           if (field) field.type = toggle.checked ? 'text' : 'password';
         });
+      });
       });
     </script>
 </head>
