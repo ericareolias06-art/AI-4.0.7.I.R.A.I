@@ -46,6 +46,20 @@ fi
 BADGING="$("$AAPT" dump badging "$APK" | head -n 1)"
 [[ "$BADGING" == *"versionCode='14'"* ]] || { echo "WRONG APK version: $BADGING"; exit 1; }
 
+# Inspect the actual Google Play .aab manifest using Google's bundletool.
+# Never serve a bundle whose internal version code isn't 14.
+BUNDLETOOL="$TEMP/bundletool.jar"
+BUNDLETOOL_URL="https://github.com/google/bundletool/releases/download/1.18.2/bundletool-all-1.18.2.jar"
+command -v curl >/dev/null || { echo "curl is needed to verify the AAB"; exit 1; }
+curl --fail --location --retry 3 --silent --show-error "$BUNDLETOOL_URL" -o "$BUNDLETOOL"
+AAB_CODE="$(java -jar "$BUNDLETOOL" dump manifest --bundle="$AAB" --xpath='/manifest/@android:versionCode' | tr -d '\r\n[:space:]')"
+AAB_NAME="$(java -jar "$BUNDLETOOL" dump manifest --bundle="$AAB" --xpath='/manifest/@android:versionName' | tr -d '\r\n[:space:]')"
+[[ "$AAB_CODE" == "14" && "$AAB_NAME" == "1.6.6" ]] || {
+  echo "REFUSING to serve wrong Google Play AAB: versionCode=$AAB_CODE, versionName=$AAB_NAME"
+  exit 1
+}
+echo "Google Play AAB INTERNAL manifest verified: versionCode=14, versionName=1.6.6"
+
 # Atomically replace public downloads and drop any old, generic filenames.
 mkdir -p "$DEST"
 rm -f "$DEST"/*.apk "$DEST"/*.aab
@@ -53,8 +67,25 @@ cp "$AAB" "$DEST/IraiTec-1.6.6-v14.aab"
 cp "$APK" "$DEST/IraiTec-1.6.6-v14.apk"
 
 echo
-echo "SUCCESS: Version code 14 verified, from GitHub Actions run $RUN_ID"
+echo "SUCCESS: Google Play AAB itself verified as version code 14, from GitHub Actions run $RUN_ID"
 echo "Download AAB: /IraiTec-1.6.6-v14.aab"
 echo "Download APK: /IraiTec-1.6.6-v14.apk"
 echo "Starting port 8765. Keep the Codespaces port Private."
-exec python3 -m http.server 8765 --bind 0.0.0.0 --directory "$DEST"
+# Disable browser caching and make the requested release download an attachment.
+exec python3 - "$DEST" <<'PY'
+import http.server, os, socketserver, sys
+os.chdir(sys.argv[1])
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        if self.path.endswith((".aab", ".apk")):
+            self.send_header("Content-Disposition", 'attachment; filename="' + os.path.basename(self.path) + '"')
+        super().end_headers()
+class Server(socketserver.TCPServer):
+    allow_reuse_address = True
+with Server(("0.0.0.0", 8765), Handler) as server:
+    print("Serving verified Google Play version 14 at port 8765", flush=True)
+    server.serve_forever()
+PY
