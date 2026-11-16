@@ -2980,18 +2980,6 @@ class MainActivity : Activity() {
                     }
                 }
             }
-            } catch (error: Throwable) {
-                android.util.Log.e("IRAI_AI", "Local AI request failed", error)
-                runOnUiThread {
-                    aiRequestInProgress.set(false)
-                    streamActive = false
-                    streamFinished = true
-                    speechRemainder = ""
-                    val feedback = if (error is OutOfMemoryError) "Not enough memory to run Irai's local AI model." else "Irai's local AI stopped unexpectedly. Please try again."
-                    if (onReply != null) onReply(feedback) else speakResponse(feedback)
-                }
-                return@thread
-            }
             if (onReply == null && pendingSpeech.isNotEmpty()) {
                 val batch = pendingSpeech.toString()
                 runOnUiThread { receiveStreamText(batch) }
@@ -3024,6 +3012,18 @@ class MainActivity : Activity() {
                     streamActive = false
                     speakResponse(result.error ?: "My local AI could not answer. Please check the model in Settings.")
                 }
+            }
+            } catch (error: Throwable) {
+                android.util.Log.e("IRAI_AI", "Local AI request failed", error)
+                runOnUiThread {
+                    aiRequestInProgress.set(false)
+                    streamActive = false
+                    streamFinished = true
+                    speechRemainder = ""
+                    val feedback = if (error is OutOfMemoryError) "Not enough memory to run Irai's local AI model." else "Irai's local AI stopped unexpectedly. Please try again."
+                    if (onReply != null) onReply(feedback) else speakResponse(feedback)
+                }
+                return@thread
             }
         }
     }
