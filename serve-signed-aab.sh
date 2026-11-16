@@ -2,8 +2,8 @@
 set -euo pipefail
 
 REPO="ericareolias06-art/AI-4.0.7.I.R.A.I"
-RUN_ID="43795515742"
-ARTIFACT="IraiTec-1.6.3-signed-AAB"
+RUN_ID="43800136992"
+ARTIFACT="IraiTec-PlayStore-signed-AAB"
 EXPECTED_SHA1="64:F2:1C:73:69:A5:0E:57:E1:D7:13:B0:C4:F7:A1:79:2B:03:A2:29"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="$ROOT/downloads"
@@ -13,12 +13,11 @@ command -v gh >/dev/null || { echo "Install/login to GitHub CLI (gh) first."; ex
 command -v keytool >/dev/null || { echo "Java keytool is required to verify the upload certificate."; exit 1; }
 gh auth status >/dev/null || { echo "Authenticate GitHub CLI with: gh auth login"; exit 1; }
 
+echo "Checking IraiTec 1.6.4 (version code 12) release build..."
+gh run watch "$RUN_ID" --repo "$REPO" --exit-status
 mkdir -p "$DEST"
-if [[ -f "$AAB" ]]; then
-  mv "$AAB" "$AAB.previous"
-fi
-
-echo "Downloading IraiTec signed Google Play AAB from GitHub Actions..."
+rm -f "$AAB"
+echo "Downloading signed IraiTec 1.6.4 AAB..."
 gh run download "$RUN_ID" --repo "$REPO" --name "$ARTIFACT" --dir "$DEST"
 
 if [[ ! -s "$AAB" ]]; then
