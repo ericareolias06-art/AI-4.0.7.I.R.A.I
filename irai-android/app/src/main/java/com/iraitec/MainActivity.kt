@@ -5198,8 +5198,15 @@ class MainActivity : Activity() {
                 val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
                 "${info.versionName ?: "unknown"} ($code)"
             } catch (_: Exception) { "unknown" }
-            val draft = "What happened?\\n\\nHow can we reproduce it?\\n\\nExpected result?\\n\\n" +
-                "IraiTec version: $version\\nAndroid: ${Build.VERSION.RELEASE}\\nDevice: ${Build.MANUFACTURER} ${Build.MODEL}"
+            val draft = """What happened?
+
+How can we reproduce it?
+
+Expected result?
+
+IraiTec version: $version
+Android: ${Build.VERSION.RELEASE}
+Device: ${Build.MANUFACTURER} ${Build.MODEL}"""
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_SUBJECT, "IraiTec Alpha Feedback")
@@ -5214,7 +5221,7 @@ class MainActivity : Activity() {
         content.addView(menuButton("Review Recent Conversation", "See the last encrypted chat messages kept on this device") {
             val messages = try { recentChatMemory.load(currentEmail) } catch (_: Exception) { emptyList() }
             val preview = if (messages.isEmpty()) "No recent messages saved."
-                else messages.joinToString("\\n\\n") {
+                else messages.joinToString("\n\n") {
                     val role = if (it.optString("role") == "user") "You" else "Irai"
                     "$role: ${it.optString("content").take(500)}"
                 }
