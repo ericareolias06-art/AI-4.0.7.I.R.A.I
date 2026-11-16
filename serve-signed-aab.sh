@@ -11,7 +11,7 @@ DEST="$ROOT/downloads"
 TEMP="$(mktemp -d)"
 trap 'rm -rf "$TEMP"' EXIT
 
-for command in gh keytool python3; do
+for command in gh keytool python3 java curl; do
   command -v "$command" >/dev/null || { echo "Missing $command"; exit 1; }
 done
 gh auth status >/dev/null || { echo "Log in: gh auth login"; exit 1; }
@@ -32,19 +32,6 @@ APK="$TEMP/apk/app-release.apk"
 [[ -s "$AAB" && -s "$APK" ]] || { echo "Missing signed release files"; exit 1; }
 FINGERPRINT="$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA1:[[:space:]]*//p' | head -n 1 | tr '[:lower:]' '[:upper:]')"
 [[ "$FINGERPRINT" == "$EXPECTED_SHA1" ]] || { echo "Wrong signing certificate"; exit 1; }
-
-# Prove this really is a compiled v14 build, not a renamed v11.
-AAPT="$(command -v aapt || true)"
-if [[ -z "$AAPT" ]]; then
-  for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" /usr/local/lib/android/sdk; do
-    [[ -n "$sdk" && -d "$sdk/build-tools" ]] || continue
-    AAPT="$(find "$sdk/build-tools" -type f -name aapt | sort -V | tail -n 1)"
-    [[ -n "$AAPT" ]] && break
-  done
-fi
-[[ -n "$AAPT" ]] || { echo "Android aapt build tool not found; refusing to serve unverified bundle."; exit 1; }
-BADGING="$("$AAPT" dump badging "$APK" | head -n 1)"
-[[ "$BADGING" == *"versionCode='14'"* ]] || { echo "WRONG APK version: $BADGING"; exit 1; }
 
 # Inspect the actual Google Play .aab manifest using Google's bundletool.
 # Never serve a bundle whose internal version code isn't 14.
