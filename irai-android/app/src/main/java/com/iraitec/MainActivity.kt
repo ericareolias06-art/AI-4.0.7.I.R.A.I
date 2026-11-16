@@ -174,6 +174,33 @@ class MainActivity : Activity() {
     private var pendingScanImageUri: Uri? = null
     private val aiConversationHistory = mutableListOf<JSONObject>()
 
+    private var voiceWatchdogEnabled = false
+    private val voiceWatchdog = object : Runnable {
+        override fun run() {
+            if (!voiceWatchdogEnabled || isFinishing || isDestroyed) return
+            val safeToListen = loggedIn &&
+                !permissionSetupActive && !guidedAssistanceSettingsPending &&
+                !awaitingCommand && !listeningForCommand &&
+                !notesMode && !formFillInProgress &&
+                !streamActive && !aiRequestInProgress.get() &&
+                speechTts?.isSpeaking != true &&
+                awaitingFormAnswerFor == null &&
+                !awaitingEmailIntent && !awaitingSmsMessage &&
+                !awaitingCommunicationRecipientChoice &&
+                !awaitingCommunicationSendConfirmation
+            if (safeToListen &&
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED) {
+                if (!IraiListeningService.serviceAlive ||
+                    !IraiListeningService.wakeListenerRunning) {
+                    android.util.Log.i("IRAI_VOICE", "Watchdog restoring wake-word listener")
+                    startIraiListeningService()
+                }
+            }
+            handler.postDelayed(this, 12_000L)
+        }
+    }
+
     private val restartListeningRunnable = Runnable {
         if (loggedIn && !permissionSetupActive && !guidedAssistanceSettingsPending &&
             !awaitingCommand && !listeningForCommand) {
@@ -5767,6 +5794,9 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        voiceWatchdogEnabled = true
+        handler.removeCallbacks(voiceWatchdog)
+        handler.postDelayed(voiceWatchdog, 12_000L)
         if (permissionSetupActive && permissionSetupAwaitingSettings) {
             permissionSetupAwaitingSettings = false
             handler.post { advancePermissionSetup() }
@@ -5788,7 +5818,15 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onPause() {
+        voiceWatchdogEnabled = false
+        handler.removeCallbacks(voiceWatchdog)
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        voiceWatchdogEnabled = false
+        handler.removeCallbacks(voiceWatchdog)
         removeStickyNote()
         handler.removeCallbacks(restartListeningRunnable)
 
