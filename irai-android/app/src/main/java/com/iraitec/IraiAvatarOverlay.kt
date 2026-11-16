@@ -73,7 +73,8 @@ object IraiAvatarOverlay {
         appContext = context.applicationContext
         reducedMotion = android.provider.Settings.Global.getFloat(
             context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f
-        ) == 0f
+        ) == 0f || context.getSharedPreferences("irai_appearance", Context.MODE_PRIVATE)
+            .getBoolean("reduce_avatar_motion", false)
         windowManager = appContext!!.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         if (avatarWindow != null) return
         removeMinimized()
@@ -182,6 +183,16 @@ object IraiAvatarOverlay {
     private fun pill(density: Float) = GradientDrawable().apply {
         setColor(Color.argb(220, 74, 57, 112))
         cornerRadius = 18 * density
+    }
+
+    /** Respect a user's motion preference immediately without recreating the overlay. */
+    fun setReducedMotion(enabled: Boolean) {
+        val view = avatarImage ?: return
+        val context = appContext ?: return
+        reducedMotion = enabled || android.provider.Settings.Global.getFloat(
+            context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f
+        ) == 0f
+        view.post { switchToMood(currentMood.ifBlank { "idle" }) }
     }
 
     /** Change animation only when the avatar's activity actually changes. */
