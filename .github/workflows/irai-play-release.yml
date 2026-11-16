@@ -1,0 +1,75 @@
+name: IraiTec Signed Google Play AAB
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Irai hybrid AI branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/irai-hybrid-ai
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Decode and check Google Play upload key
+        id: signing
+        shell: bash
+        env:
+          IRAI_UPLOAD_KEYSTORE_BASE64: ${{ secrets.IRAI_UPLOAD_KEYSTORE_BASE64 }}
+          IRAI_UPLOAD_KEY_ALIAS: ${{ secrets.IRAI_UPLOAD_KEY_ALIAS }}
+          IRAI_UPLOAD_STORE_PASSWORD: ${{ secrets.IRAI_UPLOAD_STORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${IRAI_UPLOAD_KEYSTORE_BASE64}" || -z "${IRAI_UPLOAD_KEY_ALIAS}" || -z "${IRAI_UPLOAD_STORE_PASSWORD}" ]]; then
+            echo "::error::Missing one or more Irai upload signing secrets"
+            exit 1
+          fi
+          KEYSTORE="$RUNNER_TEMP/irai-upload.jks"
+          printf '%s' "$IRAI_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          EXPECTED="64:F2:1C:73:69:A5:0E:57:E1:D7:13:B0:C4:F7:A1:79:2B:03:A2:29"
+          FINGERPRINT="$(keytool -list -v -keystore "$KEYSTORE" -alias "$IRAI_UPLOAD_KEY_ALIAS" -storepass:env IRAI_UPLOAD_STORE_PASSWORD | sed -n 's/^[[:space:]]*SHA1: //p' | head -1)"
+          if [[ "$FINGERPRINT" != "$EXPECTED" ]]; then
+            echo "::error::GitHub upload keystore SHA-1 does not match Google Play's expected certificate"
+            exit 1
+          fi
+          echo "Expected Google Play upload key confirmed."
+          echo "keystore=$KEYSTORE" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed release AAB
+        working-directory: irai-android
+        shell: bash
+        env:
+          ORG_GRADLE_PROJECT_IRAI_UPLOAD_STORE_FILE: ${{ steps.signing.outputs.keystore }}
+          ORG_GRADLE_PROJECT_IRAI_UPLOAD_STORE_PASSWORD: ${{ secrets.IRAI_UPLOAD_STORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_IRAI_UPLOAD_KEY_ALIAS: ${{ secrets.IRAI_UPLOAD_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_IRAI_UPLOAD_KEY_PASSWORD: ${{ secrets.IRAI_UPLOAD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$ORG_GRADLE_PROJECT_IRAI_UPLOAD_KEY_PASSWORD" || { echo "::error::Missing upload key password"; exit 1; }
+          chmod +x gradlew
+          ./gradlew --no-daemon bundleRelease
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          test -s "$AAB"
+          jarsigner -verify "$AAB"
+
+      - name: Upload Google Play AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: IraiTec-1.6.3-signed-AAB
+          path: irai-android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 30
