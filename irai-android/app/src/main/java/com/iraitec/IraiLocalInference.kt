@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.collect
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ExecutionException
 
 /**
  * Optional on-device LiteRT-LM inference. Does not change Irai's existing
@@ -71,7 +73,7 @@ class IraiLocalInference(context: Context) {
 
     fun generate(prompt: String, onText: (String) -> Unit): Result {
         if (!modelInstalled()) return Result(false, "", "No on-device model installed")
-        val future: Future<Result> = executor.submit<Result> {
+        val future: Future<Result> = try { executor.submit<Result> {
             val output = StringBuilder()
             try {
                 if (engine == null || initializedModelSize != modelFile.length()) {
@@ -132,19 +134,22 @@ class IraiLocalInference(context: Context) {
                     chat.close()
                 }
                 Result(output.isNotEmpty(), output.toString())
-            } catch (e: Exception) {
-                android.util.Log.w("IRAI_LOCAL", "On-device inference unavailable", e)
+            } catch (e: Throwable) {
+                android.util.Log.e("IRAI_LOCAL", "On-device inference failed", e)
                 // A failed native session may leave its engine unusable for the next turn.
-                try { engine?.close() } catch (_: Exception) {}
+                try { engine?.close() } catch (_: Throwable) {}
                 engine = null
                 initializedModelSize = -1L
                 loadedOnGpu = false
-                Result(false, output.toString(), "Local model could not finish")
+                Result(false, output.toString(), if (e is OutOfMemoryError) "Not enough memory to run the local AI model on this device." else "Local model could not finish")
             }
+        } } catch (e: RejectedExecutionException) {
+            return Result(false, "", "Local AI is shutting down. Please reopen Irai.")
         }
         return try {
             future.get()
         } catch (e: Exception) {
+            android.util.Log.e("IRAI_LOCAL", "Local AI worker failed", e)
             Result(false, "", "Local model worker unavailable")
         }
     }
