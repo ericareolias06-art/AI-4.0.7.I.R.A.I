@@ -26,8 +26,8 @@ android {
         applicationId = "com.Iraitec"
         minSdk = 24
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.6.4"
+        versionCode = 13
+        versionName = "1.6.5"
     }
 
     signingConfigs {
