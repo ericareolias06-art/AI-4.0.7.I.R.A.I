@@ -1,38 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Serve ONLY the verified Irai 1.6.5 / Play versionCode 13 signed release.
 REPO="ericareolias06-art/AI-4.0.7.I.R.A.I"
-RUN_ID="43800136992"
-ARTIFACT="IraiTec-PlayStore-signed-AAB"
+RUN_ID="43808058001"
+EXPECTED_COMMIT="9ecb0a4ddc61d48c5f6493040252b32ad17816e9"
 EXPECTED_SHA1="64:F2:1C:73:69:A5:0E:57:E1:D7:13:B0:C4:F7:A1:79:2B:03:A2:29"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="$ROOT/downloads"
-AAB="$DEST/app-release.aab"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 
-command -v gh >/dev/null || { echo "Install/login to GitHub CLI (gh) first."; exit 1; }
-command -v keytool >/dev/null || { echo "Java keytool is required to verify the upload certificate."; exit 1; }
-gh auth status >/dev/null || { echo "Authenticate GitHub CLI with: gh auth login"; exit 1; }
+command -v gh >/dev/null || { echo "GitHub CLI (gh) is required."; exit 1; }
+command -v keytool >/dev/null || { echo "Java keytool is required."; exit 1; }
+gh auth status >/dev/null || { echo "Authenticate GitHub CLI with gh auth login."; exit 1; }
 
-echo "Checking IraiTec 1.6.4 (version code 12) release build..."
-gh run watch "$RUN_ID" --repo "$REPO" --exit-status
-mkdir -p "$DEST"
-rm -f "$AAB"
-echo "Downloading signed IraiTec 1.6.4 AAB..."
-gh run download "$RUN_ID" --repo "$REPO" --name "$ARTIFACT" --dir "$DEST"
+echo "Verifying signed IraiTec 1.6.5 (version code 13) release..."
+RUN_SHA="$(gh run view "$RUN_ID" --repo "$REPO" --json headSha --jq '.headSha')"
+RUN_STATUS="$(gh run view "$RUN_ID" --repo "$REPO" --json conclusion --jq '.conclusion')"
+[[ "$RUN_SHA" == "$EXPECTED_COMMIT" ]] || { echo "Unexpected build commit; refusing outdated release."; exit 1; }
+[[ "$RUN_STATUS" == "success" ]] || { echo "Release build is not successful: $RUN_STATUS"; exit 1; }
 
-if [[ ! -s "$AAB" ]]; then
-  echo "AAB was not found at $AAB"
-  exit 1
-fi
+mkdir -p "$TMP/aab" "$TMP/apk" "$DEST"
+gh run download "$RUN_ID" --repo "$REPO" --name IraiTec-PlayStore-signed-AAB --dir "$TMP/aab"
+gh run download "$RUN_ID" --repo "$REPO" --name IraiTec-signed-release-APK --dir "$TMP/apk"
+AAB="$TMP/aab/app-release.aab"
+APK="$TMP/apk/app-release.apk"
+[[ -s "$AAB" && -s "$APK" ]] || { echo "Signed release files missing."; exit 1; }
 
 FINGERPRINT="$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA1:[[:space:]]*//p' | head -n 1 | tr '[:lower:]' '[:upper:]')"
-if [[ "$FINGERPRINT" != "$EXPECTED_SHA1" ]]; then
-  echo "ERROR: Downloaded AAB does not match Google Play expected upload SHA1."
-  exit 1
-fi
+[[ "$FINGERPRINT" == "$EXPECTED_SHA1" ]] || { echo "AAB signing certificate mismatch."; exit 1; }
 
-echo "Verified AAB signing certificate matches Google Play."
-echo "IraiTec download ready on port 8765:"
-echo "  /app-release.aab"
-echo "Codespaces: set port 8765 visibility to Private unless intentionally sharing."
+cp "$AAB" "$DEST/IraiTec-1.6.5-v13.aab"
+cp "$APK" "$DEST/IraiTec-1.6.5-v13.apk"
+echo "Verified release files ready on port 8765:"
+echo "  /IraiTec-1.6.5-v13.aab  (Google Play)"
+echo "  /IraiTec-1.6.5-v13.apk  (direct Android install)"
+echo "Open Codespaces PORTS and keep port 8765 Private unless intentionally sharing."
 exec python3 -m http.server 8765 --bind 0.0.0.0 --directory "$DEST"
