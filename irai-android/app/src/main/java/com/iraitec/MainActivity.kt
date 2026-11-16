@@ -93,6 +93,8 @@ class MainActivity : Activity() {
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private val localInference by lazy { IraiLocalInference(this) }
     private val recentChatMemory by lazy { IraiRecentMemory(this) }
+    private val playUpdates by lazy { IraiPlayUpdates(this) }
+    private var playUpdatesStarted = false
     private var loadedHistoryAccount: String? = null
     private val localAiPrefs by lazy { getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE) }
     private val localModelPickerCode = 2417
@@ -327,6 +329,13 @@ class MainActivity : Activity() {
                 }
             }
         }
+
+        handler.postDelayed({
+            if (!isFinishing && !isDestroyed) {
+                playUpdatesStarted = true
+                playUpdates.check()
+            }
+        }, 4_000L)
 
         if (!handleVerificationIntent(intent)) {
             // Restore a valid existing session first; an old pending-signup marker
@@ -1273,15 +1282,15 @@ class MainActivity : Activity() {
                 // Speech providers may cap these hints, but request generous time.
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    if (notesMode) 20_000L else 15_000L
+                    if (notesMode) 20_000L else 2_500L
                 )
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    if (notesMode) 15_000L else 10_000L
+                    if (notesMode) 15_000L else 1_400L
                 )
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
-                    if (notesMode) 3_000L else 2_000L
+                    if (notesMode) 3_000L else 500L
                 )
             }
 
@@ -1306,7 +1315,7 @@ class MainActivity : Activity() {
                 restartListeningAfterDelay()
             }
             speechRecognitionTimeout = timeout
-            handler.postDelayed(timeout, 30_000L)
+            handler.postDelayed(timeout, if (notesMode) 35_000L else 20_000L)
         } catch (e: Exception) {
             clearSpeechRecognitionTimeout()
             speechRecognitionSessionId++
@@ -2821,10 +2830,10 @@ class MainActivity : Activity() {
         while (speechRemainder.isNotEmpty()) {
             val mark = speechRemainder.indexOfFirst { it == '.' || it == '!' || it == '?' || it == '\n' }
             val end = when {
-                mark >= 0 && mark < 190 -> mark + 1
-                speechRemainder.length >= 140 -> {
-                    val blank = speechRemainder.lastIndexOf(' ', 140)
-                    if (blank > 40) blank + 1 else 140
+                mark >= 0 && mark < 150 -> mark + 1
+                speechRemainder.length >= 105 -> {
+                    val blank = speechRemainder.lastIndexOf(' ', 105)
+                    if (blank > 35) blank + 1 else 105
                 }
                 complete -> speechRemainder.length
                 else -> break
@@ -5097,6 +5106,20 @@ class MainActivity : Activity() {
                 }
                 .show()
         })
+        content.addView(menuButton("Avatar Motion", "Choose full animations or reduced motion") {
+            val prefs = getSharedPreferences("irai_appearance", Context.MODE_PRIVATE)
+            val reduced = prefs.getBoolean("reduce_avatar_motion", false)
+            AlertDialog.Builder(this)
+                .setTitle("Avatar Motion")
+                .setSingleChoiceItems(arrayOf("Full animations", "Reduced motion"), if (reduced) 1 else 0) { dialog, which ->
+                    val enabled = which == 1
+                    prefs.edit().putBoolean("reduce_avatar_motion", enabled).apply()
+                    IraiAvatarOverlay.setReducedMotion(enabled)
+                    dialog.dismiss()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        })
         content.addView(menuButton("Home Background", "Choose a photo from your phone") {
             chooseHomeBackground()
         })
@@ -5167,6 +5190,51 @@ class MainActivity : Activity() {
                     aiConversationHistory.clear()
                     Toast.makeText(this, "Recent conversations cleared.", Toast.LENGTH_SHORT).show()
                 }.show()
+        })
+
+        section("Testing & Updates")
+        content.addView(menuButton("Check for Updates", "Ask Google Play whether a newer IraiTec version is ready") {
+            playUpdatesStarted = true
+            playUpdates.check(manual = true)
+        })
+        content.addView(menuButton("Report an Issue", "Choose an email app and describe a bug; no chat history is attached") {
+            val version = try {
+                val info = packageManager.getPackageInfo(packageName, 0)
+                val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+                "${info.versionName ?: "unknown"} ($code)"
+            } catch (_: Exception) { "unknown" }
+            val draft = """What happened?
+
+How can we reproduce it?
+
+Expected result?
+
+IraiTec version: $version
+Android: ${Build.VERSION.RELEASE}
+Device: ${Build.MANUFACTURER} ${Build.MODEL}"""
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, "IraiTec Alpha Feedback")
+                putExtra(Intent.EXTRA_TEXT, draft)
+            }
+            try {
+                startActivity(Intent.createChooser(intent, "Send IraiTec feedback"))
+            } catch (_: Exception) {
+                Toast.makeText(this, "No sharing app available.", Toast.LENGTH_LONG).show()
+            }
+        })
+        content.addView(menuButton("Review Recent Conversation", "See the last encrypted chat messages kept on this device") {
+            val messages = try { recentChatMemory.load(currentEmail) } catch (_: Exception) { emptyList() }
+            val preview = if (messages.isEmpty()) "No recent messages saved."
+                else messages.joinToString("\n\n") {
+                    val role = if (it.optString("role") == "user") "You" else "Irai"
+                    "$role: ${it.optString("content").take(500)}"
+                }
+            AlertDialog.Builder(this)
+                .setTitle("Recent Chat on This Device")
+                .setMessage(preview)
+                .setPositiveButton("Close", null)
+                .show()
         })
 
         section("Account")
@@ -5776,6 +5844,7 @@ class MainActivity : Activity() {
         speechTts?.shutdown()
         speechTts = null
         localInference.closeAsync()
+        if (playUpdatesStarted) playUpdates.close()
 
         super.onDestroy()
     }
