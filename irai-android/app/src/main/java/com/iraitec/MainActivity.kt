@@ -620,15 +620,42 @@ class MainActivity : Activity() {
         content.addView(emailInput)
 
         passwordInput = field("Password").apply {
-            inputType = 129
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         content.addView(passwordInput)
+        val showPassword = CheckBox(this).apply {
+            text = "Show password"
+            setTextColor(white)
+            setOnCheckedChangeListener { _, checked ->
+                val cursor = passwordInput.selectionStart
+                passwordInput.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    (if (checked) android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                     else android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD)
+                passwordInput.setSelection(cursor.coerceIn(0, passwordInput.text.length))
+            }
+        }
+        content.addView(showPassword)
 
         confirmInput = field("Confirm password").apply {
-            inputType = 129
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             visibility = View.GONE
         }
         content.addView(confirmInput)
+        val showConfirmPassword = CheckBox(this).apply {
+            text = "Show confirm password"
+            setTextColor(white)
+            visibility = View.GONE
+            setOnCheckedChangeListener { _, checked ->
+                val cursor = confirmInput.selectionStart
+                confirmInput.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    (if (checked) android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                     else android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD)
+                confirmInput.setSelection(cursor.coerceIn(0, confirmInput.text.length))
+            }
+        }
+        content.addView(showConfirmPassword)
 
         val action = Button(this).apply {
             text = "Log In"
@@ -652,6 +679,10 @@ class MainActivity : Activity() {
 
                 confirmInput.visibility =
                     if (registering) View.VISIBLE else View.GONE
+                showConfirmPassword.visibility =
+                    if (registering) View.VISIBLE else View.GONE
+                showPassword.isChecked = false
+                showConfirmPassword.isChecked = false
 
                 message.text = ""
                 text = if (registering) {
