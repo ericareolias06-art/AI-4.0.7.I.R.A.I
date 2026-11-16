@@ -2,6 +2,11 @@ name: IraiTec Signed Google Play AAB
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/irai-play-release.yml
 
 permissions:
   contents: read
