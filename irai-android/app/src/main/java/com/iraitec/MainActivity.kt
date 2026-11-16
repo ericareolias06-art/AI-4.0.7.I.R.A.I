@@ -805,6 +805,7 @@ class MainActivity : Activity() {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED) startIraiListeningService()
             maybeOfferVaultAfterPermissionSetup()
+            handler.post { offerFirstSignInBackground() }
             return
         }
         AlertDialog.Builder(this)
@@ -823,6 +824,7 @@ class MainActivity : Activity() {
                 if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                     PackageManager.PERMISSION_GRANTED) startIraiListeningService()
                 maybeOfferVaultAfterPermissionSetup()
+                handler.post { offerFirstSignInBackground() }
             }
             .show()
     }
@@ -958,6 +960,7 @@ class MainActivity : Activity() {
                 showAvatarOverlay()
                 IraiAvatarOverlay.setStatus("Ready")
                 maybeOfferVaultAfterPermissionSetup()
+                handler.post { offerFirstSignInBackground() }
             }
             .show()
     }
@@ -4217,9 +4220,8 @@ class MainActivity : Activity() {
                     LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
                 ))
                 setContentView(root)
-                // Personalization comes first. The AI model can still be installed
-                // explicitly in Settings or when the user first requests AI chat.
-                offerFirstSignInBackground()
+                // First sign-in personalization is offered after the permission
+                // tour so two onboarding dialogs cannot overlap.
             }
         }
     }
