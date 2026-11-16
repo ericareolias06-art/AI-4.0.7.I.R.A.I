@@ -1708,6 +1708,28 @@ class MainActivity : Activity() {
         speakResponse("Your Personal Vault setup is complete. You can review or update your details anytime in Settings.")
     }
 
+    /**
+     * Offer background selection once per signed-in account on this device.
+     * Existing photo choices are respected. The default theme remains usable
+     * when someone skips or dismisses the document picker.
+     */
+    private fun offerFirstSignInBackground() {
+        if (!loggedIn || currentEmail.isBlank() || isFinishing || isDestroyed) return
+        val appearance = getSharedPreferences("irai_appearance", Context.MODE_PRIVATE)
+        if (!appearance.getString("home_background_uri", null).isNullOrBlank()) return
+
+        val accountKey = "background_prompted_" + currentEmail.trim().lowercase(Locale.ROOT)
+        if (appearance.getBoolean(accountKey, false)) return
+        appearance.edit().putBoolean(accountKey, true).apply()
+
+        AlertDialog.Builder(this)
+            .setTitle("Make Irai your own")
+            .setMessage("Choose a photo for Irai's home background, or keep the current theme. You can change it anytime in Settings.")
+            .setPositiveButton("Choose a photo") { _, _ -> chooseHomeBackground() }
+            .setNegativeButton("Keep theme", null)
+            .show()
+    }
+
     private fun chooseHomeBackground() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -4195,15 +4217,9 @@ class MainActivity : Activity() {
                     LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
                 ))
                 setContentView(root)
-                if (!localInference.modelInstalled() && !setupPromptOffered) {
-                    setupPromptOffered = true
-                    // Ask once per installation, not on each activity recreation/login.
-                    val prefs = getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE)
-                    if (!prefs.getBoolean("model_setup_offered", false)) {
-                        prefs.edit().putBoolean("model_setup_offered", true).apply()
-                        handler.post { showRequiredModelSetup() }
-                    }
-                }
+                // Personalization comes first. The AI model can still be installed
+                // explicitly in Settings or when the user first requests AI chat.
+                offerFirstSignInBackground()
             }
         }
     }
