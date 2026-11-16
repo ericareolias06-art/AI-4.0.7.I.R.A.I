@@ -5181,14 +5181,15 @@ class MainActivity : Activity() {
         content.addView(menuButton("Report an Issue", "Choose an email app and describe a bug; no chat history is attached") {
             val version = try {
                 val info = packageManager.getPackageInfo(packageName, 0)
-                "${info.versionName ?: "unknown"} (${if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()})"
+                val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+                "${info.versionName ?: "unknown"} ($code)"
             } catch (_: Exception) { "unknown" }
             val draft = "What happened?\\n\\nHow can we reproduce it?\\n\\nExpected result?\\n\\n" +
                 "IraiTec version: $version\\nAndroid: ${Build.VERSION.RELEASE}\\nDevice: ${Build.MANUFACTURER} ${Build.MODEL}"
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_SUBJECT, "IraiTec Alpha Feedback")
-                putExtra(Intent.EXTRA_TEXT, draft.replace("\\\\n", "\\n"))
+                putExtra(Intent.EXTRA_TEXT, draft)
             }
             try {
                 startActivity(Intent.createChooser(intent, "Send IraiTec feedback"))
