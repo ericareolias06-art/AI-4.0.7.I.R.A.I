@@ -30,7 +30,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0'
+          SDKMANAGER="$(find /usr/local/lib/android/sdk/cmdline-tools -path '*/bin/sdkmanager' | sort -V | tail -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
 
       - name: Decode and check Google Play upload key
         id: signing
