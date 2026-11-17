@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Pinned to successful signed Irai Tec v1.6.7 (versionCode 15) build.
+# Serve only the verified signed Irai Tec v1.6.8 (versionCode 16) build.
 REPO="ericareolias06-art/AI-4.0.7.I.R.A.I"
-RUN_ID="43965112467"
-EXPECTED_SHA="2aad4c8d6ef0a2837c6aca3954a4ad183e9a2553"
+EXPECTED_SHA="c67452bd953b4a4f73c585320ad67cbc05bc2c24"
+RUN_ID="$(gh run list --repo "$REPO" --workflow irai-signed-release.yml --branch feature/irai-hybrid-ai --limit 50 --json databaseId,headSha,conclusion --jq '.[] | select(.headSha == "c67452bd953b4a4f73c585320ad67cbc05bc2c24" and .conclusion == "success") | .databaseId' | head -n 1)"
+[[ -n "$RUN_ID" ]] || { echo "No successful signed version 16 build found yet. Check GitHub Actions."; exit 1; }
 EXPECTED_SHA1="64:F2:1C:73:69:A5:0E:57:E1:D7:13:B0:C4:F7:A1:79:2B:03:A2:29"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="$ROOT/downloads"
@@ -34,29 +35,29 @@ FINGERPRINT="$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA1:
 [[ "$FINGERPRINT" == "$EXPECTED_SHA1" ]] || { echo "Wrong signing certificate"; exit 1; }
 
 # Inspect the actual Google Play .aab manifest using Google's bundletool.
-# Never serve a bundle whose internal version code isn't 15.
+# Never serve a bundle whose internal version code isn't 16.
 BUNDLETOOL="$TEMP/bundletool.jar"
 BUNDLETOOL_URL="https://github.com/google/bundletool/releases/download/1.18.2/bundletool-all-1.18.2.jar"
 command -v curl >/dev/null || { echo "curl is needed to verify the AAB"; exit 1; }
 curl --fail --location --retry 3 --silent --show-error "$BUNDLETOOL_URL" -o "$BUNDLETOOL"
 AAB_CODE="$(java -jar "$BUNDLETOOL" dump manifest --bundle="$AAB" --xpath='/manifest/@android:versionCode' | tr -d '\r\n[:space:]')"
 AAB_NAME="$(java -jar "$BUNDLETOOL" dump manifest --bundle="$AAB" --xpath='/manifest/@android:versionName' | tr -d '\r\n[:space:]')"
-[[ "$AAB_CODE" == "15" && "$AAB_NAME" == "1.6.7" ]] || {
+[[ "$AAB_CODE" == "16" && "$AAB_NAME" == "1.6.8" ]] || {
   echo "REFUSING to serve wrong Google Play AAB: versionCode=$AAB_CODE, versionName=$AAB_NAME"
   exit 1
 }
-echo "Google Play AAB INTERNAL manifest verified: versionCode=15, versionName=1.6.7"
+echo "Google Play AAB INTERNAL manifest verified: versionCode=16, versionName=1.6.8"
 
 # Replace public downloads and remove old release files.
 mkdir -p "$DEST"
 rm -f "$DEST"/*.apk "$DEST"/*.aab
-cp "$AAB" "$DEST/IraiTec-1.6.7-v15.aab"
-cp "$APK" "$DEST/IraiTec-1.6.7-v15.apk"
+cp "$AAB" "$DEST/IraiTec-1.6.8-v16.aab"
+cp "$APK" "$DEST/IraiTec-1.6.8-v16.apk"
 
 echo
-echo "SUCCESS: Google Play AAB itself verified as version code 15, from GitHub Actions run $RUN_ID"
-echo "Download AAB: /IraiTec-1.6.7-v15.aab"
-echo "Download APK: /IraiTec-1.6.7-v15.apk"
+echo "SUCCESS: Google Play AAB itself verified as version code 16, from GitHub Actions run $RUN_ID"
+echo "Download AAB: /IraiTec-1.6.8-v16.aab"
+echo "Download APK: /IraiTec-1.6.8-v16.apk"
 echo "Starting port 8765. Keep the Codespaces port Private."
 # Disable browser caching and make the requested release download an attachment.
 exec python3 - "$DEST" <<'PY'
@@ -73,6 +74,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 class Server(socketserver.TCPServer):
     allow_reuse_address = True
 with Server(("0.0.0.0", 8765), Handler) as server:
-    print("Serving verified Google Play version 15 at port 8765", flush=True)
+    print("Serving verified Google Play version 16 at port 8765", flush=True)
     server.serve_forever()
 PY
