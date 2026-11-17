@@ -26,8 +26,8 @@ android {
         applicationId = "com.Iraitec"
         minSdk = 24
         targetSdk = 36
-        versionCode = 15 // Next Google Play upload; do not reuse version codes
-        versionName = "1.6.7"
+        versionCode = 16 // Next Google Play upload; do not reuse version codes
+        versionName = "1.6.8"
     }
 
     signingConfigs {
