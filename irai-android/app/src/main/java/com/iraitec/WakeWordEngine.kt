@@ -48,8 +48,9 @@ internal class WakeWordEngine(
             modelConfig = modelConfig,
             maxActivePaths = 4,
             keywordsFile = "$MODEL_DIR/keywords.txt",
-            keywordsScore = 1.5f,
-            keywordsThreshold = 0.20f,
+            // Accommodate quieter or higher-pitched voices; tune against false activations.
+            keywordsScore = 1.25f,
+            keywordsThreshold = 0.16f,
             numTrailingBlanks = 2
         )
 

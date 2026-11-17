@@ -2,7 +2,7 @@ name: Build Irai Tec Android APK and AAB
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/irai-hybrid-ai]
     paths:
       - "irai-android/**"
       - ".github/workflows/android-debug-apk.yml"
