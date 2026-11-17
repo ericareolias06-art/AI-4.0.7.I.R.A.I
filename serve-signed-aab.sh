@@ -47,14 +47,14 @@ AAB_NAME="$(java -jar "$BUNDLETOOL" dump manifest --bundle="$AAB" --xpath='/mani
 }
 echo "Google Play AAB INTERNAL manifest verified: versionCode=15, versionName=1.6.7"
 
-# Atomically replace public downloads and drop any old, generic filenames.
+# Replace public downloads and remove old release files.
 mkdir -p "$DEST"
 rm -f "$DEST"/*.apk "$DEST"/*.aab
 cp "$AAB" "$DEST/IraiTec-1.6.7-v15.aab"
 cp "$APK" "$DEST/IraiTec-1.6.7-v15.apk"
 
 echo
-echo "SUCCESS: Google Play AAB itself verified as version code 14, from GitHub Actions run $RUN_ID"
+echo "SUCCESS: Google Play AAB itself verified as version code 15, from GitHub Actions run $RUN_ID"
 echo "Download AAB: /IraiTec-1.6.7-v15.aab"
 echo "Download APK: /IraiTec-1.6.7-v15.apk"
 echo "Starting port 8765. Keep the Codespaces port Private."
