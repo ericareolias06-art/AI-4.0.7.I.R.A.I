@@ -128,11 +128,17 @@ class IraiListeningService : Service() {
             registerReceiver(resumeReceiver, resumeFilter)
         }
 
-        startForeground(
-            NOTIFICATION_ID,
-            buildNotification("Preparing wake-word detector…")
-        )
-        reportStatus("Service started; preparing detector")
+        try {
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification("Preparing wake-word detector…")
+            )
+            reportStatus("Service started; preparing detector")
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "Foreground service promotion rejected", e)
+            reportStatus("ERROR: Open Irai Tec to enable microphone listening")
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(
