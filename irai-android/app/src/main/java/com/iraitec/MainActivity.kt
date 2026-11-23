@@ -1212,7 +1212,25 @@ class MainActivity : Activity() {
                 listeningForCommand = false
                 latestDiagnostic = "Offline speech model missing. Install the English ASR model."
                 refreshDiagnostic()
-                restartListeningAfterDelay()
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("Install offline English speech")
+                    .setMessage("Irai needs a one-time English speech model download to recognize commands entirely on your phone. The download uses storage and internet once; speech stays on-device afterward. Continue?")
+                    .setPositiveButton("Download") { _, _ ->
+                        Thread {
+                            val installed = IraiSpeechModelInstaller(applicationContext).install()
+                            runOnUiThread {
+                                latestDiagnostic = if (installed) {
+                                    "Offline speech model installed. Say Irai to begin."
+                                } else {
+                                    "Speech model download failed. Please retry when connected."
+                                }
+                                refreshDiagnostic()
+                                restartListeningAfterDelay()
+                            }
+                        }.start()
+                    }
+                    .setNegativeButton("Not now") { _, _ -> restartListeningAfterDelay() }
+                    .show()
                 return
             }
             Thread {
