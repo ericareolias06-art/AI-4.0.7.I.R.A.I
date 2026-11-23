@@ -42,6 +42,11 @@ APK_NAME="$(echo "$APK_BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")"
 APK_CERT="$("$APKSIGNER" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
 AAB_CERT="$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
 [[ -n "$APK_CERT" && "$APK_CERT" == "$AAB_CERT" ]] || { echo "STOP: APK/AAB signing certificates do not match"; exit 1; }
+EXPECTED_UPLOAD_SHA1="64:F2:1C:73:69:A5:0E:57:E1:D7:13:B0:C4:F7:A1:79:2B:03:A2:29"
+ACTUAL_UPLOAD_SHA1="$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA1:[[:space:]]*//p' | head -1 | tr '[:lower:]' '[:upper:]')"
+[[ "$ACTUAL_UPLOAD_SHA1" == "$EXPECTED_UPLOAD_SHA1" ]] || {
+  echo "STOP: signing key does not match Irai's previously verified upload certificate"; exit 1;
+}
 # bundletool checks the *internal* AAB manifest, not the filename.
 BUNDLETOOL="$ROOT/.build-tools/bundletool.jar"
 mkdir -p "$(dirname "$BUNDLETOOL")"
