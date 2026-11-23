@@ -24,6 +24,8 @@ class IraiModelDownloader(private val context: Context, private val local: IraiL
         private const val MAX_BYTES = 1_200_000_000L
     }
 
+    private val capabilities = IraiDeviceCapabilities(context)
+
     @Volatile var cancelled: Boolean = false
     @Volatile var running: Boolean = false
         private set
@@ -37,11 +39,8 @@ class IraiModelDownloader(private val context: Context, private val local: IraiL
         cancelled = false
         val partial = File(context.filesDir, "irai-model-download.part")
         try {
-            val free = StatFs(context.filesDir.absolutePath).availableBytes
-            val remainingEstimate = (APPROX_BYTES - partial.length()).coerceAtLeast(0L)
-            if (free < remainingEstimate + 150_000_000L) {
-                return Result(false, "Free more phone storage and retry. About 1 GB total is recommended.")
-            }
+            val preflight = capabilities.checkBeforeDownload(APPROX_BYTES, partial.length())
+            if (!preflight.supported) return Result(false, preflight.reason ?: "Device cannot install this AI model.")
             var offset = if (partial.exists()) partial.length() else 0L
             if (offset > MAX_BYTES) {
                 partial.delete()
