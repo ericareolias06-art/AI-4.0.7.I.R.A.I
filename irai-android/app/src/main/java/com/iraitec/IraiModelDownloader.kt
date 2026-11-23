@@ -26,6 +26,28 @@ class IraiModelDownloader(private val context: Context, private val local: IraiL
 
     private val capabilities = IraiDeviceCapabilities(context)
 
+    private data class ModelChoice(
+        val name: String, val url: String, val sha256: String,
+        val estimatedBytes: Long, val maxBytes: Long, val gpu: Boolean
+    )
+
+    private fun selectModel(): ModelChoice {
+        val memory = android.app.ActivityManager.MemoryInfo()
+        (context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager)
+            .getMemoryInfo(memory)
+        return if (memory.totalMem < 6L * 1024L * 1024L * 1024L) {
+            ModelChoice(
+                "LFM2.5-350M_int4.litertlm",
+                "https://huggingface.co/litert-community/LFM2.5-350M/resolve/main/LFM2.5-350M_int4.litertlm?download=true",
+                "272b0a1ca55f8b39fe636927deffe4049feb93b5eda7c05a5dbbb3141d6d53f8",
+                248_000_000L, 400_000_000L, false
+            )
+        } else {
+            ModelChoice(FILE_NAME, DOWNLOAD_URL, EXPECTED_SHA256, APPROX_BYTES, MAX_BYTES, true)
+        }
+    }
+
+
     @Volatile var cancelled: Boolean = false
     @Volatile var running: Boolean = false
         private set
@@ -37,16 +59,17 @@ class IraiModelDownloader(private val context: Context, private val local: IraiL
         if (running) return Result(false, "A model download is already active.")
         running = true
         cancelled = false
-        val partial = File(context.filesDir, "irai-model-download.part")
+        val selected = selectModel()
+        val partial = File(context.filesDir, "irai-model-download-" + selected.name + ".part")
         try {
-            val preflight = capabilities.checkBeforeDownload(APPROX_BYTES, partial.length())
+            val preflight = capabilities.checkBeforeDownload(selected.estimatedBytes, partial.length())
             if (!preflight.supported) return Result(false, preflight.reason ?: "Device cannot install this AI model.")
             var offset = if (partial.exists()) partial.length() else 0L
-            if (offset > MAX_BYTES) {
+            if (offset > selected.maxBytes) {
                 partial.delete()
                 offset = 0
             }
-            val connection = (URL(DOWNLOAD_URL).openConnection() as HttpURLConnection).apply {
+            val connection = (URL(selected.url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 25_000
                 readTimeout = 35_000
                 instanceFollowRedirects = true
@@ -71,8 +94,8 @@ class IraiModelDownloader(private val context: Context, private val local: IraiL
                 }
                 val total = connection.getHeaderField("Content-Range")
                     ?.substringAfterLast('/')?.toLongOrNull()
-                    ?: if (connection.contentLengthLong > 0) connection.contentLengthLong + offset else APPROX_BYTES
-                if (total > MAX_BYTES) return Result(false, "Unexpected model size. Download stopped.")
+                    ?: if (connection.contentLengthLong > 0) connection.contentLengthLong + offset else selected.estimatedBytes
+                if (total > selected.maxBytes) return Result(false, "Unexpected model size. Download stopped.")
                 connection.inputStream.buffered().use { incoming ->
                     // Append when resuming. Do not delete previous verified bytes.
                     java.io.FileOutputStream(partial, resumed).buffered().use { out ->
@@ -83,7 +106,7 @@ class IraiModelDownloader(private val context: Context, private val local: IraiL
                             val count = incoming.read(bytes)
                             if (count < 0) break
                             written += count
-                            if (written > MAX_BYTES) return Result(false, "Model download exceeded the allowed size.")
+                            if (written > selected.maxBytes) return Result(false, "Model download exceeded the allowed size.")
                             out.write(bytes, 0, count)
                             onProgress(((written * 100L) / total.coerceAtLeast(1L)).toInt().coerceIn(0, 99))
                         }
@@ -104,7 +127,7 @@ class IraiModelDownloader(private val context: Context, private val local: IraiL
                 }
             }
             val actual = sha.digest().joinToString("") { "%02x".format(it) }
-            if (actual != EXPECTED_SHA256) {
+            if (actual != selected.sha256) {
                 partial.delete()
                 return Result(false, "Model verification failed. Retry the download.")
             }
@@ -112,7 +135,7 @@ class IraiModelDownloader(private val context: Context, private val local: IraiL
                 return Result(false, "Model downloaded but installation failed. Check storage and retry.")
             }
             context.getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE)
-                .edit().putBoolean("local_first", true).putBoolean("gpu_model", true).apply()
+                .edit().putBoolean("local_first", true).putBoolean("gpu_model", selected.gpu).apply()
             onProgress(100)
             return Result(true, "Irai's on-device model is installed and verified.")
         } catch (error: Exception) {
