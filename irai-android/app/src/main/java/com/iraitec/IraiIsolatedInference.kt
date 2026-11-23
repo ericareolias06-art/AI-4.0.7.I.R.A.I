@@ -39,7 +39,7 @@ class IraiIsolatedInference(private val context: Context) {
         val connection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
                 try {
-                    Messenger(binder).send(Message.obtain(null, IraiInferenceService.REQUEST_GENERATE).apply {
+                    Messenger(requireNotNull(binder)).send(Message.obtain(null, IraiInferenceService.REQUEST_GENERATE).apply {
                         replyTo = replyMessenger
                         data = android.os.Bundle().apply {
                             putString(IraiInferenceService.KEY_PROMPT, prompt)
