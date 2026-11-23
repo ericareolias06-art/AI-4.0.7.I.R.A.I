@@ -132,3 +132,4 @@ jobs:
           if [[ -n "${IRAI_KEYSTORE_PATH:-}" ]]; then
             rm -f -- "$IRAI_KEYSTORE_PATH"
           fi
+# Trigger signed Irai v17 build
