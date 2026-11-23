@@ -34,6 +34,7 @@ class IraiLocalInference(context: Context) {
     private var initializedModelSize = -1L
     private var initializedModelModified = -1L
     private val preferences = appContext.getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE)
+    private val capabilities = IraiDeviceCapabilities(appContext)
     private var loadedOnGpu = false
     private val deviceMemoryGb: Long by lazy {
         val info = ActivityManager.MemoryInfo()
@@ -78,6 +79,8 @@ class IraiLocalInference(context: Context) {
 
     fun generate(prompt: String, onText: (String) -> Unit): Result {
         if (!modelInstalled()) return Result(false, "", "No on-device model installed")
+        val preflight = capabilities.checkBeforeInference()
+        if (!preflight.supported) return Result(false, "", preflight.reason)
         if (executor.isShutdown) return Result(false, "", "Local AI is shutting down. Please reopen Irai.")
         val future: Future<Result> = try { executor.submit<Result> {
             val output = StringBuilder()
