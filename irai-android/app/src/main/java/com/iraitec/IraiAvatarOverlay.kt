@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
@@ -31,6 +33,11 @@ object IraiAvatarOverlay {
     private var avatarImage: ImageView? = null
     private var idleAnimation: AnimatorSet? = null
     private var speakingAnimation: AnimatorSet? = null
+    private var reactionAnimation: AnimatorSet? = null
+    private var welcomeWave: IraiWelcomeWave? = null
+    private var fallbackGreeting: AnimatorSet? = null
+    private var currentMood = ""
+    private var reducedMotion = false
     private var avatarLayoutParams: WindowManager.LayoutParams? = null
 
     private fun dp(value: Int): Int {
@@ -64,6 +71,9 @@ object IraiAvatarOverlay {
     fun show(context: Context) {
         if (!hasPermission(context)) return
         appContext = context.applicationContext
+        reducedMotion = android.provider.Settings.Global.getFloat(
+            context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f
+        ) == 0f
         windowManager = appContext!!.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         if (avatarWindow != null) return
         removeMinimized()
@@ -159,7 +169,11 @@ object IraiAvatarOverlay {
         try {
             avatarLayoutParams = params(dp(146), dp(252))
             windowManager?.addView(panel, avatarLayoutParams)
-            startIdleAnimation()
+            currentMood = "idle"
+            if (!reducedMotion) startIdleAnimation()
+            // Greet exactly once when the companion appears. If already
+            // displayed, show() returns above without replaying the wave.
+            playWakeWave()
         } catch (_: Exception) {
             avatarWindow = null
         }
@@ -170,72 +184,195 @@ object IraiAvatarOverlay {
         cornerRadius = 18 * density
     }
 
+    /** Change animation only when the avatar's activity actually changes. */
     fun setStatus(value: String) {
+        val mood = when {
+            value.startsWith("Speaking", true) -> "speaking"
+            value.contains("Listening", true) || value.contains("heard you", true) -> "listening"
+            value.contains("Thinking", true) || value.contains("answering", true) ||
+                value.contains("Contacting", true) -> "thinking"
+            else -> "idle"
+        }
         statusLabel?.post {
             statusLabel?.text = value
-            if (value.startsWith("Speaking", ignoreCase = true)) {
-                startSpeakingAnimation()
+            if (mood == currentMood && welcomeWave == null) return@post
+            currentMood = mood
+            if (welcomeWave != null || fallbackGreeting != null) return@post
+            switchToMood(mood)
+        }
+    }
+
+    /** Trigger on the wake word, not on ordinary app startup. */
+    fun playWakeWave() {
+        val view = avatarImage ?: return
+        view.post {
+            if (reducedMotion || welcomeWave != null || avatarImage !== view) return@post
+            val context = appContext ?: return@post
+            val gif = IraiWelcomeWave.loaded(context) {
+                if (avatarImage === view) {
+                    welcomeWave = null
+                    view.setImageResource(R.drawable.irai_avatar)
+                    switchToMood(currentMood.ifBlank { "idle" })
+                }
+            }
+            stopAllAnimations()
+            if (gif != null) {
+                welcomeWave = gif
+                view.setImageDrawable(gif)
             } else {
-                stopSpeakingAnimation()
-                startIdleAnimation()
+                startBuiltinGreeting(view)
             }
         }
     }
 
-    // Gentle breathing and floating while Irai is waiting or listening.
+    /** Always available when a bundled or previously imported GIF is absent. */
+    private fun startBuiltinGreeting(view: ImageView) {
+        fallbackGreeting?.cancel()
+        val wave = ObjectAnimator.ofFloat(
+            view, View.ROTATION, 0f, -5f, 4f, -5f, 4f, -3f, 0f
+        ).apply { duration = 1600L }
+        val bounce = ObjectAnimator.ofFloat(
+            view, View.TRANSLATION_Y, 0f, -dp(4).toFloat(), 0f
+        ).apply { duration = 1600L }
+        val animation = AnimatorSet().apply {
+            playTogether(wave, bounce)
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (fallbackGreeting === animation && avatarImage === view) {
+                        fallbackGreeting = null
+                        switchToMood(currentMood.ifBlank { "idle" })
+                    }
+                }
+            })
+        }
+        fallbackGreeting = animation
+        animation.start()
+    }
+
+    private fun switchToMood(mood: String) {
+        stopAllAnimations()
+        if (reducedMotion) return
+        when (mood) {
+            "speaking" -> startSpeakingAnimation()
+            "listening" -> startListeningAnimation()
+            "thinking" -> startThinkingAnimation()
+            else -> startIdleAnimation()
+        }
+    }
+
+    private fun resetPose() {
+        avatarImage?.apply {
+            translationX = 0f
+            translationY = 0f
+            scaleX = 1f
+            scaleY = 1f
+            rotation = 0f
+            alpha = 1f
+        }
+    }
+
+    private fun stopAllAnimations() {
+        idleAnimation?.cancel()
+        speakingAnimation?.cancel()
+        reactionAnimation?.cancel()
+        idleAnimation = null
+        speakingAnimation = null
+        reactionAnimation = null
+        resetPose()
+    }
+
+    /** Small, natural sway + breathing; original static art stays sharp. */
     private fun startIdleAnimation() {
         val avatar = avatarImage ?: return
-        if (speakingAnimation?.isRunning == true || idleAnimation?.isRunning == true) return
-        val floatMotion = ObjectAnimator.ofFloat(avatar, View.TRANSLATION_Y, dp(2).toFloat(), dp(-5).toFloat()).apply {
-            duration = 1900
+        if (idleAnimation?.isRunning == true) return
+        val floatMotion = ObjectAnimator.ofFloat(
+            avatar, View.TRANSLATION_Y, 0f, dp(-4).toFloat(), 0f
+        ).apply {
+            duration = 3600
             repeatCount = ValueAnimator.INFINITE
-            repeatMode = ValueAnimator.REVERSE
             interpolator = AccelerateDecelerateInterpolator()
         }
-        val breathe = ObjectAnimator.ofFloat(avatar, View.SCALE_Y, 1f, 1.018f).apply {
-            duration = 1900
+        val breathe = ObjectAnimator.ofFloat(
+            avatar, View.SCALE_Y, 1f, 1.015f, 1f
+        ).apply {
+            duration = 3400
             repeatCount = ValueAnimator.INFINITE
-            repeatMode = ValueAnimator.REVERSE
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+        val sway = ObjectAnimator.ofFloat(
+            avatar, View.ROTATION, -1.1f, 1.1f, -1.1f
+        ).apply {
+            duration = 5600
+            repeatCount = ValueAnimator.INFINITE
             interpolator = AccelerateDecelerateInterpolator()
         }
         idleAnimation = AnimatorSet().apply {
-            playTogether(floatMotion, breathe)
+            playTogether(floatMotion, breathe, sway)
             start()
         }
     }
 
-    // Rhythmic upper-body motion while TTS speaks. Facial mouth frames can
-    // be layered in later without replacing the original avatar artwork.
-    private fun startSpeakingAnimation() {
-        stopIdleAnimation()
+    /** Lean in slightly as if paying attention to the user's voice. */
+    private fun startListeningAnimation() {
         val avatar = avatarImage ?: return
-        if (speakingAnimation?.isRunning == true) return
-        val pulse = ObjectAnimator.ofFloat(avatar, View.SCALE_X, 1f, 1.025f, 1f).apply {
-            duration = 430
+        val attentiveTilt = ObjectAnimator.ofFloat(avatar, View.ROTATION, 0f, -2f, 0f).apply {
+            duration = 2100
             repeatCount = ValueAnimator.INFINITE
             interpolator = AccelerateDecelerateInterpolator()
         }
-        val bob = ObjectAnimator.ofFloat(avatar, View.TRANSLATION_Y, 0f, dp(-3).toFloat(), 0f).apply {
-            duration = 430
+        val lean = ObjectAnimator.ofFloat(avatar, View.SCALE_X, 1f, 1.017f, 1f).apply {
+            duration = 2100
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+        reactionAnimation = AnimatorSet().apply {
+            playTogether(attentiveTilt, lean)
+            start()
+        }
+    }
+
+    /** Thinking is visually calmer than speaking, with a tiny periodic nod. */
+    private fun startThinkingAnimation() {
+        val avatar = avatarImage ?: return
+        val nod = ObjectAnimator.ofFloat(
+            avatar, View.TRANSLATION_Y, 0f, dp(2).toFloat(), 0f
+        ).apply {
+            duration = 1600
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+        val tilt = ObjectAnimator.ofFloat(avatar, View.ROTATION, 0f, 1.5f, 0f).apply {
+            duration = 2400
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+        reactionAnimation = AnimatorSet().apply {
+            playTogether(nod, tilt)
+            start()
+        }
+    }
+
+    /** Light bob on streamed speech without stretching the full-body artwork. */
+    private fun startSpeakingAnimation() {
+        val avatar = avatarImage ?: return
+        val bob = ObjectAnimator.ofFloat(
+            avatar, View.TRANSLATION_Y, 0f, dp(-3).toFloat(), 0f
+        ).apply {
+            duration = 540
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+        val express = ObjectAnimator.ofFloat(
+            avatar, View.ROTATION, -0.7f, 0.7f, -0.7f
+        ).apply {
+            duration = 1080
             repeatCount = ValueAnimator.INFINITE
             interpolator = AccelerateDecelerateInterpolator()
         }
         speakingAnimation = AnimatorSet().apply {
-            playTogether(pulse, bob)
+            playTogether(bob, express)
             start()
         }
-    }
-
-    private fun stopSpeakingAnimation() {
-        speakingAnimation?.cancel()
-        speakingAnimation = null
-        avatarImage?.scaleX = 1f
-        avatarImage?.translationY = 0f
-    }
-
-    private fun stopIdleAnimation() {
-        idleAnimation?.cancel()
-        idleAnimation = null
     }
 
     fun minimize() {
@@ -270,8 +407,12 @@ object IraiAvatarOverlay {
     }
 
     private fun removeAvatar() {
-        stopIdleAnimation()
-        stopSpeakingAnimation()
+        welcomeWave?.stop()
+        welcomeWave = null
+        fallbackGreeting?.cancel()
+        fallbackGreeting = null
+        stopAllAnimations()
+        currentMood = ""
         avatarImage = null
         avatarLayoutParams = null
         try { avatarWindow?.let { windowManager?.removeView(it) } } catch (_: Exception) {}

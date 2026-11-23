@@ -15,7 +15,10 @@ class PlaySubscriptions(
 
     private val client = BillingClient.newBuilder(activity)
         .setListener(this)
-        .enablePendingPurchases()
+        .enablePendingPurchases(
+            PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()
+        )
+        .enableAutoServiceReconnection()
         .build()
     private var products: List<ProductDetails> = emptyList()
 
@@ -41,9 +44,9 @@ class PlaySubscriptions(
                     .setProductType(BillingClient.ProductType.SUBS)
                     .build()
             }).build()
-        client.queryProductDetailsAsync(params) { result, details ->
+        client.queryProductDetailsAsync(params) { result, queryResult ->
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                products = details
+                products = queryResult.productDetailsList
                 activity.runOnUiThread(onReady)
             } else activity.runOnUiThread { onError("Could not load subscriptions: ${result.debugMessage}") }
         }
