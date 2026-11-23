@@ -17,9 +17,11 @@ import java.security.MessageDigest
 internal class IraiSpeechModelInstaller(private val context: Context) {
     companion object {
         private const val URL_STRING =
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/" +
-            "sherpa-onnx-streaming-zipformer-en-2023-06-26.tar.bz2"
-        private const val MAX_DOWNLOAD = 250_000_000L
+            "https://huggingface.co/xumo/onnx_models/resolve/a2698dfcc0315eec55427270c093844814d93ee4/" +
+            "sherpa-onnx-streaming-zipformer-en-2023-06-26.tar.bz2?download=true"
+        private const val MAX_DOWNLOAD = 330_000_000L
+        // Pinned to the Git LFS SHA-256 recorded in the immutable mirror commit.
+        private const val EXPECTED_SHA256 = "639e25b578e9e997131402199419c13a941f8e4e198e2da1ce57dbf5cf401282"
         private const val MAX_EXTRACTED = 400_000_000L
         private val ALLOWED = setOf(
             "encoder-epoch-99-avg-1-chunk-16-left-64.int8.onnx",
@@ -55,6 +57,19 @@ internal class IraiSpeechModelInstaller(private val context: Context) {
                     }
                 }
             } finally { connection.disconnect() }
+            val sha = MessageDigest.getInstance("SHA-256")
+            archive.inputStream().buffered().use { input ->
+                val buffer = ByteArray(1024 * 1024)
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n < 0) break
+                    sha.update(buffer, 0, n)
+                }
+            }
+            val actualSha = sha.digest().joinToString("") { "%02x".format(it) }
+            check(actualSha.equals(EXPECTED_SHA256, ignoreCase = true)) {
+                "Speech model SHA-256 verification failed; refusing to install"
+            }
             var totalExtracted = 0L
             archive.inputStream().buffered().use { input ->
                 TarArchiveInputStream(BZip2CompressorInputStream(input)).use { tar ->
