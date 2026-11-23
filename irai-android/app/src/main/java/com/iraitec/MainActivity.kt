@@ -1230,7 +1230,14 @@ class MainActivity : Activity() {
                         runOnUiThread {
                             if (speechSessionId != speechRecognitionSessionId) return@runOnUiThread
                             latestDiagnostic = "Processing your command..."
+                            IraiAvatarOverlay.setStatus("Processing...")
                             refreshDiagnostic()
+                            // A recognizer may finish speech but never deliver results.
+                            // Shorten the remaining watchdog once speech has ended.
+                            speechRecognitionTimeout?.let { timeout ->
+                                handler.removeCallbacks(timeout)
+                                handler.postDelayed(timeout, 8_000L)
+                            }
                         }
                     }
 
@@ -1241,6 +1248,9 @@ class MainActivity : Activity() {
                             speechRecognitionSessionId++
                             awaitingCommand = false
                             listeningForCommand = false
+                            try { speechRecognizer?.destroy() } catch (_: Exception) {}
+                            speechRecognizer = null
+                            IraiAvatarOverlay.setStatus("Ready")
                             // Cancellation by permission setup is not a timeout.
                             if (permissionSetupActive || guidedAssistanceSettingsPending) {
                                 return@runOnUiThread
@@ -1302,10 +1312,12 @@ class MainActivity : Activity() {
                             }
 
                             if (spokenText.isBlank()) {
+                                IraiAvatarOverlay.setStatus("Ready")
                                 latestDiagnostic = "I didn't catch that."
                                 refreshDiagnostic()
                                 speakResponse("Sorry, I didn't catch that.")
                             } else {
+                                IraiAvatarOverlay.setStatus("Thinking...")
                                 latestDiagnostic = "Routing recognized command..."
                                 refreshDiagnostic()
                                 handleVoiceCommand(spokenText)
@@ -1364,7 +1376,7 @@ class MainActivity : Activity() {
                 } catch (_: Exception) {}
                 speechRecognizer = null
                 latestDiagnostic = "Speech recognition timed out. Say Irai to try again."
-                IraiAvatarOverlay.setStatus("Speech timeout — say Irai again")
+                IraiAvatarOverlay.setStatus("Ready")
                 refreshDiagnostic()
                 restartListeningAfterDelay()
             }
@@ -1376,6 +1388,9 @@ class MainActivity : Activity() {
             awaitingCommand = false
             listeningForCommand = false
             latestDiagnostic = "Could not start speech recognition: ${e.message}"
+            try { speechRecognizer?.destroy() } catch (_: Exception) {}
+            speechRecognizer = null
+            IraiAvatarOverlay.setStatus("Ready")
             refreshDiagnostic()
             restartListeningAfterDelay()
         }
