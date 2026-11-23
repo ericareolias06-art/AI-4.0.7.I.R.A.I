@@ -52,6 +52,7 @@ android {
 dependencies {
     implementation("com.android.billingclient:billing-ktx:8.0.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.google.mlkit:text-recognition:16.0.1")
