@@ -3049,7 +3049,7 @@ class MainActivity : Activity() {
             .setTitle("Install Irai's AI brain")
             .setMessage(
                 "Irai needs an on-device AI model to answer locally. " +
-                "This is a one-time download of about 736 MB and uses about 1 GB of storage. " +
+                "Irai automatically selects a smaller model (about 248 MB) on lower-memory phones, or a larger model (about 736 MB) on higher-memory phones. " +
                 "Wi-Fi is recommended. Do you want to install it now?"
             )
             .setCancelable(false)
