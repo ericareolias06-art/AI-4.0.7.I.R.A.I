@@ -53,7 +53,13 @@ dependencies {
     implementation("com.android.billingclient:billing-ktx:8.0.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
-    // LiteRT-LM 0.16.1 invokes SendChannel.close$default; coroutines 1.9.0\n    // is binary-incompatible with that callback and crashes the :irai_ai process.\n    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")\n    constraints {\n        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2") {\n            because("LiteRT-LM requires a compatible SendChannel API at runtime")\n        }\n    }
+    // Keep LiteRT-LM and Kotlin coroutines runtime APIs compatible.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    constraints {
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2") {
+            because("LiteRT-LM must use a compatible coroutines runtime")
+        }
+    }
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation(files("libs/sherpa-onnx-2.0.1.aar"))
 }
