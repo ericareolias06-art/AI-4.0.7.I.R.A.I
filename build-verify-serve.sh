@@ -11,14 +11,19 @@ git fetch origin "$BRANCH"
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse "origin/$BRANCH")" ]] || {
   echo "STOP: local branch differs from origin/$BRANCH; git pull --ff-only"; exit 1;
 }
-for cmd in java keytool python3 sha256sum; do command -v "$cmd" >/dev/null || { echo "Missing $cmd"; exit 1; }; done
+for cmd in java keytool python3 sha256sum curl; do command -v "$cmd" >/dev/null || { echo "Missing $cmd"; exit 1; }; done
 for v in IRAI_UPLOAD_STORE_FILE IRAI_UPLOAD_STORE_PASSWORD IRAI_UPLOAD_KEY_ALIAS IRAI_UPLOAD_KEY_PASSWORD; do
   [[ -n "${!v:-}" ]] || { echo "STOP: release signing variable $v is not set"; exit 1; }
 done
 [[ -f "$IRAI_UPLOAD_STORE_FILE" ]] || { echo "STOP: upload keystore file missing"; exit 1; }
 cd "$ROOT/irai-android"
 chmod +x gradlew
-./gradlew --no-daemon --stacktrace clean :app:assembleRelease :app:bundleRelease
+./gradlew --no-daemon --stacktrace \
+  -PIRAI_UPLOAD_STORE_FILE="$IRAI_UPLOAD_STORE_FILE" \
+  -PIRAI_UPLOAD_STORE_PASSWORD="$IRAI_UPLOAD_STORE_PASSWORD" \
+  -PIRAI_UPLOAD_KEY_ALIAS="$IRAI_UPLOAD_KEY_ALIAS" \
+  -PIRAI_UPLOAD_KEY_PASSWORD="$IRAI_UPLOAD_KEY_PASSWORD" \
+  clean :app:assembleRelease :app:bundleRelease
 APK="app/build/outputs/apk/release/app-release.apk"
 AAB="app/build/outputs/bundle/release/app-release.aab"
 [[ -s "$APK" && -s "$AAB" ]] || { echo "STOP: release outputs missing"; exit 1; }
