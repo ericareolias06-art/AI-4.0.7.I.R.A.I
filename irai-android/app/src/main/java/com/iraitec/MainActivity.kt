@@ -1203,6 +1203,41 @@ class MainActivity : Activity() {
         latestDiagnostic = "Irai heard you. Listening for your command..."
         refreshDiagnostic()
 
+        // On older Android, transcribe microphone samples with Sherpa-ONNX locally.
+        // Never use the platform's potentially network-backed recognizer.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            val offline = IraiOfflineSpeech(this)
+            if (!offline.isInstalled()) {
+                awaitingCommand = false
+                listeningForCommand = false
+                latestDiagnostic = "Offline speech model missing. Install the English ASR model."
+                refreshDiagnostic()
+                restartListeningAfterDelay()
+                return
+            }
+            Thread {
+                val recognized = try { offline.recognize() } catch (error: Exception) {
+                    android.util.Log.w("IRAI_ASR", "Offline transcription failed", error)
+                    ""
+                }
+                runOnUiThread {
+                    if (speechSessionId != speechRecognitionSessionId) return@runOnUiThread
+                    clearSpeechRecognitionTimeout()
+                    speechRecognitionSessionId++
+                    awaitingCommand = false
+                    listeningForCommand = false
+                    if (recognized.isNotBlank()) {
+                        handleVoiceCommand(recognized)
+                    } else {
+                        latestDiagnostic = "Offline speech did not recognize a command."
+                        refreshDiagnostic()
+                        restartListeningAfterDelay()
+                    }
+                }
+            }.start()
+            return
+        }
+
         // Never use a provider that might upload speech to a remote server.
         // Android 12+ exposes a dedicated on-device recognition service.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
