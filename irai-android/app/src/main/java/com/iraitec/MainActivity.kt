@@ -93,6 +93,7 @@ class MainActivity : Activity() {
     private var stickyWindowParams: WindowManager.LayoutParams? = null
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private val localInference by lazy { IraiLocalInference(this) }
+    private val isolatedInference by lazy { IraiIsolatedInference(this) }
     private val recentChatMemory by lazy { IraiRecentMemory(this) }
     private var loadedHistoryAccount: String? = null
     private val localAiPrefs by lazy { getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE) }
@@ -2975,7 +2976,7 @@ class MainActivity : Activity() {
                 historyForModel + "\nUser: " + message + "\nIrai:"
             var receivedChunks = false
             val pendingSpeech = StringBuilder()
-            val result = localInference.generate(localPrompt) { chunk ->
+            val result = isolatedInference.generate(localPrompt) { chunk ->
                 receivedChunks = true
                 if (onReply == null) {
                     pendingSpeech.append(chunk)
