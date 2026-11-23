@@ -18,13 +18,13 @@ import java.io.File
  * Fully offline command transcription for Android 7-11.
  *
  * Requires a separately installed Sherpa streaming English model in
- * filesDir/irai_asr with encoder.int8.onnx, decoder.onnx,
- * joiner.onnx, and tokens.txt. Never invokes Android's cloud recognizer.
+ * filesDir/irai_asr with encoder-epoch-99-avg-1-chunk-16-left-64.int8.onnx, decoder-epoch-99-avg-1-chunk-16-left-64.int8.onnx,
+ * joiner-epoch-99-avg-1-chunk-16-left-64.int8.onnx, and tokens.txt. Never invokes Android's cloud recognizer.
  * Call on a background thread after stopping wake-word microphone capture.
  */
 internal class IraiOfflineSpeech(private val context: Context) {
     private val directory = File(context.filesDir, "irai_asr")
-    private val required = listOf("encoder.int8.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt")
+    private val required = listOf("encoder-epoch-99-avg-1-chunk-16-left-64.int8.onnx", "decoder-epoch-99-avg-1-chunk-16-left-64.int8.onnx", "joiner-epoch-99-avg-1-chunk-16-left-64.int8.onnx", "tokens.txt")
 
     fun isInstalled(): Boolean = required.all { File(directory, it).isFile && File(directory, it).length() > 0 }
 
@@ -37,9 +37,9 @@ internal class IraiOfflineSpeech(private val context: Context) {
             featConfig = FeatureConfig(sampleRate = 16000, featureDim = 80),
             modelConfig = OnlineModelConfig(
                 transducer = OnlineTransducerModelConfig(
-                    encoder = File(directory, "encoder.int8.onnx").absolutePath,
-                    decoder = File(directory, "decoder.onnx").absolutePath,
-                    joiner = File(directory, "joiner.onnx").absolutePath
+                    encoder = File(directory, "encoder-epoch-99-avg-1-chunk-16-left-64.int8.onnx").absolutePath,
+                    decoder = File(directory, "decoder-epoch-99-avg-1-chunk-16-left-64.int8.onnx").absolutePath,
+                    joiner = File(directory, "joiner-epoch-99-avg-1-chunk-16-left-64.int8.onnx").absolutePath
                 ),
                 tokens = File(directory, "tokens.txt").absolutePath,
                 numThreads = 2,
