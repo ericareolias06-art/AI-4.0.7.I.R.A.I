@@ -1202,16 +1202,26 @@ class MainActivity : Activity() {
         latestDiagnostic = "Irai heard you. Listening for your command..."
         refreshDiagnostic()
 
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+        // Never use a provider that might upload speech to a remote server.
+        // Android 12+ exposes a dedicated on-device recognition service.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
             awaitingCommand = false
             listeningForCommand = false
-            speakResponse("Speech recognition is not available on this device.")
+            latestDiagnostic = "Offline speech recognition is unavailable on this device."
+            refreshDiagnostic()
+            Toast.makeText(
+                this,
+                "This phone has no supported offline speech recognizer. Irai will not send your voice to a cloud service.",
+                Toast.LENGTH_LONG
+            ).show()
+            restartListeningAfterDelay()
             return
         }
 
         try {
             speechRecognizer?.destroy()
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
 
             speechRecognizer?.setRecognitionListener(
                 object : RecognitionListener {
@@ -1319,9 +1329,8 @@ class MainActivity : Activity() {
             )
 
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                // Allow the system's installed recognition service to use its
-                // supported mode if an offline English speech pack is missing.
-                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+                // The recognizer is explicitly on-device; do not permit cloud fallback.
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                 putExtra(
                     RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
