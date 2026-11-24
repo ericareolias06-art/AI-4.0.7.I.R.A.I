@@ -26,8 +26,8 @@ android {
         applicationId = "com.Iraitec"
         minSdk = 24
         targetSdk = 36
-        versionCode = 17 // New test release; verify availability in Play Console before upload
-        versionName = "1.6.9"
+        versionCode = 18 // Verify availability in Play Console before upload
+        versionName = "1.6.10"
     }
 
     signingConfigs {
@@ -54,7 +54,10 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // LiteRT-LM 0.16.1 calls SendChannel.close$default on the interface itself.
+    // Coroutines 1.9.0 lacks this ABI; see LiteRT-LM issue #2812.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation(files("libs/sherpa-onnx-2.0.1.aar"))
 }
