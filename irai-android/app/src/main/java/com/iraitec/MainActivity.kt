@@ -93,6 +93,7 @@ class MainActivity : Activity() {
     private var stickyWindowParams: WindowManager.LayoutParams? = null
     private val notesDb by lazy { IraiNotesDatabase(this) }
     private val localInference by lazy { IraiLocalInference(this) }
+    private val isolatedInference by lazy { IraiIsolatedInference(this) }
     private val recentChatMemory by lazy { IraiRecentMemory(this) }
     private var loadedHistoryAccount: String? = null
     private val localAiPrefs by lazy { getSharedPreferences("irai_local_ai", Context.MODE_PRIVATE) }
@@ -1202,16 +1203,79 @@ class MainActivity : Activity() {
         latestDiagnostic = "Irai heard you. Listening for your command..."
         refreshDiagnostic()
 
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+        // On older Android, transcribe microphone samples with Sherpa-ONNX locally.
+        // Never use the platform's potentially network-backed recognizer.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            val offline = IraiOfflineSpeech(this)
+            if (!offline.isInstalled()) {
+                awaitingCommand = false
+                listeningForCommand = false
+                latestDiagnostic = "Offline speech model missing. Install the English ASR model."
+                refreshDiagnostic()
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("Install offline English speech")
+                    .setMessage("Irai needs a one-time English speech model download to recognize commands entirely on your phone. The download uses storage and internet once; speech stays on-device afterward. Continue?")
+                    .setPositiveButton("Download") { _, _ ->
+                        Thread {
+                            val installed = IraiSpeechModelInstaller(applicationContext).install()
+                            runOnUiThread {
+                                latestDiagnostic = if (installed) {
+                                    "Offline speech model installed. Say Irai to begin."
+                                } else {
+                                    "Speech model download failed. Please retry when connected."
+                                }
+                                refreshDiagnostic()
+                                restartListeningAfterDelay()
+                            }
+                        }.start()
+                    }
+                    .setNegativeButton("Not now") { _, _ -> restartListeningAfterDelay() }
+                    .show()
+                return
+            }
+            Thread {
+                val recognized = try { offline.recognize() } catch (error: Exception) {
+                    android.util.Log.w("IRAI_ASR", "Offline transcription failed", error)
+                    ""
+                }
+                runOnUiThread {
+                    if (speechSessionId != speechRecognitionSessionId) return@runOnUiThread
+                    clearSpeechRecognitionTimeout()
+                    speechRecognitionSessionId++
+                    awaitingCommand = false
+                    listeningForCommand = false
+                    if (recognized.isNotBlank()) {
+                        handleVoiceCommand(recognized)
+                    } else {
+                        latestDiagnostic = "Offline speech did not recognize a command."
+                        refreshDiagnostic()
+                        restartListeningAfterDelay()
+                    }
+                }
+            }.start()
+            return
+        }
+
+        // Never use a provider that might upload speech to a remote server.
+        // Android 12+ exposes a dedicated on-device recognition service.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
             awaitingCommand = false
             listeningForCommand = false
-            speakResponse("Speech recognition is not available on this device.")
+            latestDiagnostic = "Offline speech recognition is unavailable on this device."
+            refreshDiagnostic()
+            Toast.makeText(
+                this,
+                "This phone has no supported offline speech recognizer. Irai will not send your voice to a cloud service.",
+                Toast.LENGTH_LONG
+            ).show()
+            restartListeningAfterDelay()
             return
         }
 
         try {
             speechRecognizer?.destroy()
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
 
             speechRecognizer?.setRecognitionListener(
                 object : RecognitionListener {
@@ -1331,9 +1395,8 @@ class MainActivity : Activity() {
             )
 
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                // Allow the system's installed recognition service to use its
-                // supported mode if an offline English speech pack is missing.
-                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+                // The recognizer is explicitly on-device; do not permit cloud fallback.
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                 putExtra(
                     RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
@@ -2981,7 +3044,7 @@ class MainActivity : Activity() {
                 historyForModel + "\nUser: " + message + "\nIrai:"
             var receivedChunks = false
             val pendingSpeech = StringBuilder()
-            val result = localInference.generate(localPrompt) { chunk ->
+            val result = isolatedInference.generate(localPrompt) { chunk ->
                 receivedChunks = true
                 if (onReply == null) {
                     pendingSpeech.append(chunk)
@@ -3054,7 +3117,7 @@ class MainActivity : Activity() {
             .setTitle("Install Irai's AI brain")
             .setMessage(
                 "Irai needs an on-device AI model to answer locally. " +
-                "This is a one-time download of about 736 MB and uses about 1 GB of storage. " +
+                "Irai automatically selects a smaller model (about 248 MB) on lower-memory phones, or a larger model (about 736 MB) on higher-memory phones. " +
                 "Wi-Fi is recommended. Do you want to install it now?"
             )
             .setCancelable(false)

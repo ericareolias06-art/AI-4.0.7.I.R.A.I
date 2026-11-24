@@ -26,8 +26,8 @@ android {
         applicationId = "com.Iraitec"
         minSdk = 24
         targetSdk = 36
-        versionCode = 16 // Next Google Play upload; do not reuse version codes
-        versionName = "1.6.8"
+        versionCode = 17 // New test release; verify availability in Play Console before upload
+        versionName = "1.6.9"
     }
 
     signingConfigs {
@@ -52,6 +52,7 @@ android {
 dependencies {
     implementation("com.android.billingclient:billing-ktx:8.0.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
     // Keep LiteRT-LM and Kotlin coroutines runtime APIs compatible.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

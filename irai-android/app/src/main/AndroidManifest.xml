@@ -53,6 +53,10 @@
                 android:resource="@xml/irai_assist_accessibility" />
         </service>
         <service
+            android:name=".IraiInferenceService"
+            android:exported="false"
+            android:process=":irai_ai" />
+        <service
             android:name=".IraiListeningService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
