@@ -27,6 +27,8 @@ class IraiLocalInference(context: Context) {
         val error: String? = null
     )
 
+    private class ResponseLimitReached : RuntimeException()
+
     private val appContext = context.applicationContext
     private val executor = Executors.newSingleThreadExecutor()
     private val modelFile = File(appContext.filesDir, "irai-local.litertlm")
@@ -92,7 +94,7 @@ class IraiLocalInference(context: Context) {
                     loadedOnGpu = false
                     val tryGpu = preferences.getBoolean("gpu_model", false) &&
                         preferences.getBoolean("prefer_gpu", true) &&
-                        deviceMemoryGb >= 6L &&
+                        deviceMemoryGb >= 8L &&
                         android.os.Build.VERSION.SDK_INT >= 31
                     if (tryGpu) {
                         try {
@@ -136,8 +138,8 @@ class IraiLocalInference(context: Context) {
                         chat.sendMessageAsync(prompt).collect { message ->
                             val delta = message.toString()
                             if (delta.isNotEmpty()) {
-                                if (output.length + delta.length > 12_000) {
-                                    throw IllegalStateException("AI response exceeded the safe output limit")
+                                if (output.length + delta.length > 2_000) {
+                                    throw ResponseLimitReached()
                                 }
                                 output.append(delta)
                                 try { onText(delta) } catch (callbackError: Exception) {
@@ -146,6 +148,8 @@ class IraiLocalInference(context: Context) {
                             }
                         }
                     }
+                } catch (_: ResponseLimitReached) {
+                    android.util.Log.i("IRAI_LOCAL", "Stopped generation at response limit")
                 } finally {
                     chat.close()
                 }
