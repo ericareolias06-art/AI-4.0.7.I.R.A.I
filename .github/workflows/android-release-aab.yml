@@ -3,7 +3,7 @@ name: Build Irai Tec Play AAB
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feature/irai-device-only-stability]
     paths:
       - "irai-android/**"
       - ".github/workflows/android-release-aab.yml"
@@ -44,8 +44,22 @@ jobs:
             echo "::error::Release signing secrets are missing. Refusing to publish an unsigned Play AAB."
             exit 1
           fi
+      - name: Verify signed bundle before publishing
+        if: github.ref_name == 'feature/irai-device-only-stability'
+        working-directory: irai-android
+        run: |
+          set -euo pipefail
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          SHA1=$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA1:[[:space:]]*//p' | head -1)
+          test "$SHA1" = "64:F2:1C:73:69:A5:0E:57:E1:D7:13:B0:C4:F7:A1:79:2B:03:A2:29"
+          for lib in core android; do
+            test "$(unzip -p "$AAB" "base/root/META-INF/kotlinx_coroutines_${lib}.version" | tr -d '\r\n')" = "1.11.0"
+          done
+          curl -fsSL --retry 3 https://github.com/google/bundletool/releases/download/1.18.2/bundletool-all-1.18.2.jar -o /tmp/bundletool.jar
+          test "$(java -jar /tmp/bundletool.jar dump manifest --bundle="$AAB" --xpath='/manifest/@android:versionCode' | tr -d '[:space:]')" = "18"
+          sha256sum "$AAB"
       - uses: actions/upload-artifact@v4
         with:
-          name: IraiTec-v6-release-aab
+          name: IraiTec-signed-release-aab
           path: irai-android/app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
